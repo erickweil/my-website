@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Your custom rules can go here.
+  {
+    rules: {
+      // Example: Disable the rule for no unused variables.
+      "prefer-const": "off",
+    }
+  }
 ]);
 
 export default eslintConfig;

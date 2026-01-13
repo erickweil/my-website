@@ -32,7 +32,7 @@ export default function Home() {
     { href: fallbackLink, text: "Análise Big O" },
     { href: fallbackLink, text: "Visualizador de árvores binárias" },
     { href: fallbackLink, text: "Simulador de portas lógicas" },
-    { href: fallbackLink, text: "Sudoku Minado" },
+    { href: "/toy/sudoku-minado", text: "Sudoku Minado" },
     { href: fallbackLink, text: "Jogo da Vida" },
     { href: fallbackLink, text: "Simulação de Gravidade" },
     { href: fallbackLink, text: "Esteganografia" },
