@@ -45,7 +45,7 @@ export class Possib {
 }
 
 export type RegrasQuadro = (quadro: number[], possibs: Possib | null) => boolean;
-export type ProgressCallback = (iter: number, depth: number) => void;
+export type ProgressCallback = (iter: number, depth: number) => Promise<void>;
 
 function iniciarPossib(quadro: number[], nPossibs: number): Possib[] {
     return quadro.map((_, i) => new Possib(i, nPossibs));
@@ -142,7 +142,7 @@ function getRandomRange(n: number): number[] {
 /**
  * Resolve o quadro retornando o número de iterações e se obteve sucesso.
  */
-function solucionarQuadro(
+async function solucionarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
@@ -154,24 +154,25 @@ function solucionarQuadro(
         maxSolucoes: maxSolucoes,
         solucoes: [] as number[][],
     };
-    _solucionarQuadro(0, stats, quadro, nPossibs, regrasfn, progressCallback);
+    await _solucionarQuadro(0, stats, quadro, nPossibs, regrasfn, progressCallback);
     return stats;
 }
 
-function _solucionarQuadro(
+async function _solucionarQuadro(
     depth: number,
     stats: { iter: number, solucoes: number[][], maxSolucoes: number },
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback
-): boolean {
+): Promise<boolean> {
     stats.iter++;
 
-    if (stats.iter % 10000 === 0) {
+    if (stats.iter % 100000 === 0) {
         console.log(`iter: ${stats.iter} Depth: ${depth}`);
         if (progressCallback) {
-            progressCallback(stats.iter, depth);
+            //await progressCallback(stats.iter, depth);
+            await new Promise((resolve) => setTimeout(() => resolve(progressCallback(stats.iter, depth)), 0));
         }
     }
 
@@ -196,7 +197,7 @@ function _solucionarQuadro(
             } else if(result === 0) {
                 // Não está solucionado ainda, continua tentando
                 // Tenta solucionar com mais escolhas depois dessa, e se der certo retorna true
-                if (_solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
+                if (await _solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
                     return true;
                 }
             }
@@ -214,7 +215,7 @@ function _solucionarQuadro(
  * A ideia é começar com um quadro resolvido, e ir desmarcando células até onde continue tendo só uma solução
  * Como isso é um processo aleatório, o resultado final pode variar a cada execução, mas sempre será um quadro com solução única
  */
-function desmarcarQuadro(
+async function desmarcarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
@@ -222,9 +223,14 @@ function desmarcarQuadro(
     maxSolucoes: number = 1
 ) {
     const indices = getRandomRange(quadro.length);
+    let iter = 0;
     for (const index of indices) {
         const originalValue = quadro[index];
         quadro[index] = 0;
+
+        if (progressCallback) {
+            await progressCallback(iter++, index);
+        }
 
         // const stats = { 
         //     iter: 0, 
@@ -237,12 +243,10 @@ function desmarcarQuadro(
         const quantos = p ? p.contar() : 0;
 
         // Se não é única a solução, volta o valor
-        if (quantos !== 1) {
+        if (quantos === 0 || quantos > maxSolucoes) {
             quadro[index] = originalValue;
         }
     }
-
-    return quadro;
 }
 
 export class PencilmarkSolver {

@@ -145,72 +145,6 @@ export function regrasSudokuMinado(quadro: number[], possibs: Possib | null): bo
         }
     }
 
-    
-    /*
-    // Regras Campo Minado
-    // Algumas regras do campo minado se aplicam: Se uma célula não é uma mina, o número nela indica quantas minas estão adjacentes a ela (até 8 vizinhos). Além disso, não irá expandir células vazias ao clicar nelas.
-        
-    // 1. Verifica se é possível ou não que a célula seja uma mina, por contar o min/max de minas adjacentes 
-    // (Tem que lembrar que a célula atual não foi contada pois está sem marcar, então se for mina, o número de minas adjacentes aumentaria em 1)
-    // Cada vizinho, possui seu máximo/mínimo de minas adjacentes, 
-    let minaOuNao = 0; // 0 = não decidido, 1 = pode ser mina, -1 = não pode ser mina
-    for(let dx = -1; dx <= 1; dx++) {
-        for(let dy = -1; dy <= 1; dy++) {
-            const nx = px + dx;
-            const ny = py + dy;
-            if(nx < 0 || nx >= 6 || ny < 0 || ny >= 6) continue;
-            if(nx === px && ny === py) continue;
-
-            const nValor = quadro[ny * 6 + nx];
-            if(ehMina(nValor)) {
-                continue; // Já é mina, não dá para saber nada
-            }
-            const [
-                minasAdjMin, // Número de minas adjacentes que estão marcadas
-                minasAdjMax  // Número máximo de minas adjacentes possíveis
-            ] = contarMinasAdjacentes(quadro, nx, ny);
-
-            if(nValor === 0) {
-                // Célula não definida, 
-                if(minasAdjMin + 1 > minasAdjMax) {
-                    // Se for mina, o mínimo de minas adjacentes do vizinho ultrapassa o máximo possível
-                    minaOuNao = -1;
-                    break;
-                }
-            } else {
-                // Célula definida com número indicando quantas minas adjacentes deveriam existir
-                const nMinasAdjacentes = valorSudoku(nValor);
-
-                // Se o número de minas adjacentes for igual ao número na célula, completou.
-                if(minasAdjMin + 1 > nMinasAdjacentes) {
-                    // Não pode ser mina
-                    minaOuNao = -1;
-                    break;
-                }
-
-                // Se só falta essa para completar, precisa ser mina para o vizinho atingir o número correto
-                if(minasAdjMin + 1 === nMinasAdjacentes && minasAdjMin + 1 === minasAdjMax) {
-                    // Precisa ser mina
-                    minaOuNao = 1;
-                    break;
-                }
-            }
-        }
-        if(minaOuNao !== 0) break;
-    }
-    
-    if(minaOuNao === -1) {
-        // Não pode ser mina, desabilita todas as possibilidades com mina
-        for(let v = 7; v <= 12; v++) {
-            possibs.p[v - 1] = false;
-        }
-    } else if(minaOuNao === 1) {
-        // Precisa ser mina, desabilita todas as possibilidades sem mina
-        for(let v = 1; v <= 6; v++) {
-            possibs.p[v - 1] = false;
-        }
-    }*/
-
     // 2. Ajusta as possibilidades baseado no número que deve estar na célula caso não seja mina
     const [minasAdjMin, minasAdjMax] = contarMinasAdjacentes(quadro, px, py);
     for(let v = 1; v <= 6; v++) {
@@ -252,7 +186,7 @@ export function printarQuadro(quadro: number[]): void {
             line = "";
             continue;
         }
-        if ((i + 1) % 9 === 0) {
+        if ((i + 1) % 12 === 0) {
             console.log(line);
             line = "";
         }

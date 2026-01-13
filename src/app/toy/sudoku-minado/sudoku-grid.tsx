@@ -1,7 +1,7 @@
 "use client";
 import z, { set } from "zod";
 import styles from "./sudoku.module.css";
-import { SubmitHandler, useForm } from "react-hook-form";
+import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/classMerge";
 import { printarQuadro, regrasSudokuMinado } from "./sudoku-minado-solver";
@@ -15,15 +15,16 @@ const sudokuSchema = z.object({
 type DesafioStateType = {
     resolvido?: number[];
     desmarcado?: number[];
+    status?: string;
     carregando: boolean;
 };
 
 export default function SudokuGrid() {
     const [desafioState, setDesafioState] = useState<DesafioStateType>({
-        carregando: false,
+        carregando: false
     });
 
-    const { register, handleSubmit, watch, formState: { errors }, setValue, getValues } = useForm({
+    const { register, handleSubmit, control, watch, formState: { errors }, setValue, getValues } = useForm({
         resolver: zodResolver(sudokuSchema),
         defaultValues: {
             cell: Array.from({ length: 6 * 6 }).map(() => ""),
@@ -44,8 +45,30 @@ export default function SudokuGrid() {
         console.log("Submitted data:", data);
 
         const quadro: number[] = data.cell.map((v) => v === "" ? 0 : v.endsWith("*") ? parseInt(v.substring(0, v.length-1), 10) + 6 : parseInt(v, 10));
+        const solucao = desafioState.resolvido!;
+        let vazios = false;
+        for(let i = 0; i < quadro.length; i++) {
+            const v = quadro[i];
+            if(isNaN(v) || v < 0 || v > 12) {
+                alert(`Valor inválido na célula ${i + 1}. Insira números de 1 a 6, opcionalmente seguidos de '*', ou deixe em branco.`);
+                return;
+            }
+            if(v === 0) {
+                vazios = true;
+                continue;
+            }
+            if(v !== solucao[i]) {
+                alert(`Valor incorreto na célula ${i + 1}.`);
+                return;
+            }
+        }
 
-        if(!quadro.includes(0)) {
+        if(!vazios)
+        alert("Parabéns! Você resolveu o Sudoku Minado corretamente!");
+        else
+        alert("Até agora tudo certo! Continue preenchendo o Sudoku Minado.");
+
+        /*if(!quadro.includes(0)) {
             console.log("O quadro já está completo. Desmarcando...");
 
             const desmarcado = PencilmarkSolver.desmarcarQuadro(quadro, 12, regrasSudokuMinado);
@@ -60,7 +83,7 @@ export default function SudokuGrid() {
 
         if(solucao) {
             preencherQuadro(solucao);
-        }
+        }*/
 
         /*// Obter possibilidades de cada célula
         for(let i = 0; i < quadro.length; i++) {
@@ -99,20 +122,27 @@ export default function SudokuGrid() {
         </tbody></table>;
     };
 
+    console.log("Renderizando SudokuGrid, estado do desafio:", desafioState);
     return (
         <>
         {
             desafioState.carregando && <p className="text-red-400 text-4xl border-4 border-red-400 p-4 mb-4">
-                Gerando novo desafio... por favor aguarde isso pode demorar bastante!
+                Gerando novo desafio (Pode demorar até 1 minuto)... 
+                { desafioState.status }
             </p>
         }
-        <input type="button" value="Gerar Novo Sudoku Minado" onClick={() => {
+        <input type="button" value="Gerar Novo Sudoku Minado" disabled={desafioState.carregando} onClick={() => {
             setDesafioState({carregando: true});
 
-            setTimeout(() => {
+            setTimeout(async () => {
                 // 1. Gerar quadro completo solucionado
                 const quadro: number[] = Array.from({ length: 6 * 6 }).map(() => 0);
-                const {iter, solucoes} = PencilmarkSolver.solucionarQuadro(quadro, 12, regrasSudokuMinado);
+                const {iter, solucoes} = await PencilmarkSolver.solucionarQuadro(quadro, 12, regrasSudokuMinado, async (iter, depth) => {
+                    setDesafioState((prevState) => ({
+                        ...prevState,
+                        status: `Iterações: ${iter}, Profundidade: ${depth}`
+                    }));
+                });
                 console.log(`Sudoku Minado completo gerado em ${iter} iterações, Soluções encontradas: ${solucoes.length}`);
                 const solucaoCompleta = solucoes[0];
                 printarQuadro(solucaoCompleta);
@@ -124,7 +154,8 @@ export default function SudokuGrid() {
                 }
 
                 // 2. Remover valores para criar desafio (desmarcar)
-                const desmarcado = PencilmarkSolver.desmarcarQuadro(solucaoCompleta, 12, regrasSudokuMinado);
+                const desmarcado = [...solucaoCompleta];
+                await PencilmarkSolver.desmarcarQuadro(desmarcado, 12, regrasSudokuMinado);
                 
                 setDesafioState({
                     resolvido: solucaoCompleta,
@@ -134,11 +165,27 @@ export default function SudokuGrid() {
                 preencherQuadro(desmarcado);
             }, 0);
         }}/>
+        {
+            desafioState.resolvido && 
+            <input type="button" value="Mostrar Solução" onClick={() => {
+                if(desafioState.resolvido) {
+                    preencherQuadro(desafioState.resolvido);
+                }
+            }}/>
+        }
+        {
+            desafioState.desmarcado && 
+            <input type="button" value="Reiniciar" onClick={() => {
+                if(desafioState.desmarcado) {
+                    preencherQuadro(desafioState.desmarcado);
+                }
+            }}/>
+        }
         <form className="flex flex-row gap-2" onSubmit={handleSubmit(onSubmit)}>
             {gerarTabela(3,2, styles.sudokuTable, styles.sudokuGroup, (rowGroup, colGroup) => {
                 return gerarTabela(2,3, styles.sudokuTable, styles.sudokuCell, (row, col) => {
                     const cellId = (rowGroup * 2 + row) * 6 + (colGroup * 3 + col);
-                    return <input 
+                    /*return <input 
                         type="text" 
                         //inputMode="numeric"
                         //pattern="[1-6]*" 
@@ -148,11 +195,37 @@ export default function SudokuGrid() {
                             ...register(`cell.${cellId}`, 
                             { required: false })
                         }
+                    />;*/
+                    return <Controller
+                        name={`cell.${cellId}`}
+                        control={control}
+                        render={({ field }) => (
+                            <input 
+                                type="text" 
+                                //inputMode="numeric"
+                                //pattern="[1-6]*" 
+                                title="Insira apenas números de 1 a 6, opcionalmente seguidos de '*'" 
+                                className={cn(
+                                    styles.sudokuInput, 
+                                    errors.cell && errors.cell[cellId]?.message ? "text-red-600" : "",
+                                    field.value === "" ? styles.minesweeperfog :
+                                    field.value === " " ? styles.minesweeperclear :
+                                    field.value.endsWith("*") ? styles.minesweepermine : 
+                                    field.value === "1" ? styles.minesweeper1 :
+                                    field.value === "2" ? styles.minesweeper2 :
+                                    field.value === "3" ? styles.minesweeper3 :
+                                    field.value === "4" ? styles.minesweeper4 :
+                                    field.value === "5" ? styles.minesweeper5 :
+                                    field.value === "6" ? styles.minesweeper6 : "italic"
+                                )} 
+                                {...field}
+                            />
+                        )}
                     />;
                 });
             })}
             <div>
-                <input type="submit" value="Resolver"/>
+                <input type="submit" value="Verificar"/>
             </div>
         </form>
         </>
