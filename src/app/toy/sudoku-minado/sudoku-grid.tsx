@@ -1,41 +1,83 @@
 "use client";
-import z, { set } from "zod";
+import z from "zod";
 import styles from "./sudoku.module.css";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/classMerge";
-import { printarQuadro, regrasSudokuMinado } from "./sudoku-minado-solver";
+import { RegrasSudokuMinado } from "./sudoku-minado-solver";
 import { PencilmarkSolver } from "@/lib/pencilmark";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+function mapTextoParaValor(v: string): number {
+    v = v.trim();
+    return v === "" ? 0 : v.endsWith("*") ? parseInt(v.substring(0, v.length-1), 10) + 6 : parseInt(v, 10)
+}
+
+function mapValorParaTexto(val: number): string {
+    return val === 0 ? "" : val > 6 ? (val-6).toString()+"*" : val.toString();
+}
+
+const defaultQuadro: string[] = [
+    "5*", "2*", "1*", "4*", "3", "6*",
+    "4*", "6*", "3*", "1*", "5", "2",
+    "3", "4", "5", "2*", "6", "1*",
+    "6*", "1", "2", "5*", "4*", "3*",
+    "2", "3", "4", "6", "1*", "5",
+    "1", "5*", "6*", "3*", "2*", "4*",
+];
 
 const sudokuSchema = z.object({
-    cell: z.array(z.string().regex(/^[1-9]*\*?$/)).length(6*6),
+    cell: z.array(z.string().regex(/^[1-9\s]*\*?$/)).length(6*6),
 });
 
 type DesafioStateType = {
     resolvido?: number[];
     desmarcado?: number[];
     status?: string;
+    etapa?: string;
+    progresso?: number;
     carregando: boolean;
 };
 
 export default function SudokuGrid() {
     const [desafioState, setDesafioState] = useState<DesafioStateType>({
-        carregando: false
+        carregando: false,
+        resolvido: defaultQuadro.map(mapTextoParaValor),
+        desmarcado: [
+            0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+            0, 1, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 5,
+            0, 0, 0, 0, 0, 0,
+        ],
+        progresso: 100,
     });
 
-    const { register, handleSubmit, control, watch, formState: { errors }, setValue, getValues } = useForm({
+    const { handleSubmit, control, formState: { errors }, setValue } = useForm({
         resolver: zodResolver(sudokuSchema),
         defaultValues: {
-            cell: Array.from({ length: 6 * 6 }).map(() => ""),
+            cell: [
+                "", "", "", "", "", "",
+                "", "", "", "", "", "",
+                "", "", "", "", "", "",
+                "", "1", "", "", "", "",
+                "", "", "", "", "", " ",
+                "", "", "", "", "", "",
+            ],
         },
     });
+
+    const calcularProgressoGeracao = (iter: number, depth: number) => {
+        const progressoPorIteracao = Math.log(iter + 1);
+        return Math.max(12, Math.min(82, Math.round(12 + progressoPorIteracao)));
+    };
 
     const preencherQuadro = (valores: number[]) => {
         // Atualiza os valores do formulário com a solução
         for(let i = 0; i < valores.length; i++) {
             const val = valores[i];
-            setValue(`cell.${i}`, val === 0 ? "" : val > 6 ? (val-6).toString()+"*" : val.toString());
+            setValue(`cell.${i}`, mapValorParaTexto(val));
         }
     };
 
@@ -44,7 +86,7 @@ export default function SudokuGrid() {
     }> = (data) => {
         console.log("Submitted data:", data);
 
-        const quadro: number[] = data.cell.map((v) => v === "" ? 0 : v.endsWith("*") ? parseInt(v.substring(0, v.length-1), 10) + 6 : parseInt(v, 10));
+        const quadro: number[] = data.cell.map(mapTextoParaValor);
         const solucao = desafioState.resolvido!;
         let vazios = false;
         for(let i = 0; i < quadro.length; i++) {
@@ -122,52 +164,94 @@ export default function SudokuGrid() {
         </tbody></table>;
     };
 
-    console.log("Renderizando SudokuGrid, estado do desafio:", desafioState);
     return (
         <>
         {
-            desafioState.carregando && <p className="text-red-400 text-4xl border-4 border-red-400 p-4 mb-4">
-                Gerando novo desafio (Pode demorar até 1 minuto)... 
-                { desafioState.status }
-            </p>
+            desafioState.carregando && (
+                <div className={styles.loadingCard}>
+                    <div className={styles.loadingHeader}>
+                        <div>
+                            <p className={styles.loadingTitle}>Gerando novo Sudoku Minado</p>
+                            <p className={styles.loadingSubtitle}>Pode demorar até 1 minuto.</p>
+                        </div>
+                        <span className={styles.loadingPercent}>{desafioState.progresso ?? 0}%</span>
+                    </div>
+                    <div
+                        className={styles.progressBar}
+                        role="progressbar"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={desafioState.progresso ?? 0}
+                        aria-label="Progresso da geração do Sudoku Minado"
+                    >
+                        <div
+                            className={styles.progressFill}
+                            style={{ width: `${desafioState.progresso ?? 0}%` }}
+                        />
+                    </div>
+                    <div className={styles.loadingMeta}>
+                        <span>{desafioState.etapa ?? "Preparando..."}</span>
+                        <span>{desafioState.status ?? "Iniciando geração do desafio..."}</span>
+                    </div>
+                </div>
+            )
         }
-        <input type="button" value="Gerar Novo Sudoku Minado" disabled={desafioState.carregando} onClick={() => {
-            setDesafioState({carregando: true});
+        <div className={styles.actionsRow}>
+            <input className={cn(styles.gameButton, styles.primaryButton)} type="button" value="Gerar Novo Sudoku Minado" disabled={desafioState.carregando} onClick={() => {
+                setDesafioState({
+                    carregando: true,
+                    progresso: 5,
+                    etapa: "Preparando tabuleiro",
+                    status: "Inicializando o solucionador..."
+                });
 
-            setTimeout(async () => {
-                // 1. Gerar quadro completo solucionado
-                const quadro: number[] = Array.from({ length: 6 * 6 }).map(() => 0);
-                const {iter, solucoes} = await PencilmarkSolver.solucionarQuadro(quadro, 12, regrasSudokuMinado, async (iter, depth) => {
+                setTimeout(async () => {
+                    // 1. Gerar quadro completo solucionado
+                    const quadro: number[] = Array.from({ length: 6 * 6 }).map(() => 0);
+                    const regrasSudokuMinado = new RegrasSudokuMinado();
+                    const {iter, solucoes} = await PencilmarkSolver.solucionarQuadro(quadro, 12, regrasSudokuMinado.gerarRegrasFn(), async (iter, depth) => {
+                        const progresso = calcularProgressoGeracao(iter, depth);
+                        setDesafioState((prevState) => ({
+                            ...prevState,
+                            progresso,
+                            etapa: "Buscando uma solução válida",
+                            status: `Iterações: ${iter}, Profundidade: ${depth}`
+                        }));
+                    });
+                    console.log(`Sudoku Minado completo gerado em ${iter} iterações, Soluções encontradas: ${solucoes.length}`);
+                    const solucaoCompleta = solucoes[0];
+                    
+                    if(!solucaoCompleta) {
+                        alert("Falha ao gerar Sudoku Minado completo!");
+                        setDesafioState({carregando: false});
+                        return;
+                    }
+
+                    regrasSudokuMinado.quadro = solucaoCompleta!;
+                    regrasSudokuMinado.printarQuadro();
+
+                    // 2. Remover valores para criar desafio (desmarcar)
                     setDesafioState((prevState) => ({
                         ...prevState,
-                        status: `Iterações: ${iter}, Profundidade: ${depth}`
+                        progresso: 88,
+                        etapa: "Montando o desafio",
+                        status: "Removendo pistas para criar o tabuleiro final..."
                     }));
-                });
-                console.log(`Sudoku Minado completo gerado em ${iter} iterações, Soluções encontradas: ${solucoes.length}`);
-                const solucaoCompleta = solucoes[0];
-                printarQuadro(solucaoCompleta);
-
-                if(!solucaoCompleta) {
-                    alert("Falha ao gerar Sudoku Minado completo!");
-                    setDesafioState({carregando: false});
-                    return;
-                }
-
-                // 2. Remover valores para criar desafio (desmarcar)
-                const desmarcado = [...solucaoCompleta];
-                await PencilmarkSolver.desmarcarQuadro(desmarcado, 12, regrasSudokuMinado);
-                
-                setDesafioState({
-                    resolvido: solucaoCompleta,
-                    desmarcado: desmarcado,
-                    carregando: false,
-                });
-                preencherQuadro(desmarcado);
-            }, 0);
-        }}/>
+                    const desmarcado = [...solucaoCompleta];
+                    await PencilmarkSolver.desmarcarQuadro(desmarcado, 12, regrasSudokuMinado.gerarRegrasFn());
+                    
+                    setDesafioState({
+                        resolvido: solucaoCompleta,
+                        desmarcado: desmarcado,
+                        progresso: 100,
+                        carregando: false,
+                    });
+                    preencherQuadro(desmarcado);
+                }, 0);
+            }}/>
         {
             desafioState.resolvido && 
-            <input type="button" value="Mostrar Solução" onClick={() => {
+            <input className={styles.gameButton} type="button" value="Mostrar Solução" onClick={() => {
                 if(desafioState.resolvido) {
                     preencherQuadro(desafioState.resolvido);
                 }
@@ -175,12 +259,13 @@ export default function SudokuGrid() {
         }
         {
             desafioState.desmarcado && 
-            <input type="button" value="Reiniciar" onClick={() => {
+            <input className={styles.gameButton} type="button" value="Reiniciar" onClick={() => {
                 if(desafioState.desmarcado) {
                     preencherQuadro(desafioState.desmarcado);
                 }
             }}/>
         }
+        </div>
         <form className="flex flex-row gap-2" onSubmit={handleSubmit(onSubmit)}>
             {gerarTabela(3,2, styles.sudokuTable, styles.sudokuGroup, (rowGroup, colGroup) => {
                 return gerarTabela(2,3, styles.sudokuTable, styles.sudokuCell, (row, col) => {
@@ -225,7 +310,7 @@ export default function SudokuGrid() {
                 });
             })}
             <div>
-                <input type="submit" value="Verificar"/>
+                <input className={cn(styles.gameButton, styles.submitButton)} type="submit" value="Verificar"/>
             </div>
         </form>
         </>

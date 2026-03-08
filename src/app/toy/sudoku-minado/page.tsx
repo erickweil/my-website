@@ -29,6 +29,9 @@ export default function SudokuMinado() {
                     Regra especial: Cada caixa 2x3 possui um número de minas diferente, ou seja, nenhuma caixa terá o mesmo número de minas que outra.
                 </li>
             </ul>
+            <p>
+                Preencha os números de 1 a 6 em cada célula, para indicar que é uma mina adicione um asterisco * após o número (ex: 3*).
+            </p>
             <SudokuGrid />
             </article>
         </main>

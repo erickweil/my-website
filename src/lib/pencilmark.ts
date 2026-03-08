@@ -93,9 +93,9 @@ function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQ
             min_cont = cont;
             min_p.receber(p);
         }
-    }
 
-    if (min_cont <= 0) return null;
+        if (min_cont <= 0) return null;
+    }
     return min_p;
 }
 
