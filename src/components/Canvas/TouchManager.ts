@@ -154,7 +154,7 @@ export default class TouchManager<T> {
         else return 1;
     }
 
-    touchstart(e: TouchEvent, ...args: unknown[]) {
+    touchstart(e: TouchEvent, args: T) {
         if (this.touches.length == 0) {
             this.touchDownIssued = false;
             this.numTouches = 0;
@@ -269,6 +269,8 @@ export default class TouchManager<T> {
 
     getCenterTouchPos() {
         let p = { x: 0, y: 0 };
+        if(this.touches.length == 0) return p;
+
         for (let i = 0; i < this.touches.length; i++) {
             p.x += this.touches[i].x;
             p.y += this.touches[i].y;

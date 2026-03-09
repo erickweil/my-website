@@ -96,7 +96,7 @@ also handles state using useRef only... to prevent re-renders
 const CanvasControler = <T extends EstadoType,>(
     draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
     everyFrame: ((estado: T) => Partial<T> | false | null | undefined) | undefined,
-    getInitialState: (estado: T) => void,
+    getInitialState: (estado: EstadoType) => void,
     onPropsChange: ((estado: T) => void) | undefined,
     onDismount: ((estado: T) => void) | undefined,
     options: {
@@ -111,17 +111,17 @@ const CanvasControler = <T extends EstadoType,>(
     const canvasRef = useRef<{canvas: HTMLCanvasElement | null | undefined, estado: T | null}>({ canvas: null, estado: null });
     if (!canvasRef.current.estado) {
         console.log("SETANDO ESTADO INICIAL...");
-        const novoEstado: T = {
+        const novoEstado: EstadoType = {
             offsetLeft: 0,
             offsetTop: 0,
             width: window.innerWidth,
             height: window.innerHeight,
             _changes: 1
-        } as T;
+        };
 
         getInitialState(novoEstado);
 
-        canvasRef.current.estado = novoEstado;
+        canvasRef.current.estado = novoEstado as T;
     }
     else {
         if (onPropsChange) {

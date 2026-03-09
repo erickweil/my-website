@@ -33,7 +33,7 @@ const MeuCanvas = <T extends EstadoType,>(props: {
         onTouchEnd?: CanvasEventFn<T>,
         onTouchCancel?: CanvasEventFn<T>
     },
-    getInitialState: (estado: T) => void,
+    getInitialState: (estado: EstadoType) => void,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
     options?: {
@@ -65,8 +65,8 @@ const MeuCanvas = <T extends EstadoType,>(props: {
     }, [canvasUseEffect]);
     
     let myListeners: { [key: string]: CanvasEventFn<T> } = {
-        onContextMenu: (e) => {
-            if(!("preventDefault" in e) || !("button" in e) ) return null;
+        onContextMenu: (_e) => {
+            const e = _e as unknown as MouseEvent;
 
             if(options.preventContextMenu)
                 e.preventDefault(); // evitar abrir a janela contextMenu ao clicar o botão direito
@@ -93,8 +93,8 @@ const MeuCanvas = <T extends EstadoType,>(props: {
     myListeners = {...myListeners,...{
         onTouchStart: (e, estado) => { touchManager.touchstart(e as TouchEvent, estado); return null; },
         onTouchMove: (e, estado) => { touchManager.touchmove(e as TouchEvent, estado); return null; },
-        onTouchEnd: (e, estado) => { 
-            if(!("preventDefault" in e) || !("touches" in e) ) return null;
+        onTouchEnd: (_e, estado) => { 
+            const e = _e as unknown as TouchEvent;
             // Impedir um evento de long tap?
             if(options.preventContextMenu)
                 e.preventDefault();

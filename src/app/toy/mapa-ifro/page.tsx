@@ -97,9 +97,13 @@ export default function MapaIfro() {
             ctx.font = "20px Arial";
             ctx.fillText("Aguardando permissão de localização...", 10, 30);
         }
+
+        ctx.fillStyle = "yellow";
+        ctx.font = "20px Arial";
+        ctx.fillText(`Cliques: ${estado.cliques || 0}`, w-120, 30);
     };
 
-    const myGetInitialState = (estado: MapaEstado) => {
+    const myGetInitialState = (estado: ZoomEstadoType) => {
         console.log("Getting initial state for canvas...");
         mesclarEstado(estado, {
             latitude: 0, 
@@ -147,7 +151,8 @@ export default function MapaIfro() {
 			draw={mydraw}
 			options={{
                 useTouchManager: false,
-                spanButton: "any"
+                spanButton: "any",
+                // DEBUG: true
             }}
 			onDismount={onDismount}
 			everyFrame={everyFrame}

@@ -59,14 +59,16 @@ export function doZoomWithCenter(estado: ZoomEstadoType, newScale: number, cente
         y:center.y
     },offLeft,offTop,span,scale);
 
-    span.x -= after.x - before.x;
-    span.y -= after.y - before.y;
+    const newSpan = {
+        x: span.x - (after.x - before.x),
+        y: span.y - (after.y - before.y)
+    };
 
-    const newMousePos = pageToZoomCanvas({x:mouse.pageX,y:mouse.pageY},offLeft,offTop,span,scale); // Atualiza o mouse com a nova transformação
+    const newMousePos = pageToZoomCanvas({x:mouse.pageX,y:mouse.pageY},offLeft,offTop,newSpan,scale); // Atualiza o mouse com a nova transformação
 
     return {
         scale:scale,
-        span:span,
+        span:newSpan,
         mouse: {
             ...mouse,
             x: newMousePos.x,
@@ -109,7 +111,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         onMouseEnter?: CanvasEventFn<T>,
         onSpan?: CanvasEventFn<T>
     },
-    getInitialState: (estado: T) => void,
+    getInitialState: (estado: ZoomEstadoType) => void,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
     options?: {
@@ -290,10 +292,15 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         {
             if(estado.spanning)
             {
-                const span = estado.span;
-                span.x -= mouse.x - estado.spanningStart.x;
-                span.y -= mouse.y - estado.spanningStart.y;
+                //const span = estado.span;
+                //span.x -= mouse.x - estado.spanningStart.x;
+                //span.y -= mouse.y - estado.spanningStart.y;
+                const span = {
+                    x: estado.span.x - (mouse.x - estado.spanningStart.x),
+                    y: estado.span.y - (mouse.y - estado.spanningStart.y)
+                };
 
+                estado.span = span;
                 mesclarEstado(estado,{
                     mouse:getMouse(e,estado),
                     span:span,
@@ -342,9 +349,6 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         mesclarEstado(estado,{
             mouse:mouse,
             spanning:false
-
-            // Apesar do updateEstado mesclar, filhos são substituídos, então é necessário mesclar aqui:
-            //,retangulos:[mouse,...(estado.retangulos ? estado.retangulos : [])]
         });
 
         if(!wasSpanning && events?.onMouseUp) 
@@ -432,7 +436,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
     }
     
     // Não é o jeito certo? idaí?
-    const myGetInitialState = (estado: T) => {
+    const myGetInitialState = (estado: EstadoType) => {
         mesclarEstado(estado,{
             mouse:{pageX:0,pageY:0,x:0,y:0,left:0,middle:0,right:0},
             span:{x:0,y:0},
@@ -445,7 +449,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         });
 
         //carrega o estado inicial de quem chamou
-        getInitialState(estado);
+        getInitialState(estado as ZoomEstadoType);
     };
 
     let myListeners: { [key: string]: CanvasEventFn<T> } = {
