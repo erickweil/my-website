@@ -1,5 +1,4 @@
 "use client";
-import { RevealCard } from "@/components/reveal-card";
 import { cn } from "@/lib/classMerge";
 
 export function MirroredText({ text, className, ...attrs }: { text: string } & React.HTMLAttributes<HTMLDivElement>) {
@@ -25,22 +24,33 @@ export default function Home() {
 
   const fallbackLink = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
   const linkTableContent = [
-    { href: fallbackLink, text: "Gerador de Horário" },
-    { href: fallbackLink, text: "Avaliador automático" },
-    { href: fallbackLink, text: "Busca DFS e BFS" },
-    { href: fallbackLink, text: "Pilha, Fila, Deque" },
-    { href: fallbackLink, text: "Análise Big O" },
-    { href: fallbackLink, text: "Visualizador de árvores binárias" },
-    { href: fallbackLink, text: "Simulador de portas lógicas" },
-    { href: "/toy/sudoku-minado", text: "Sudoku Minado" },
-    { href: fallbackLink, text: "Jogo da Vida" },
-    { href: fallbackLink, text: "Simulação de Gravidade" },
-    { href: fallbackLink, text: "Esteganografia" },
-    { href: fallbackLink, text: "Pixels"}
+    { 
+      href: "/toy/sudoku-minado", 
+      text: "Sudoku Minado", 
+      status: "Finalizado",
+      description: "Um sudoku 6x6 com regras de campo minado",
+    },
+    { 
+      href: "/toy/mapa-ifro", 
+      text: "Desafio Semana do ADS", 
+      status: "Em construção",
+      description: "Desafio a ser resolvido durante a semana do ADS",
+    },
+    { href: null, text: "Gerador de Horário", status: "A Fazer" },
+    { href: null, text: "Avaliador automático", status: "A Fazer" },
+    { href: null, text: "Busca DFS e BFS", status: "A Fazer" },
+    { href: null, text: "Pilha, Fila, Deque", status: "A Fazer" },
+    { href: null, text: "Análise Big O", status: "A Fazer" },
+    { href: null, text: "Visualizador de árvores binárias", status: "A Fazer" },
+    { href: null, text: "Simulador de portas lógicas", status: "A Fazer" },
+    { href: null, text: "Jogo da Vida", status: "A Fazer" },
+    { href: null, text: "Simulação de Gravidade", status: "A Fazer" },
+    { href: null, text: "Esteganografia", status: "A Fazer" },
+    { href: null, text: "Pixels", status: "A Fazer" },
   ];
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-24">
+      <main className="flex min-h-screen flex-col items-center p-24">
       <div className="text-5xl font-bold mb-8">
         Erick<MirroredText text="Erick" className="inline-block border-r pr-1 ml-1" />
       </div>
@@ -48,17 +58,49 @@ export default function Home() {
         Explore utilitários, experimentos, simulações entre outras coisas
       </p>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {linkTableContent.map((link, n) => (
-          <RevealCard key={n} onClick={() => {
-            window.open(link.href, "_blank");
-          }} >
-            <p className="text-center text-lg font-semibold text-foreground">
-              {link.text}
-            </p>
-          </RevealCard>
-        ))}
-      </div>
+        <section id="projetos" className="space-y-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-foreground/60">
+                Projetos
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {linkTableContent.map((link, n) => {
+              const isReady = link.href !== null;
+              return (
+                <a
+                  key={n}
+                  href={link.href || fallbackLink}
+                  target={isReady ? undefined : "_blank"}
+                  rel={isReady ? undefined : "noreferrer"}
+                  className="group rounded-2xl border border-foreground/10 p-5 transition-colors hover:border-[color-mix(in_srgb,var(--primary)_35%,transparent)] hover:bg-[color-mix(in_srgb,var(--primary)_4%,transparent)]"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-lg font-semibold text-foreground">{link.text}</p>
+                      <p className="mt-2 text-sm leading-6 text-foreground/65">
+                        {link.description || ""}
+                      </p>
+                    </div>
+                    <div className={cn(
+                      "rounded-full px-3 py-1 text-xs font-semibold whitespace-nowrap",
+                      link.status === "Finalizado"
+                        ? "bg-green-100 text-green-800"
+                        : link.status === "Em construção"
+                          ? "bg-yellow-100 text-yellow-800"
+                          : "bg-gray-100 text-gray-800"
+                    )}>
+                      {link.status}
+                    </div> 
+                  </div>
+                </a>
+              );
+            })}
+          </div>
+        </section>
     </main>
   );
 }
