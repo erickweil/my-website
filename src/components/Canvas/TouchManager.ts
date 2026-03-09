@@ -1,4 +1,4 @@
-import { WheelEvent } from "react";
+import { MouseEvent, TouchEvent, WheelEvent } from "react";
 
 function referenceSafeRemove<T>(array: T[], index: number) {
     for (let i = index; i < array.length; i++) {
@@ -92,7 +92,7 @@ export type CanvasEventType = MouseEvent | TouchEvent | WheelEvent | Event | {
     delta?: number
 };
 
-export type CanvasEventFn<T> = (e: CanvasEventType, estado: T) => T | false | null | undefined;
+export type CanvasEventFn<T> = (e: CanvasEventType, estado: T) => Partial<T> | false | null | undefined;
 
 export default class TouchManager<T> {
     touches: { id: number, x: number, y: number }[];

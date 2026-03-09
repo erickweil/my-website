@@ -4,8 +4,11 @@ import { CanvasEventFn, CanvasEventType } from './TouchManager';
 
 // criar um tipo que representa um estado, pode conter qualuer coisa mas devo poder manipular suas chaves
 export type EstadoType = {
-    [key: string]: unknown,
     _changes?: number // número de mudanças desde a última renderização, para otimizar renderizações
+    width: number,
+    height: number,
+    offsetLeft: number /*canvas.offsetLeft*/,
+    offsetTop: number /*canvas.offsetTop*/
 };
 
 /**
@@ -15,7 +18,7 @@ export type EstadoType = {
  * @param novoEstado Objeto com apenas as propriedades que mudaram 
  * (Pode também ser o mesmo objeto do estado anterior)
  */
-export function mesclarEstado(estado: EstadoType, novoEstado?: EstadoType | false | null | undefined) {
+export function mesclarEstado<T extends EstadoType>(estado: Record<string, unknown> & T, novoEstado?: Record<string, unknown> | false | null | undefined) {
     // https://stackoverflow.com/questions/171251/how-can-i-merge-properties-of-two-javascript-objects-dynamically
     //setEstado({...estado,...novoEstado});
 
@@ -23,8 +26,10 @@ export function mesclarEstado(estado: EstadoType, novoEstado?: EstadoType | fals
 
     let changed = false;
     for (const k in novoEstado) {
-        estado[k] = novoEstado[k];
-        changed = true;
+        if(novoEstado[k] !== undefined) {
+            (estado as Record<string, unknown>)[k] = novoEstado[k];
+            changed = true;
+        }
     }
 
     if (changed) estado._changes!++;
@@ -88,12 +93,12 @@ export function pageToCanvas(p: {x: number, y: number}, offsetLeft: number, offs
 Canvas Controler, handles resizing and animationframe callbacks
 also handles state using useRef only... to prevent re-renders
 */
-const CanvasControler = (
-    draw: (context: RenderingContext | null, estado: EstadoType) => void,
-    everyFrame: ((estado: EstadoType) => EstadoType) | undefined,
-    getInitialState: (estado: EstadoType) => void,
-    onPropsChange: ((estado: EstadoType) => void) | undefined,
-    onDismount: ((estado: EstadoType) => void) | undefined,
+const CanvasControler = <T extends EstadoType,>(
+    draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
+    everyFrame: ((estado: T) => Partial<T> | false | null | undefined) | undefined,
+    getInitialState: (estado: T) => void,
+    onPropsChange: ((estado: T) => void) | undefined,
+    onDismount: ((estado: T) => void) | undefined,
     options: {
         context?: string
     } = {}
@@ -103,16 +108,16 @@ const CanvasControler = (
 
     // Usando só useRef pra não causar um re-render toda vez
     // https://www.smashingmagazine.com/2020/11/react-useref-hook/
-    const canvasRef = useRef<{canvas: HTMLCanvasElement | null | undefined, estado: EstadoType | null}>({ canvas: null, estado: null });
+    const canvasRef = useRef<{canvas: HTMLCanvasElement | null | undefined, estado: T | null}>({ canvas: null, estado: null });
     if (!canvasRef.current.estado) {
         console.log("SETANDO ESTADO INICIAL...");
-        const novoEstado = {
+        const novoEstado: T = {
             offsetLeft: 0,
             offsetTop: 0,
             width: window.innerWidth,
             height: window.innerHeight,
             _changes: 1
-        };
+        } as T;
 
         getInitialState(novoEstado);
 
@@ -131,13 +136,13 @@ const CanvasControler = (
     //   - Um conflito de mesclagem é evitado por alterar o próprio objeto com novos valores e então realizar o setEstado
     // - Cada mudança de estado mudará apenas o necessário
     const getEstado = () => {
-        if (!canvasRef) return {} as EstadoType;
+        if (!canvasRef) return {} as T;
 
         return canvasRef.current.estado!;
     };
 
     // Executa o evento e mescla o estado
-    const doEvent = (callback: CanvasEventFn<EstadoType>, e: CanvasEventType) => {
+    const doEvent = (callback: CanvasEventFn<T>, e: CanvasEventType) => {
         const _estado = getEstado();
 
         // Pode retornar apenas o que mudou como um novo objeto
@@ -200,7 +205,7 @@ const CanvasControler = (
                     //offsetTop:canvas.offsetTop
                 });
 
-                draw(context, estado);
+                draw(context as (CanvasRenderingContext2D | null), estado);
                 estado._changes = 0;
             }
 

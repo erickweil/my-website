@@ -1,10 +1,16 @@
 "use client";
 
 import { EstadoType, mesclarEstado } from "@/components/Canvas/CanvasController";
-import MeuCanvas from "@/components/Canvas/MeuCanvas";
 import { CanvasEventType } from "@/components/Canvas/TouchManager";
+import ZoomableCanvas, { ZoomEstadoType } from "@/components/Canvas/ZoomableCanvas";
 import NonSSRWrapper from "@/components/nonSSRWrapper";
 import { useEffect, useRef, useState } from "react";
+
+type MapaEstado = ZoomEstadoType & {
+    latitude?: number,
+    longitude?: number,
+    cliques?: number
+};
 
 export default function MapaIfro() {
     const [locationAllowed, setLocationAllowed] = useState<boolean>(false);
@@ -67,10 +73,13 @@ export default function MapaIfro() {
         };        
     }, [locationAllowed]);
 
-    const mydraw = (ctx: RenderingContext | null, estado: EstadoType) => {
-        console.log("Drawing canvas!");
-        if(!ctx || !("fillRect" in ctx)) return;
+    const mydraw = (ctx: CanvasRenderingContext2D | null, estado: MapaEstado) => {
+        if(!ctx) {
+            console.warn("Canvas context is null, cannot draw.");
+            return;
+        }
 
+        console.log("Drawing canvas!");
         const w = ctx.canvas.width;
         const h = ctx.canvas.height;
 
@@ -90,7 +99,7 @@ export default function MapaIfro() {
         }
     };
 
-    const myGetInitialState = (estado: EstadoType) => {
+    const myGetInitialState = (estado: MapaEstado) => {
         console.log("Getting initial state for canvas...");
         mesclarEstado(estado, {
             latitude: 0, 
@@ -99,34 +108,32 @@ export default function MapaIfro() {
         });
     };
 
-    const onPropsChange = (estado: EstadoType) => {
+    const onPropsChange = (estado: MapaEstado) => {
         console.log("Canvas props changed, current state:", estado);
     };
 
-    const onDismount = (estado: EstadoType) => {
+    const onDismount = (estado: MapaEstado) => {
         console.log("Canvas is being dismounted, final state:", estado);
     };
 
-    const everyFrame = (estado: EstadoType) => {
-        let result = {};
+    const everyFrame = (estado: MapaEstado) => {
         if(locationRef.current) {
             const { latitude, longitude } = locationRef.current.coords;
             //if(!estado.location)
             //estado.location = { latitude, longitude };
             if(estado.latitude !== latitude || estado.longitude !== longitude) {
                 console.log("Updating location in state:", { latitude, longitude });
-                result = {
-                    ...result,
+                mesclarEstado(estado, {
                     latitude: latitude,
                     longitude: longitude
-                };
+                });
             }
         }
 
-        return result;
+        return null;
     };
 
-    const onClick = (e: CanvasEventType, estado: EstadoType) => {
+    const onClick = (e: CanvasEventType, estado: MapaEstado) => {
         return {
             cliques: (estado.cliques as number || 0) + 1
         }
@@ -134,13 +141,13 @@ export default function MapaIfro() {
 
     return (
         <NonSSRWrapper>
-        <MeuCanvas		
-        // <ZoomableCanvas	
+        <ZoomableCanvas<MapaEstado>
             getInitialState={myGetInitialState}
 			onPropsChange={onPropsChange}
 			draw={mydraw}
 			options={{
-                useTouchManager: false
+                useTouchManager: false,
+                spanButton: "any"
             }}
 			onDismount={onDismount}
 			everyFrame={everyFrame}

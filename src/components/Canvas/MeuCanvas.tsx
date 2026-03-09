@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { TouchEvent, useEffect } from 'react';
 import CanvasControler, { EstadoType } from './CanvasController'
 import TouchManager, { CanvasEventFn } from './TouchManager';
 //import React, {memo} from 'react'
@@ -18,29 +18,30 @@ import TouchManager, { CanvasEventFn } from './TouchManager';
  * @param options.preventContextMenu true Cancelar eventos de abrir o menu do botão direito ou long-tap
  * @param options.context "2d" contexto de desenho do canvas
  */
-const MeuCanvas = (props: {
-    draw: (context: RenderingContext | null, estado: EstadoType) => void,
-    everyFrame?: (estado: EstadoType) => EstadoType,
+const MeuCanvas = <T extends EstadoType,>(props: {
+    draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
+    everyFrame?: (estado: T) => Partial<T> | false | null | undefined,
     events: {
-        onMouseDown?: CanvasEventFn<EstadoType>,
-        onMouseUp?: CanvasEventFn<EstadoType>,
-        onMouseMove?: CanvasEventFn<EstadoType>,
-        onClick?: CanvasEventFn<EstadoType>,
-        onContextMenu?: CanvasEventFn<EstadoType>,
-        onWheel?: CanvasEventFn<EstadoType>,
-        onTouchStart?: CanvasEventFn<EstadoType>,
-        onTouchMove?: CanvasEventFn<EstadoType>,
-        onTouchEnd?: CanvasEventFn<EstadoType>,
-        onTouchCancel?: CanvasEventFn<EstadoType>
+        onMouseDown?: CanvasEventFn<T>,
+        onMouseUp?: CanvasEventFn<T>,
+        onMouseMove?: CanvasEventFn<T>,
+        onClick?: CanvasEventFn<T>,
+        onContextMenu?: CanvasEventFn<T>,
+        onWheel?: CanvasEventFn<T>,
+        onTouchStart?: CanvasEventFn<T>,
+        onTouchMove?: CanvasEventFn<T>,
+        onTouchEnd?: CanvasEventFn<T>,
+        onTouchCancel?: CanvasEventFn<T>
     },
-    getInitialState: (estado: EstadoType) => void,
-    onPropsChange?: (estado: EstadoType) => void,
-    onDismount?: (estado: EstadoType) => void,
+    getInitialState: (estado: T) => void,
+    onPropsChange?: (estado: T) => void,
+    onDismount?: (estado: T) => void,
     options?: {
+        [key: string]: unknown,
         useTouchManager?: boolean,
         preventContextMenu?: boolean,
         contextMenuAsRightClick?: boolean, // Finge que o evento ContextMenu seja um botão direito do mouse
-        context?: string
+        context?: string,
     }
 }) => {
 
@@ -63,7 +64,7 @@ const MeuCanvas = (props: {
         return canvasUseEffect();
     }, [canvasUseEffect]);
     
-    let myListeners: { [key: string]: CanvasEventFn<EstadoType> } = {
+    let myListeners: { [key: string]: CanvasEventFn<T> } = {
         onContextMenu: (e) => {
             if(!("preventDefault" in e) || !("button" in e) ) return null;
 
@@ -86,7 +87,7 @@ const MeuCanvas = (props: {
         }
     };
 
-    const touchManager = new TouchManager<EstadoType>();
+    const touchManager = new TouchManager<T>();
 
     if(options.useTouchManager)
     myListeners = {...myListeners,...{
