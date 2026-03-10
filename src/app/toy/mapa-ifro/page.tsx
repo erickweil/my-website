@@ -1,10 +1,9 @@
 "use client";
 
-import { EstadoType, mesclarEstado } from "@/components/Canvas/CanvasController";
-import { CanvasEventType } from "@/components/Canvas/TouchManager";
+import { mesclarEstado } from "@/components/Canvas/CanvasController";
 import ZoomableCanvas, { ZoomEstadoType } from "@/components/Canvas/ZoomableCanvas";
 import NonSSRWrapper from "@/components/nonSSRWrapper";
-import { useEffect, useRef, useState } from "react";
+import { UIEvent, useEffect, useRef, useState } from "react";
 
 type MapaEstado = ZoomEstadoType & {
     latitude?: number,
@@ -73,85 +72,77 @@ export default function MapaIfro() {
         };        
     }, [locationAllowed]);
 
-    const mydraw = (ctx: CanvasRenderingContext2D | null, estado: MapaEstado) => {
-        if(!ctx) {
-            console.warn("Canvas context is null, cannot draw.");
-            return;
-        }
-
-        console.log("Drawing canvas!");
-        const w = ctx.canvas.width;
-        const h = ctx.canvas.height;
-
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, w, h);
-
-        // Escrever a posição atual no canvas
-        if(estado.latitude && estado.longitude) {
-            ctx.fillStyle = "white";
-            ctx.font = "20px Arial";
-            ctx.fillText(`Latitude: ${(estado.latitude as number)}`, 10, 30);
-            ctx.fillText(`Longitude: ${(estado.longitude as number)}`, 10, 60);
-        } else {
-            ctx.fillStyle = "red";
-            ctx.font = "20px Arial";
-            ctx.fillText("Aguardando permissão de localização...", 10, 30);
-        }
-
-        ctx.fillStyle = "yellow";
-        ctx.font = "20px Arial";
-        ctx.fillText(`Cliques: ${estado.cliques || 0}`, w-120, 30);
-    };
-
-    const onDismount = (estado: MapaEstado) => {
-        console.log("Canvas is being dismounted, final state:", estado);
-    };
-
-    const everyFrame = (estado: MapaEstado) => {
-        if(locationRef.current) {
-            const { latitude, longitude } = locationRef.current.coords;
-            
-            if(estado.latitude !== latitude || estado.longitude !== longitude) {
-                console.log("Updating location in state:", { latitude, longitude });
-                mesclarEstado(estado, {
-                    latitude: latitude,
-                    longitude: longitude
-                });
-            }
-        }
-
-        return null;
-    };
-
-    const onClick = (e: CanvasEventType, estado: MapaEstado) => {
-        return {
-            cliques: (estado.cliques as number || 0) + 1
-        }
-    };
-
     return (
         <NonSSRWrapper>
         <ZoomableCanvas<MapaEstado>
-			draw={mydraw}
-			options={{
+            options={{
                 useTouchManager: false,
                 spanButton: "any",
-                DEBUG: true,
+                // DEBUG: true,
                 initialState: {
                     latitude: 0, 
                     longitude: 0,
                     cliques: 0
                 }
             }}
-			onDismount={onDismount}
-			everyFrame={everyFrame}
+			draw={(ctx, estado) => {
+                if(!ctx) {
+                    console.warn("Canvas context is null, cannot draw.");
+                    return;
+                }
+
+                console.log("Drawing canvas!");
+                const w = ctx.canvas.width;
+                const h = ctx.canvas.height;
+
+                ctx.fillStyle = "black";
+                ctx.fillRect(0, 0, w, h);
+
+                // Escrever a posição atual no canvas
+                if(estado.latitude && estado.longitude) {
+                    ctx.fillStyle = "white";
+                    ctx.font = "20px Arial";
+                    ctx.fillText(`Latitude: ${(estado.latitude as number)}`, 10, 30);
+                    ctx.fillText(`Longitude: ${(estado.longitude as number)}`, 10, 60);
+                } else {
+                    ctx.fillStyle = "red";
+                    ctx.font = "20px Arial";
+                    ctx.fillText("Aguardando permissão de localização...", 10, 30);
+                }
+
+                ctx.fillStyle = "yellow";
+                ctx.font = "20px Arial";
+                ctx.fillText(`Cliques: ${estado.cliques || 0}`, w-120, 30);
+            }}
+            everyFrame={(estado) => {
+                if(locationRef.current) {
+                    const { latitude, longitude } = locationRef.current.coords;
+                    
+                    if(estado.latitude !== latitude || estado.longitude !== longitude) {
+                        console.log("Updating location in state:", { latitude, longitude });
+                        mesclarEstado(estado, {
+                            latitude: latitude,
+                            longitude: longitude
+                        });
+                    }
+                }
+
+                return null;
+            }}
 			events={{
-				onClick: onClick,
+				onClick: (e, estado) => {
+                    return {
+                        cliques: (estado.cliques as number || 0) + 1
+                    }
+                },
 				//onKeyPress:onKeyPress,
 				//onKeyDown:onKeyDown,
 				//onKeyUp:onKeyUp,
 				//onSpan: onSpan
 			}}
+            onDismount={(estado) => {
+                console.log("Canvas is being dismounted, final state:", estado);
+            }}
         />
         </NonSSRWrapper>
     );

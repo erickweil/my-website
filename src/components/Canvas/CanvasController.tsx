@@ -1,8 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from 'react'
-import { CanvasEventFn, CanvasEventType } from './TouchManager';
-//import TouchManager from './TouchManager';
+import { useRef, useEffect, useCallback, SyntheticEvent } from 'react'
 
 type CanvasControllerOptions<T extends EstadoType> = {
     context?: string,
@@ -17,6 +15,8 @@ export type EstadoType = {
     offsetLeft: number /*canvas.offsetLeft*/,
     offsetTop: number /*canvas.offsetTop*/
 };
+
+export type CanvasEventFn<E extends SyntheticEvent, T> = (e: E, estado: T) => Partial<T> | false | null | undefined;
 
 /**
  * Função que controla o estado do canvas,
@@ -140,7 +140,7 @@ const CanvasController = <T extends EstadoType,>(
     }, [draw, everyFrame, onPropsChange, onDismount, options]);
 
     // Executa o evento e mescla o estado
-    const doEvent = useCallback((callback: CanvasEventFn<T>, e: CanvasEventType) => {
+    const doEvent = useCallback((callback: CanvasEventFn<SyntheticEvent, T>, e: SyntheticEvent) => {
         const _estado = canvasRef.current.estado;
 
         // Pode retornar apenas o que mudou como um novo objeto

@@ -1,4 +1,4 @@
-import { MouseEvent, TouchEvent, WheelEvent } from "react";
+import { EventHandler, MouseEvent, TouchEvent, WheelEvent } from "react";
 
 function referenceSafeRemove<T>(array: T[], index: number) {
     for (let i = index; i < array.length; i++) {
@@ -80,7 +80,7 @@ export function normalizeWheel(event: WheelEvent) {
     };
 }
 
-export type CanvasEventType = MouseEvent | TouchEvent | WheelEvent | Event | {
+export type FakeTouchEvent = {
     pageX: number,
     pageY: number,
     clientX: number,
@@ -92,11 +92,9 @@ export type CanvasEventType = MouseEvent | TouchEvent | WheelEvent | Event | {
     delta?: number
 };
 
-export type CanvasEventFn<T> = (e: CanvasEventType, estado: T) => Partial<T> | false | null | undefined;
-
-export default class TouchManager<T> {
+export default class TouchManager {
     touches: { id: number, x: number, y: number }[];
-    events: { [key: string]: CanvasEventFn<T> };
+    events: { [key: string]: (e: FakeTouchEvent) => void };
     TOUCH_DELAY: number;
     numTouches: number;
     touchDownIssued: boolean;
@@ -113,10 +111,10 @@ export default class TouchManager<T> {
         this.touchDownPosition = false;
     }
 
-    fireEvent(eventName: string, touchPos: {x: number, y: number}, args: T) {
+    fireEvent(eventName: string, touchPos: {x: number, y: number}) {
         if (!this.events[eventName]) return;
 
-        let fake_e = {
+        let fake_e: FakeTouchEvent = {
             // are those the same?
             pageX: touchPos.x,
             pageY: touchPos.y,
@@ -131,7 +129,7 @@ export default class TouchManager<T> {
             // altKey, crtlKey, shiftKey, metaKey, getModifierState(key)
         };
 
-        this.events[eventName](fake_e, args);
+        this.events[eventName](fake_e);
     }
 
     getTouchByID(id: number) {
@@ -141,7 +139,7 @@ export default class TouchManager<T> {
         return false;
     }
 
-    addEventListener(e: string, func: CanvasEventFn<T>) {
+    addEventListener(e: string, func: (e: FakeTouchEvent) => void) {
         this.events[e] = func;
     }
 
@@ -154,7 +152,7 @@ export default class TouchManager<T> {
         else return 1;
     }
 
-    touchstart(e: TouchEvent, args: T) {
+    touchstart(e: TouchEvent) {
         if (this.touches.length == 0) {
             this.touchDownIssued = false;
             this.numTouches = 0;
@@ -187,7 +185,7 @@ export default class TouchManager<T> {
         //this.events["onTouchDown"](this.getCenterTouchPos(),this.touches);
     }
 
-    touchmove(e: TouchEvent, args: T) {
+    touchmove(e: TouchEvent) {
         for (let i = 0; i < e.changedTouches.length; i++) {
             let new_t = e.changedTouches[i];
 
@@ -202,7 +200,7 @@ export default class TouchManager<T> {
         let touchPos = this.getCenterTouchPos();
 
         if (!this.touchDownIssued) {
-            this.fireEvent("onTouchDown", touchPos, args);
+            this.fireEvent("onTouchDown", touchPos);
             this.touchDownIssued = true;
             this.touchDownDistance = this.getFingerDistance();
         }
@@ -221,18 +219,18 @@ export default class TouchManager<T> {
                             screenY: touchPos.y,
                             button: touchToButton(this.numTouches),
                             buttons: touchToButtons(this.numTouches)
-                        }, args);
+                        });
                 }
                 this.touchDownDistance = this.getFingerDistance();
             }
 
             if (this.numTouches <= this.touches.length) {
-                this.fireEvent("onTouchMove", touchPos, args);
+                this.fireEvent("onTouchMove", touchPos);
             }
         }
     }
 
-    touchend(e: TouchEvent, args: T) {
+    touchend(e: TouchEvent) {
         let touchPos = this.getCenterTouchPos();
         //var touchPos = this.touchDownPosition;
         for (let i = 0; i < e.changedTouches.length; i++) {
@@ -247,24 +245,24 @@ export default class TouchManager<T> {
         //{
         if (this.numTouches > 0) {
             if (!this.touchDownIssued) {
-                this.fireEvent("onTouchDown", touchPos, args);
+                this.fireEvent("onTouchDown", touchPos);
 
                 this.touchDownIssued = true;
             }
 
-            this.fireEvent("onTouchUp", touchPos, args);
+            this.fireEvent("onTouchUp", touchPos);
 
             this.numTouches = 0;
         }
 
     }
 
-    touchcancel(e: TouchEvent, args: T) {
-        this.touchend(e, args);
+    touchcancel(e: TouchEvent) {
+        this.touchend(e);
     }
 
-    touchleave(e: TouchEvent, args: T) {
-        this.touchend(e, args);
+    touchleave(e: TouchEvent) {
+        this.touchend(e);
     }
 
     getCenterTouchPos() {

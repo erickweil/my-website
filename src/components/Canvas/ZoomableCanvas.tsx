@@ -1,7 +1,7 @@
-import MeuCanvas from "./MeuCanvas";
-import { mesclarEstado, pageToCanvas, canvasToPage, EstadoType } from "./CanvasController";
-import { CanvasEventFn, CanvasEventType, normalizeWheel } from "./TouchManager";
-import { MouseEvent, WheelEvent } from "react";
+import MeuCanvas, { MyCanvasEventHandlers } from "./MeuCanvas";
+import { mesclarEstado, pageToCanvas, canvasToPage, EstadoType, CanvasEventFn } from "./CanvasController";
+import { normalizeWheel } from "./TouchManager";
+import { MouseEvent, SyntheticEvent, TouchEvent, UIEvent, WheelEvent } from "react";
 
 export type ZoomEstadoType = EstadoType & {
     span: {x: number, y: number},
@@ -101,16 +101,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
     draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
     everyFrame?: (estado: T) => Partial<T> | false | null | undefined,
     uidraw?: (context: CanvasRenderingContext2D | null, estado: T) => void,
-    events?: {
-        onMouseDown?: CanvasEventFn<T>,
-        onMouseMove?: CanvasEventFn<T>,
-        onMouseUp?: CanvasEventFn<T>,
-        onWheel?: CanvasEventFn<T>,
-        onClick?: CanvasEventFn<T>,
-        onMouseLeave?: CanvasEventFn<T>,
-        onMouseEnter?: CanvasEventFn<T>,
-        onSpan?: CanvasEventFn<T>
-    },
+    events?: MyCanvasEventHandlers<T>,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
     options?: {
@@ -268,9 +259,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
     // onMouseMove - Moveu o mouse
     // onMouseUp - Soltou o mouse
     // onWheel e doZoom - Controlar o zoom
-    const onMouseDown: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as MouseEvent;
-        
+    const onMouseDown: CanvasEventFn<MouseEvent<HTMLCanvasElement>, T> = (e, estado) => {        
         if(DEBUG)
         {
             DEBUG_TXTN++
@@ -292,9 +281,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         return null;
     };
 
-    const onMouseMove: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as MouseEvent;
-
+    const onMouseMove: CanvasEventFn<MouseEvent<HTMLCanvasElement>, T> = (e, estado) => {
         if(DEBUG) DEBUG_TXT += ".";
 
         const mouse = getMouse(e,estado);
@@ -344,9 +331,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         return null;
     };
 
-    const onMouseUp: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as MouseEvent;
-
+    const onMouseUp: CanvasEventFn<MouseEvent<HTMLCanvasElement>, T> = (e, estado) => {
         if(DEBUG)
         {
             DEBUG_TXT2N++
@@ -381,9 +366,8 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         return null;
     };
 
-    const doZoom: CanvasEventFn<T> = (_e, estado) => {  
+    const doZoom: CanvasEventFn<{delta: number, pageX: number, pageY: number} & WheelEvent<HTMLCanvasElement>, T> = (e, estado) => {  
         if(!estado.zoomEnabled) return;
-        const e = _e as unknown as {delta: number, pageX: number, pageY: number} & CanvasEventType;
 
         let newScale = estado.scale * e.delta;
         newScale = Math.max(Math.min(newScale,maxZoomScale),minZoomScale);
@@ -397,9 +381,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         return null;
     };
 
-    const onWheel: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as WheelEvent;
-
+    const onWheel: CanvasEventFn<WheelEvent<HTMLCanvasElement>, T> = (e, estado) => {
         const wheelDelta = normalizeWheel(e);
         const amount = 1.0 - Math.max(Math.min(wheelDelta.pixelY/200.0,0.2),-0.2);
         const mouse = estado.mouse;
@@ -412,9 +394,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         }, estado);
     };
     
-    const onClick: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as MouseEvent;
-
+    const onClick: CanvasEventFn<MouseEvent<HTMLCanvasElement>, T> = (e, estado) => {
         if(DEBUG)
         {
             DEBUG_TXT3N++;
@@ -428,25 +408,21 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         }
     };
 
-    const onMouseLeave: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as MouseEvent;
-
+    const onMouseLeave: CanvasEventFn<MouseEvent<HTMLCanvasElement>, T> = (e, estado) => {
         const mouse = getMouse(e,estado);
         mesclarEstado(estado,{mouse:mouse});
 
         if(events?.onMouseLeave) return events.onMouseLeave(e,estado);
     }
 
-    const onMouseEnter: CanvasEventFn<T> = (_e, estado) => {
-        const e = _e as unknown as MouseEvent;
-
+    const onMouseEnter: CanvasEventFn<MouseEvent<HTMLCanvasElement>, T> = (e, estado) => {
         const mouse = getMouse(e,estado);
         mesclarEstado(estado,{mouse:mouse});
 
         if(events?.onMouseEnter) return events.onMouseEnter(e,estado);
     }
     
-    let myListeners: { [key: string]: CanvasEventFn<T> } = {
+    let myListeners: MyCanvasEventHandlers<T> = {
         onMouseDown:onMouseDown,
         onMouseMove:onMouseMove,
         onMouseUp:onMouseUp,
@@ -458,9 +434,8 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
     };
 
     for (const k in events) {
-        if(!(k in myListeners))
-        if(k in events && typeof k === "string") {
-            myListeners[k] = events[k as keyof typeof events]!;
+        if(!(k in myListeners)) {
+            myListeners[k as keyof typeof myListeners] = events[k as keyof typeof events]! as CanvasEventFn<SyntheticEvent, T>;
         }
     }
 

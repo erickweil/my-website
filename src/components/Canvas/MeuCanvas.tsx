@@ -1,10 +1,19 @@
-import { TouchEvent, useEffect } from 'react';
-import CanvasControler, { EstadoType } from './CanvasController'
-import TouchManager, { CanvasEventFn } from './TouchManager';
+import { DOMAttributes, EventHandler, MouseEvent, SyntheticEvent, TouchEvent, UIEvent, useEffect, WheelEvent } from 'react';
+import CanvasControler, { CanvasEventFn, EstadoType } from './CanvasController'
+import TouchManager from './TouchManager';
 //import React, {memo} from 'react'
 
 //import styles from '@/styles/MeuCanvas.module.css'
 //import "./MeuCanvas.css"
+
+type CanvasEventHandlers = Omit<DOMAttributes<HTMLCanvasElement>, "children" | "dangerouslySetInnerHTML">;
+type ExtractEventType<T> = T extends (event: infer E) => void ? E : UIEvent;
+export type MyCanvasEventHandlers<T extends EstadoType> = {
+    [K in keyof CanvasEventHandlers]?: CanvasEventFn<ExtractEventType<Required<CanvasEventHandlers>[K]>, T>
+} & {
+    doZoom?: CanvasEventFn<{delta: number, pageX: number, pageY: number} & WheelEvent<HTMLCanvasElement>, T>,
+    onSpan?: CanvasEventFn<UIEvent, T>
+};
 
 /**
  * Meu Canvas,
@@ -21,18 +30,19 @@ import TouchManager, { CanvasEventFn } from './TouchManager';
 const MeuCanvas = <T extends EstadoType,>(props: {
     draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
     everyFrame?: (estado: T) => Partial<T> | false | null | undefined,
-    events: {
-        onMouseDown?: CanvasEventFn<T>,
-        onMouseUp?: CanvasEventFn<T>,
-        onMouseMove?: CanvasEventFn<T>,
-        onClick?: CanvasEventFn<T>,
-        onContextMenu?: CanvasEventFn<T>,
-        onWheel?: CanvasEventFn<T>,
-        onTouchStart?: CanvasEventFn<T>,
-        onTouchMove?: CanvasEventFn<T>,
-        onTouchEnd?: CanvasEventFn<T>,
-        onTouchCancel?: CanvasEventFn<T>
-    },
+    // events: {
+    //     onMouseDown?: CanvasEventFn<T>,
+    //     onMouseUp?: CanvasEventFn<T>,
+    //     onMouseMove?: CanvasEventFn<T>,
+    //     onClick?: CanvasEventFn<T>,
+    //     onContextMenu?: CanvasEventFn<T>,
+    //     onWheel?: CanvasEventFn<T>,
+    //     onTouchStart?: CanvasEventFn<T>,
+    //     onTouchMove?: CanvasEventFn<T>,
+    //     onTouchEnd?: CanvasEventFn<T>,
+    //     onTouchCancel?: CanvasEventFn<T>
+    // },
+    events?: MyCanvasEventHandlers<T>,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
     options?: {
@@ -64,55 +74,54 @@ const MeuCanvas = <T extends EstadoType,>(props: {
         return canvasUseEffect();
     }, [canvasUseEffect]);
     
-    let myListeners: { [key: string]: CanvasEventFn<T> } = {
+    let myListeners: CanvasEventHandlers & {
+        doZoom?: EventHandler<TouchEvent>,
+        onSpan?: EventHandler<UIEvent>
+    } = {
         onContextMenu: (_e) => {
             const e = _e as unknown as MouseEvent;
 
             if(options.preventContextMenu)
                 e.preventDefault(); // evitar abrir a janela contextMenu ao clicar o botão direito
 
-            if(options.contextMenuAsRightClick && events.onClick)
+            if(options.contextMenuAsRightClick && events?.onClick)
             {
                 //e.button = 2;
                 //e.buttons = e.buttons | 2;
                 //return doEvent(events.onClick,e);
-                return doEvent(events.onClick, {
+                doEvent(events.onClick as CanvasEventFn<SyntheticEvent, T>, {
                     ...e,
                     button: 2,
                     buttons: e.buttons | 2
                 } as unknown as MouseEvent);
+            } else if(events?.onContextMenu) {
+                doEvent(events.onContextMenu as CanvasEventFn<SyntheticEvent, T>,e);
             }
-            if(events.onContextMenu) 
-                return doEvent(events.onContextMenu,e);
         }
     };
 
-    const touchManager = new TouchManager<T>();
+    const touchManager = new TouchManager();
 
     if(options.useTouchManager)
     myListeners = {...myListeners,...{
-        onTouchStart: (e, estado) => { touchManager.touchstart(e as TouchEvent, estado); return null; },
-        onTouchMove: (e, estado) => { touchManager.touchmove(e as TouchEvent, estado); return null; },
-        onTouchEnd: (_e, estado) => { 
+        onTouchStart: (e) => touchManager.touchstart(e as TouchEvent),
+        onTouchMove: (e) => touchManager.touchmove(e as TouchEvent),
+        onTouchCancel: (e) => touchManager.touchcancel(e as TouchEvent),
+        onTouchEnd: (_e) => { 
             const e = _e as unknown as TouchEvent;
             // Impedir um evento de long tap?
             if(options.preventContextMenu)
                 e.preventDefault();
 
-            touchManager.touchend(e, estado); 
-            return null;
+            touchManager.touchend(e);
         },
-        onTouchCancel: (e, estado) => { 
-            touchManager.touchcancel(e as TouchEvent, estado); 
-            return null;
-        }
     }};
 
     for (const k in events) {
         if(!(k in myListeners))
-        myListeners[k] = (e) => { 
-            if(k in events && typeof k === "string") {
-                return doEvent(events[k as keyof typeof events]!, e);
+        myListeners[k as keyof typeof myListeners] = (e: SyntheticEvent) => { 
+            if(k in events) {
+                return doEvent(events[k as keyof typeof events]! as CanvasEventFn<SyntheticEvent, T>, e);
             } else {
                 return null;
             }
@@ -127,14 +136,14 @@ const MeuCanvas = <T extends EstadoType,>(props: {
         // 2 toques -> Botão direito
         // 3 toques -> Botão do meio
         // (Especialmente necessário para funcionar o pinch zoom + span)    
-        touchManager.addEventListener("onTouchDown", (e, estado) => myListeners.onMouseDown ? myListeners.onMouseDown(e, estado) : null);
-        touchManager.addEventListener("onTouchMove", (e, estado) => myListeners.onMouseMove ? myListeners.onMouseMove(e, estado) : null);
-        touchManager.addEventListener("onTouchUp", (e, estado) => {
-            if(myListeners.onMouseUp) myListeners.onMouseUp(e, estado);
-            if(myListeners.onClick) return myListeners.onClick(e, estado);
+        touchManager.addEventListener("onTouchDown", (e) => myListeners.onMouseDown ? myListeners.onMouseDown(e as unknown as MouseEvent<HTMLCanvasElement>) : null);
+        touchManager.addEventListener("onTouchMove", (e) => myListeners.onMouseMove ? myListeners.onMouseMove(e as unknown as MouseEvent<HTMLCanvasElement>) : null);
+        touchManager.addEventListener("onTouchUp", (e) => {
+            if(myListeners.onMouseUp) myListeners.onMouseUp(e as unknown as MouseEvent<HTMLCanvasElement>);
+            if(myListeners.onClick) return myListeners.onClick(e as unknown as MouseEvent<HTMLCanvasElement>);
             return null;
         });
-        touchManager.addEventListener("onTouchZoom", (e, estado) => myListeners.doZoom ? myListeners.doZoom(e, estado) : null);
+        touchManager.addEventListener("onTouchZoom", (e) => myListeners.doZoom ? myListeners.doZoom(e as unknown as TouchEvent) : null);
     }
     
     // Removing custom doZoom listener from canvasListeners to prevent React Error
