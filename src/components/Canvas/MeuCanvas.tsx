@@ -33,7 +33,6 @@ const MeuCanvas = <T extends EstadoType,>(props: {
         onTouchEnd?: CanvasEventFn<T>,
         onTouchCancel?: CanvasEventFn<T>
     },
-    getInitialState: (estado: EstadoType) => void,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
     options?: {
@@ -42,24 +41,25 @@ const MeuCanvas = <T extends EstadoType,>(props: {
         preventContextMenu?: boolean,
         contextMenuAsRightClick?: boolean, // Finge que o evento ContextMenu seja um botão direito do mouse
         context?: string,
+        initialState?: Partial<T>
     }
 }) => {
 
     console.log("Criou o MeuCanvas");
 
-    const { draw, everyFrame, events, getInitialState, onPropsChange, onDismount, options: _options, ...rest } = props
+    const { draw, everyFrame, events, onPropsChange, onDismount, options: _options, ...rest } = props
 
     const defaultOptions = {
         useTouchManager:true,
         preventContextMenu:true,
         contextMenuAsRightClick:true, // Finge que o evento ContextMenu seja um botão direito do mouse
-        context:"2d"
+        context:"2d",
     };
     const options = _options ? {...defaultOptions,..._options} : defaultOptions;
 
+    const { doEvent, canvasUseEffect, canvasRef } = CanvasControler(draw, everyFrame, onPropsChange, onDismount, options)
 
-    const { doEvent, canvasUseEffect, canvasRef } = CanvasControler(draw, everyFrame,getInitialState, onPropsChange, onDismount, options)
-
+    // Ainda não entendi porque não pode ficar dentro do CanvasController, mas se colocar lá nunca executa
     useEffect(() => {
         return canvasUseEffect();
     }, [canvasUseEffect]);

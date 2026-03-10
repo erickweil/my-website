@@ -1,10 +1,17 @@
-import { useRef, useEffect } from 'react'
+"use client";
+
+import { useRef, useEffect, useCallback } from 'react'
 import { CanvasEventFn, CanvasEventType } from './TouchManager';
 //import TouchManager from './TouchManager';
 
+type CanvasControllerOptions<T extends EstadoType> = {
+    context?: string,
+    initialState?: Partial<T>
+};
+
 // criar um tipo que representa um estado, pode conter qualuer coisa mas devo poder manipular suas chaves
 export type EstadoType = {
-    _changes?: number // número de mudanças desde a última renderização, para otimizar renderizações
+    _changes: number // número de mudanças desde a última renderização, para otimizar renderizações
     width: number,
     height: number,
     offsetLeft: number /*canvas.offsetLeft*/,
@@ -32,7 +39,7 @@ export function mesclarEstado<T extends EstadoType>(estado: Record<string, unkno
         }
     }
 
-    if (changed) estado._changes!++;
+    if (changed) estado._changes++;
 }
 
 /**
@@ -93,57 +100,48 @@ export function pageToCanvas(p: {x: number, y: number}, offsetLeft: number, offs
 Canvas Controler, handles resizing and animationframe callbacks
 also handles state using useRef only... to prevent re-renders
 */
-const CanvasControler = <T extends EstadoType,>(
+const CanvasController = <T extends EstadoType,>(
     draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
     everyFrame: ((estado: T) => Partial<T> | false | null | undefined) | undefined,
-    getInitialState: (estado: EstadoType) => void,
     onPropsChange: ((estado: T) => void) | undefined,
     onDismount: ((estado: T) => void) | undefined,
-    options: {
-        context?: string
-    } = {}
+    options: CanvasControllerOptions<T> = {}
 ) => {
     //const [estado,setEstado] = useState(null);
     //if(!estado) setEstado(getInitialState());
 
     // Usando só useRef pra não causar um re-render toda vez
     // https://www.smashingmagazine.com/2020/11/react-useref-hook/
-    const canvasRef = useRef<{canvas: HTMLCanvasElement | null | undefined, estado: T | null}>({ canvas: null, estado: null });
-    if (!canvasRef.current.estado) {
-        console.log("SETANDO ESTADO INICIAL...");
-        const novoEstado: EstadoType = {
+    const canvasRef = useRef<{canvas: HTMLCanvasElement | null | undefined, estado: T}>({
+        canvas: null,
+        estado: {
+            ...(options.initialState ? options.initialState : {}),
             offsetLeft: 0,
             offsetTop: 0,
             width: window.innerWidth,
             height: window.innerHeight,
             _changes: 1
-        };
+        } as T
+    });
+    const drawRef = useRef(draw);
+    const everyFrameRef = useRef(everyFrame);
+    const onDismountRef = useRef(onDismount);
+    const contextType = options.context || '2d';
 
-        getInitialState(novoEstado);
+    useEffect(() => {
+        console.log("Options changed, updating refs and calling onPropsChange if canvas is ready...", options);        drawRef.current = draw;
+        everyFrameRef.current = everyFrame;
+        onDismountRef.current = onDismount;
 
-        canvasRef.current.estado = novoEstado as T;
-    }
-    else {
-        if (onPropsChange) {
-            console.log("onPropsChange");
-            onPropsChange(canvasRef.current.estado);
+        if (canvasRef.current.canvas) {
+            canvasRef.current.estado._changes++;
+            onPropsChange?.(canvasRef.current.estado);
         }
-    }
-
-    // GetEstado
-    // Essa função garante que:
-    // - O estado obtido sempre é o mais recente
-    //   - Um conflito de mesclagem é evitado por alterar o próprio objeto com novos valores e então realizar o setEstado
-    // - Cada mudança de estado mudará apenas o necessário
-    const getEstado = () => {
-        if (!canvasRef) return {} as T;
-
-        return canvasRef.current.estado!;
-    };
+    }, [draw, everyFrame, onPropsChange, onDismount, options]);
 
     // Executa o evento e mescla o estado
-    const doEvent = (callback: CanvasEventFn<T>, e: CanvasEventType) => {
-        const _estado = getEstado();
+    const doEvent = useCallback((callback: CanvasEventFn<T>, e: CanvasEventType) => {
+        const _estado = canvasRef.current.estado;
 
         // Pode retornar apenas o que mudou como um novo objeto
         // O mesmo objeto já modificado (Se modificar o mesmo objeto não precisa retornar ele)
@@ -157,16 +155,17 @@ const CanvasControler = <T extends EstadoType,>(
         //setEstado({..._estado}); -- NÃO USAR ESTADO MAIS
 
         return null;
-    };
+    }, []);
 
-    const canvasUseEffect = () => {
+    const canvasUseEffect = useCallback(() => {
+        console.log("UseEffect do canvas, criando contexto e listeners...");
+        const canvas = canvasRef.current.canvas;
+        if (!canvas) return;
 
-        console.log("useEffect do CanvasControler")
-        const canvas = canvasRef.current.canvas!;
-        const context = canvas.getContext((options && options.context) || '2d');
+        const context = canvas.getContext(contextType);
 
         // Timer
-        let animationFrameId: number;
+        let animationFrameId = 0;
 
         // Listener de Resize
         const doResize = () => {
@@ -175,7 +174,7 @@ const CanvasControler = <T extends EstadoType,>(
             const height = window.innerHeight - top;
 
             if (canvas.width !== width || canvas.height !== height) {
-                const estado = getEstado();
+                const estado = canvasRef.current.estado;
 
                 canvas.width = width;
                 canvas.height = height;
@@ -194,7 +193,7 @@ const CanvasControler = <T extends EstadoType,>(
 
         // Timer que se auto-registra recursivamente
         const render = () => {
-            const estado = getEstado();
+            const estado = canvasRef.current.estado;
 
             // só garante que vai atualizar a cada mudança se o estado for modificado com mesclarEstado
             if (estado._changes) {
@@ -205,12 +204,12 @@ const CanvasControler = <T extends EstadoType,>(
                     //offsetTop:canvas.offsetTop
                 });
 
-                draw(context as (CanvasRenderingContext2D | null), estado);
+                drawRef.current(context as (CanvasRenderingContext2D | null), estado);
                 estado._changes = 0;
             }
 
-            if (everyFrame)
-                mesclarEstado(estado, everyFrame(estado));
+            if (everyFrameRef.current)
+                mesclarEstado(estado, everyFrameRef.current(estado));
             // auto-registra novamente
             // TODO: só pedir um AnimationFrame se houve uma mudança mesmo para ser feita.
             animationFrameId = window.requestAnimationFrame(render);
@@ -225,13 +224,13 @@ const CanvasControler = <T extends EstadoType,>(
             window.cancelAnimationFrame(animationFrameId);
             window.removeEventListener("resize", debounceHandleResize);
 
-            if (onDismount) {
-                const estado = getEstado();
-                onDismount(estado);
+            if (onDismountRef.current) {
+                const estado = canvasRef.current.estado;
+                onDismountRef.current(estado);
             }
         }
-    }; //, [draw]); // Só vai re-chamar o useEffect se o draw mudar.
+    }, []);
 
     return { doEvent, canvasUseEffect, canvasRef };
 }
-export default CanvasControler;
+export default CanvasController;

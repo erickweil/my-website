@@ -111,7 +111,6 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         onMouseEnter?: CanvasEventFn<T>,
         onSpan?: CanvasEventFn<T>
     },
-    getInitialState: (estado: ZoomEstadoType) => void,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
     options?: {
@@ -125,13 +124,14 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         useTouchManager?: boolean,
         preventContextMenu?: boolean,
         context?: string
+        initialState?: Partial<T>
     }
 }) => {
 
     console.log("Criou o ZoomableCanvas");
-    const { uidraw, draw, everyFrame, events, getInitialState, onPropsChange, onDismount, options:_options, ...rest } = props
+    const { uidraw, draw, everyFrame, events, onPropsChange, onDismount, options:_options, ...rest } = props
 
-    const defaultOptions = {
+    const defaultOptions: typeof _options = {
         DEBUG: false,
         spanButton:"any",
         maxZoomScale: 20.0,
@@ -140,11 +140,22 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         zoomEnabled: true
     };
     const options = _options ? {...defaultOptions,..._options} : defaultOptions;
+    options.initialState = {
+        ...(_options?.initialState ? _options.initialState : {}),
+        mouse:{pageX:0,pageY:0,x:0,y:0,left:0,middle:0,right:0},
+        span:{x:0,y:0},
+        spanning:false,
+        scale:1.0,
+        spanningStart:{x:0,y:0},
+        spanned:false,
+        spanEnabled:options.spanEnabled,
+        zoomEnabled:options.zoomEnabled        
+    } as T;
 
     const spanButton = options.spanButton;
     const DEBUG = options.DEBUG;
-    const maxZoomScale = options.maxZoomScale;
-    const minZoomScale = options.minZoomScale;
+    const maxZoomScale = options.maxZoomScale!;
+    const minZoomScale = options.minZoomScale!;
     // Obtêm o mouse em coordenadas locais
     const getMouse = (e: MouseEvent, estado: T) => 
     {
@@ -435,23 +446,6 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
         if(events?.onMouseEnter) return events.onMouseEnter(e,estado);
     }
     
-    // Não é o jeito certo? idaí?
-    const myGetInitialState = (estado: EstadoType) => {
-        mesclarEstado(estado,{
-            mouse:{pageX:0,pageY:0,x:0,y:0,left:0,middle:0,right:0},
-            span:{x:0,y:0},
-            spanning:false,
-            scale:1.0,
-            spanningStart:{x:0,y:0},
-            spanned:false,
-            spanEnabled:options.spanEnabled,
-            zoomEnabled:options.zoomEnabled
-        });
-
-        //carrega o estado inicial de quem chamou
-        getInitialState(estado as ZoomEstadoType);
-    };
-
     let myListeners: { [key: string]: CanvasEventFn<T> } = {
         onMouseDown:onMouseDown,
         onMouseMove:onMouseMove,
@@ -473,7 +467,6 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
     return <MeuCanvas 
         draw={mydraw}
         everyFrame={everyFrame}
-        getInitialState={myGetInitialState}
         onDismount={onDismount}
         onPropsChange={onPropsChange}
         events={myListeners}
