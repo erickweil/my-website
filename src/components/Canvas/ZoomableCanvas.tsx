@@ -384,6 +384,7 @@ const ZoomableCanvas = <T extends ZoomEstadoType,>(props: {
     const onWheel: CanvasEventFn<WheelEvent<HTMLCanvasElement>, T> = (e, estado) => {
         const wheelDelta = normalizeWheel(e);
         const amount = 1.0 - Math.max(Math.min(wheelDelta.pixelY/200.0,0.2),-0.2);
+        // deveria pegar o mouse do evento?
         const mouse = estado.mouse;
 
         return doZoom({

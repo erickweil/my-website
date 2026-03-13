@@ -30,18 +30,6 @@ export type MyCanvasEventHandlers<T extends EstadoType> = {
 const MeuCanvas = <T extends EstadoType,>(props: {
     draw: (context: CanvasRenderingContext2D | null, estado: T) => void,
     everyFrame?: (estado: T) => Partial<T> | false | null | undefined,
-    // events: {
-    //     onMouseDown?: CanvasEventFn<T>,
-    //     onMouseUp?: CanvasEventFn<T>,
-    //     onMouseMove?: CanvasEventFn<T>,
-    //     onClick?: CanvasEventFn<T>,
-    //     onContextMenu?: CanvasEventFn<T>,
-    //     onWheel?: CanvasEventFn<T>,
-    //     onTouchStart?: CanvasEventFn<T>,
-    //     onTouchMove?: CanvasEventFn<T>,
-    //     onTouchEnd?: CanvasEventFn<T>,
-    //     onTouchCancel?: CanvasEventFn<T>
-    // },
     events?: MyCanvasEventHandlers<T>,
     onPropsChange?: (estado: T) => void,
     onDismount?: (estado: T) => void,
