@@ -116,7 +116,7 @@ export default function MapaIfro() {
         <NonSSRWrapper>
         <ZoomableCanvas<MapaEstado>
             options={{
-                useTouchManager: false,
+                useTouchManager: true,
                 spanButton: "any",
                 // DEBUG: true,
                 initialState: {
