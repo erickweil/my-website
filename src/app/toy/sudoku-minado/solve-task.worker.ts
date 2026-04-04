@@ -22,6 +22,7 @@ self.onmessage = async () => {
             self.postMessage({ type: "message", value: { iter, depth } } satisfies WorkerResponseMsg<WorkerTaskValue>);
         },
         1, // maxSolucoes
+        10 // baseIter - começa a iterar a partir de 2^8 iterações
     );
 
     const solucaoCompleta = stats?.solucoes.at(0);

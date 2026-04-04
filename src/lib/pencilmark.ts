@@ -14,35 +14,17 @@ proporciona uma melhora de desempenho, tanto que em problemas fáceis resolve em
  * Traduzido de implementação em Go: https://github.com/erickweil/horariogen/blob/develop/pencilmark/possibilidades.go
  */
 
-export class Possib {
+import { IBitFlag, newBitFlag } from "./bitFlag";
+
+export interface Possib extends IBitFlag {
     index: number;
-    p: boolean[];
-
-    constructor(index: number, nPossibs: number) {
-        this.index = index;
-        // Começa com todas as possibilidades são possíveis
-        this.p = new Array(nPossibs).fill(true);
-    }
-
-    contar(): number {
-        let n = 0;
-        for (let i = 0; i < this.p.length; i++) {
-            if (this.p[i]) n++;
-        }
-        return n;
-    }
-
-    receber(outro: Possib): void {
-        this.index = outro.index;
-        for (let i = 0; i < this.p.length; i++) {
-            this.p[i] = outro.p[i];
-        }
-    }
-
-    resetar(valor: boolean): void {
-        this.p.fill(valor);
-    }
 }
+
+export const newPossib = (index: number, nPossibs: number) => {
+    const possib = newBitFlag(nPossibs) as Possib;
+    possib.index = index;
+    return possib as Possib;
+};
 
 export type RegrasQuadro = (quadro: number[], possibs: Possib | null) => boolean;
 export type ProgressCallback = (iter: number, depth: number) => void;
@@ -52,8 +34,8 @@ function printarPossib(quadro_possib: Possib[]): void {
     for (let i = 0; i < quadro_possib.length; i++) {
         const p = quadro_possib[i];
         let s = "[";
-        for (let k = 0; k < p.p.length; k++) {
-            s += p.p[k] ? `${k + 1} ` : "  ";
+        for (let k = 0; k < p.nFlags; k++) {
+            s += p.ler(k) ? `${k + 1} ` : "  ";
         }
         line += s.trimEnd() + "], ";
 
@@ -66,8 +48,9 @@ function printarPossib(quadro_possib: Possib[]): void {
 
 // Ao mesmo tempo que analisa as possibilidades, encontra a com menor entropia
 function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): Possib | boolean {
-    const p = new Possib(-1, nPossibs);
-    const min_p = new Possib(-1, nPossibs);
+    const p = newPossib(-1, nPossibs);
+    const min_p = newPossib(-1, nPossibs);
+    const randomIndex = Math.floor(Math.random() * quadro.length);
     let min_cont = -1;
 
     // Atualizar cache
@@ -85,20 +68,27 @@ function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQ
         }
 
         const cont = p.contar();
-        if (min_cont === -1 || cont < min_cont || (cont === min_cont && Math.random() < 0.5)) {
-            min_cont = cont;
-            min_p.receber(p);
+        if(cont === 0) {
+            // Encontrou um quadrado vazio sem possibilidades, ou seja, o quadro é inválido
+            return false;
         }
 
-        if (min_cont <= 0) return false;
+        if (min_cont === -1 || cont < min_cont) {
+            min_cont = cont;
+            min_p.receber(p);
+            min_p.index = p.index;
+        } else if(cont === min_cont) {
+            // Se tiver a mesma entropia, escolhe o mais próximo do índice aleatório para diversificar as soluções
+            if(Math.abs(index - randomIndex) < Math.abs(min_p.index - randomIndex)) {    
+                min_p.receber(p);
+                min_p.index = p.index;
+            }
+        }
     }
 
     if(min_cont === -1) {
         // Não encontrou nenhum vazio, ou seja, o quadro está completo e válido
         return true;
-    } else if (min_cont <= 0) {
-        // Encontrou um quadrado vazio sem possibilidades, ou seja, o quadro é inválido
-        return false;
     }
 
     return min_p;
@@ -140,36 +130,64 @@ async function solucionarQuadroConcorrente(
 
 /**
  * Resolve o quadro retornando o número de iterações e se obteve sucesso.
+ * @param [baseIter] irá começar em 2^baseIter a iteração (31 para desativar)
  */
 function solucionarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback,
-    maxSolucoes: number = 1
+    maxSolucoes: number = 1,
+    baseIter: number = 10
 ) {
-    const stats = { 
+    /*const stats = { 
         iter: 0, 
         maxSolucoes: maxSolucoes,
         solucoes: [] as number[][],
     };
     _solucionarQuadro(0, stats, quadro, nPossibs, regrasfn, progressCallback);
+    return stats;*/
+
+    // reinício a cada 2^N iterações para evitar ficar preso em um caminho ruim por muito tempo
+    const solucoes = [] as number[][];
+    const stats = {
+        iter: 0,
+        maxSolucoes: maxSolucoes,
+        solucoes: solucoes,
+        maxIter: undefined as number | undefined
+    };
+    for(let iter = baseIter; iter < 32; iter++) {
+        const quadroCopy = [...quadro];
+        stats.maxIter = iter < 31 ? (1 << iter) : undefined;
+        _solucionarQuadro(0, stats, quadroCopy, nPossibs, regrasfn, progressCallback);
+
+        if(solucoes.length >= maxSolucoes) {
+            // Obteve sucesso, retorna as soluções encontradas
+            return stats;
+        }
+    }
+
     return stats;
 }
 
 function _solucionarQuadro(
     depth: number,
-    stats: { iter: number, solucoes: number[][], maxSolucoes: number },
+    stats: { iter: number, solucoes: number[][], maxSolucoes: number, maxIter?: number },
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback
 ): boolean {
     stats.iter++;
-    if (stats.iter % 5000 === 0 && progressCallback && Math.random() < 0.25) {
-        // Assim outras promessas concorrentes podem avançar
-        // await new Promise(resolve => setTimeout(resolve, 0));        
-        progressCallback(stats.iter, depth);
+    if (stats.iter % 1000 === 0 && Math.random() < 0.25) {
+
+        if(stats.maxIter && stats.iter > stats.maxIter) {
+            return true;
+        }
+        
+        if(stats.iter % 10000 === 0 && progressCallback) {
+            progressCallback(stats.iter, depth);
+        }
     }
 
     const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
@@ -186,11 +204,11 @@ function _solucionarQuadro(
     //for (const k of randRange) {
 
     // Percorre os k valores em ordem circular a partir de um offset aleatório
-    const offset = Math.floor(Math.random() * p.p.length);
-    for (let i = 0; i < p.p.length; i++) {
-        const k = (offset + i) % p.p.length;
+    const offset = Math.floor(Math.random() * p.nFlags);
+    for (let i = 0; i < p.nFlags; i++) {
+        const k = (offset + i) % p.nFlags;
         // Se é possível colocar o valor k neste quadrado
-        if (p.p[k]) {
+        if (p.ler(k)) {
             quadro[p.index] = k + 1;
 
             // Não está solucionado ainda, continua tentando
@@ -230,7 +248,7 @@ function desmarcarQuadro(
         }
 
         const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
-        const quantos = p instanceof Possib ? p.contar() : 0;
+        const quantos = typeof p !== "boolean" ? p.contar() : 0;
 
         // Se não é única a solução, volta o valor
         if (quantos === 0 || quantos > maxSolucoes) {

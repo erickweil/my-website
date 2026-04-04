@@ -200,14 +200,14 @@ export default function SudokuGrid() {
                     status: "Inicializando o solucionador..."
                 });
 
-                const nWorkers = 16;
+                const nWorkers = navigator.hardwareConcurrency || 8;
                 executarSolverWorkers(nWorkers, (workerID, iter, depth) => {
                     const progresso = calcularProgressoGeracao(iter, depth);
                     setDesafioState((prevState) => ({
                         ...prevState,
-                        progresso: progresso > prevState.progresso! ? progresso : prevState.progresso,
+                        progresso: Math.max(prevState.progresso!, progresso),
                         etapa: `Gerando um novo desafio com ${nWorkers} workers paralelos...`,
-                        status: progresso > prevState.progresso! ? `ID:${workerID} Iterações: ${iter}, Profundidade: ${depth}` : prevState.status,
+                        status: `ID:${workerID} Iterações: ${iter}, Profundidade: ${depth}`,
                     }));
                 }).then(({ solucaoCompleta, desmarcado }) => {
                     setDesafioState({

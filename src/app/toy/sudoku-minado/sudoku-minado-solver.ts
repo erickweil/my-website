@@ -198,10 +198,8 @@ export class RegrasSudokuMinado {
         
         // Se já foi escolhido no quadro, só tem aquela opção disponível
         if(quadro[index] !== 0) {
-            for(let i = 0; i < 12; i++) {
-                possibs.p[i] = false;
-            }
-            possibs.p[quadro[index] - 1] = true;
+            possibs.resetar(false);
+            possibs.marcar(quadro[index] - 1);
             return true;
         }
 
@@ -211,8 +209,8 @@ export class RegrasSudokuMinado {
             const quadroV = this.valorSudoku(quadro[nIndex]);
             if(quadroV !== 0) {
                 // Não pode com e sem mina
-                possibs.p[quadroV - 1] = false;
-                possibs.p[quadroV - 1 + 6] = false;
+                possibs.desmarcar(quadroV - 1);
+                possibs.desmarcar(quadroV - 1 + 6);
             }
         }
 
@@ -221,7 +219,7 @@ export class RegrasSudokuMinado {
         for(let v = 1; v <= 6; v++) {
             if(v < minaMinMax[0] || v > minaMinMax[1]) {
                 // Caso seja sem mina, não é possível ter esse número pois não bate com o mínimo/máximo de minas adjacentes
-                possibs.p[v - 1] = false;
+                possibs.desmarcar(v - 1);
                 // Não afeta o caso com mina
             }
         }
@@ -248,7 +246,7 @@ export class RegrasSudokuMinado {
         if (!podeSerMina) {
             // Não pode ser mina, desabilita todas as possibilidades com mina
             for (let v = 7; v <= 12; v++) {
-                possibs.p[v - 1] = false;
+                possibs.desmarcar(v - 1);
             }
         }
 
