@@ -47,10 +47,6 @@ export class Possib {
 export type RegrasQuadro = (quadro: number[], possibs: Possib | null) => boolean;
 export type ProgressCallback = (iter: number, depth: number) => void;
 
-function iniciarPossib(quadro: number[], nPossibs: number): Possib[] {
-    return quadro.map((_, i) => new Possib(i, nPossibs));
-}
-
 function printarPossib(quadro_possib: Possib[]): void {
     let line = "";
     for (let i = 0; i < quadro_possib.length; i++) {
@@ -68,27 +64,15 @@ function printarPossib(quadro_possib: Possib[]): void {
     }
 }
 
-//const cachePossibs = new Map<number, [Possib, Possib]>();
 // Ao mesmo tempo que analisa as possibilidades, encontra a com menor entropia
-function obterMelhorPossib(depth: number, quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): Possib | null {
-    /*let _possibs = cachePossibs.get(depth);
-    if (!_possibs) {
-        _possibs = [
-            new Possib(-1, nPossibs), 
-            new Possib(-1, nPossibs)
-        ];
-        cachePossibs.set(depth, _possibs);
-    }
-
-    const [p, min_p] = _possibs;*/
+function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): Possib | boolean {
     const p = new Possib(-1, nPossibs);
     const min_p = new Possib(-1, nPossibs);
-
     let min_cont = -1;
 
     // Atualizar cache
     if(!regrasfn(quadro, null)) {
-        return null;
+        return false;
     }
 
     for (let index = 0; index < quadro.length; index++) {
@@ -97,7 +81,7 @@ function obterMelhorPossib(depth: number, quadro: number[], nPossibs: number, re
         p.resetar(true);
         p.index = index;
         if(!regrasfn(quadro, p)) {
-            return null;
+            return false;
         }
 
         const cont = p.contar();
@@ -106,44 +90,18 @@ function obterMelhorPossib(depth: number, quadro: number[], nPossibs: number, re
             min_p.receber(p);
         }
 
-        if (min_cont <= 0) return null;
+        if (min_cont <= 0) return false;
     }
 
-    if (min_cont <= 0) return null;
+    if(min_cont === -1) {
+        // Não encontrou nenhum vazio, ou seja, o quadro está completo e válido
+        return true;
+    } else if (min_cont <= 0) {
+        // Encontrou um quadrado vazio sem possibilidades, ou seja, o quadro é inválido
+        return false;
+    }
 
     return min_p;
-}
-
-// 0: não solucionado, 1: solucionado, -1: inválido
-function checarSolucionado(quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): number {
-    if(quadro.includes(0)) {
-        return 0;
-    }
-
-    if(!regrasfn(quadro, null)) {
-        return -1;
-    }
-
-    /*
-    const p = new Possib(-1, nPossibs);
-
-    for (let index = 0; index < quadro.length; index++) {
-        // Se tem algo sem estar preenchido, não está solucionado
-        const v = quadro[index];
-
-        p.resetar(true);
-        p.index = index;
-        if(!regrasfn(quadro, p)) {
-            return -1;
-        }
-
-        // O valor que está no quadrado deve ser uma das possibilidades
-        if (!p.p[v - 1]) {
-            return -1;
-        }
-    }*/
-
-    return 1;
 }
 
 function getRandomRange(n: number): number[] {
@@ -155,6 +113,31 @@ function getRandomRange(n: number): number[] {
     return arr;
 }
 
+/*
+// NÃO: Parece que deixou mais lento. (Investigar melhor)
+async function solucionarQuadroConcorrente(
+    quadro: number[],
+    nPossibs: number,
+    regrasfn: RegrasQuadro,
+    progressCallback?: ProgressCallback,
+    maxSolucoes: number = 1,
+    nPromessas: number = 1
+) {
+    // Inicia N promessas concorrentes para solucionar o quadro, e retorna a primeira que resolver
+    const result = await Promise.race(Array.from({ length: nPromessas }, () => {
+        const quadroCopy = [...quadro];
+        const stats = {
+            iter: 0,
+            maxSolucoes: maxSolucoes,
+            solucoes: [] as number[][],
+        };
+        return _solucionarQuadro(0, stats, quadroCopy, nPossibs, regrasfn, progressCallback)
+            .then(() => stats)
+    }));
+
+    return result;
+}*/
+
 /**
  * Resolve o quadro retornando o número de iterações e se obteve sucesso.
  */
@@ -165,7 +148,6 @@ function solucionarQuadro(
     progressCallback?: ProgressCallback,
     maxSolucoes: number = 1
 ) {
-    //cachePossibs.clear();
     const stats = { 
         iter: 0, 
         maxSolucoes: maxSolucoes,
@@ -184,17 +166,19 @@ function _solucionarQuadro(
     progressCallback?: ProgressCallback
 ): boolean {
     stats.iter++;
-
-    if (stats.iter % 100000 === 0) {
-        if (progressCallback) {
-            //await progressCallback(stats.iter, depth);
-            //await new Promise((resolve) => setTimeout(() => resolve(progressCallback(stats.iter, depth)), 0));
-            progressCallback(stats.iter, depth);
-        }
+    if (stats.iter % 5000 === 0 && progressCallback && Math.random() < 0.25) {
+        // Assim outras promessas concorrentes podem avançar
+        // await new Promise(resolve => setTimeout(resolve, 0));        
+        progressCallback(stats.iter, depth);
     }
 
-    const p = obterMelhorPossib(depth, quadro, nPossibs, regrasfn);
-    if (!p) return false;
+    const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
+    if(p === true) {
+        stats.solucoes.push([...quadro]);
+        return stats.solucoes.length >= stats.maxSolucoes;
+    } else if (!p) {
+        return false;
+    }
 
     // Uma vez escolhido o quadrado a partir do qual continuar,
     // testa cada possibilidade deste quadrado
@@ -209,21 +193,10 @@ function _solucionarQuadro(
         if (p.p[k]) {
             quadro[p.index] = k + 1;
 
-            const result = checarSolucionado(quadro, nPossibs, regrasfn);
-            if (result === -1) {
-                // Essa escolha é inválida, tenta a próxima possibilidade
-            } else if (result === 1) {
-                //return true;
-                stats.solucoes.push([...quadro]);
-                if (stats.solucoes.length >= stats.maxSolucoes) {
-                    return true;
-                }
-            } else if(result === 0) {
-                // Não está solucionado ainda, continua tentando
-                // Tenta solucionar com mais escolhas depois dessa, e se der certo retorna true
-                if (_solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
-                    return true;
-                }
+            // Não está solucionado ainda, continua tentando
+            // Tenta solucionar com mais escolhas depois dessa, e se der certo retorna true
+            if (_solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
+                return true;
             }
 
             // Essa escolha não resolveu o sudoku, remove ela para tentar outras
@@ -256,15 +229,8 @@ function desmarcarQuadro(
             progressCallback(iter++, index);
         }
 
-        // const stats = { 
-        //     iter: 0, 
-        //     maxSolucoes: maxSolucoes,
-        //     solucoes: [] as number[][],
-        // };
-        // const copia = [...quadro];
-        // _solucionarQuadro(0, stats, copia, nPossibs, regrasfn, progressCallback);
-        const p = obterMelhorPossib(0, quadro, nPossibs, regrasfn);
-        const quantos = p ? p.contar() : 0;
+        const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
+        const quantos = p instanceof Possib ? p.contar() : 0;
 
         // Se não é única a solução, volta o valor
         if (quantos === 0 || quantos > maxSolucoes) {
@@ -275,8 +241,6 @@ function desmarcarQuadro(
 
 export class PencilmarkSolver {
     static solucionarQuadro = solucionarQuadro;
-    static iniciarPossib = iniciarPossib;
     static printarPossib = printarPossib;
-    static checarSolucionado = checarSolucionado;
     static desmarcarQuadro = desmarcarQuadro;
 }

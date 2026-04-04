@@ -1,7 +1,7 @@
 "use client";
 import { cn } from "@/lib/classMerge";
 
-export function MirroredText({ text, className, ...attrs }: { text: string } & React.HTMLAttributes<HTMLDivElement>) {
+function MirroredText({ text, className, ...attrs }: { text: string } & React.HTMLAttributes<HTMLDivElement>) {
   const letters = text.split('');
   return (
     <div className={cn("mirrored", className)} {...attrs}>

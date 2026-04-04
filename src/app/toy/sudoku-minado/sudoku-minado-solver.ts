@@ -1,7 +1,6 @@
 // Valor 0 representa escolha ainda não feita
 // Valores 1-6 representam números escolhidos sem mina
 // Valores 7-12 representam números escolhidos com mina
-
 import { Possib } from "@/lib/pencilmark";
 
 // Tabelas de consulta estáticas para evitar cálculos repetitivos
@@ -305,3 +304,9 @@ export class RegrasSudokuMinado {
         }
     }
 }
+
+export type WorkerTaskValue = {
+    solucao?: number[];
+    iter: number;
+    depth: number;
+};
