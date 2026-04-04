@@ -4,8 +4,6 @@ import styles from "./sudoku.module.css";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/classMerge";
-import { RegrasSudokuMinado } from "./sudoku-minado-solver";
-import { PencilmarkSolver } from "@/lib/pencilmark";
 import { useEffect, useState } from "react";
 
 function mapTextoParaValor(v: string): number {
@@ -69,7 +67,7 @@ export default function SudokuGrid() {
     });
 
     const calcularProgressoGeracao = (iter: number, depth: number) => {
-        const progressoPorIteracao = Math.log(iter + 1);
+        const progressoPorIteracao = Math.log((iter * iter) + 1);
         return Math.max(12, Math.min(82, Math.round(12 + progressoPorIteracao)));
     };
 
@@ -205,49 +203,48 @@ export default function SudokuGrid() {
                     status: "Inicializando o solucionador..."
                 });
 
-                setTimeout(async () => {
-                    // 1. Gerar quadro completo solucionado
-                    const quadro: number[] = Array.from({ length: 6 * 6 }).map(() => 0);
-                    const regrasSudokuMinado = new RegrasSudokuMinado();
-                    const {iter, solucoes} = await PencilmarkSolver.solucionarQuadro(quadro, 12, regrasSudokuMinado.gerarRegrasFn(), async (iter, depth) => {
-                        const progresso = calcularProgressoGeracao(iter, depth);
+                const worker = new Worker(new URL('./solver.worker.ts', import.meta.url));
+
+                worker.onmessage = (event: MessageEvent) => {
+                    const msg = event.data;
+
+                    if (msg.type === 'progress') {
                         setDesafioState((prevState) => ({
                             ...prevState,
-                            progresso,
+                            progresso: calcularProgressoGeracao(msg.iter, msg.depth),
                             etapa: "Buscando uma solução válida",
-                            status: `Iterações: ${iter}, Profundidade: ${depth}`
+                            status: `Iterações: ${msg.iter}, Profundidade: ${msg.depth}`
                         }));
-                    });
-                    console.log(`Sudoku Minado completo gerado em ${iter} iterações, Soluções encontradas: ${solucoes.length}`);
-                    const solucaoCompleta = solucoes[0];
-                    
-                    if(!solucaoCompleta) {
-                        alert("Falha ao gerar Sudoku Minado completo!");
-                        setDesafioState({carregando: false});
-                        return;
+                    } else if (msg.type === 'desmarcando') {
+                        setDesafioState((prevState) => ({
+                            ...prevState,
+                            progresso: 88,
+                            etapa: "Montando o desafio",
+                            status: "Removendo pistas para criar o tabuleiro final..."
+                        }));
+                    } else if (msg.type === 'done') {
+                        setDesafioState({
+                            resolvido: msg.solucaoCompleta,
+                            desmarcado: msg.desmarcado,
+                            progresso: 100,
+                            carregando: false,
+                        });
+                        preencherQuadro(msg.desmarcado);
+                        worker.terminate();
+                    } else if (msg.type === 'error') {
+                        alert(msg.message);
+                        setDesafioState({ carregando: false });
+                        worker.terminate();
                     }
+                };
 
-                    regrasSudokuMinado.quadro = solucaoCompleta!;
-                    regrasSudokuMinado.printarQuadro();
+                worker.onerror = () => {
+                    alert('Erro inesperado ao gerar Sudoku Minado!');
+                    setDesafioState({ carregando: false });
+                    worker.terminate();
+                };
 
-                    // 2. Remover valores para criar desafio (desmarcar)
-                    setDesafioState((prevState) => ({
-                        ...prevState,
-                        progresso: 88,
-                        etapa: "Montando o desafio",
-                        status: "Removendo pistas para criar o tabuleiro final..."
-                    }));
-                    const desmarcado = [...solucaoCompleta];
-                    await PencilmarkSolver.desmarcarQuadro(desmarcado, 12, regrasSudokuMinado.gerarRegrasFn());
-                    
-                    setDesafioState({
-                        resolvido: solucaoCompleta,
-                        desmarcado: desmarcado,
-                        progresso: 100,
-                        carregando: false,
-                    });
-                    preencherQuadro(desmarcado);
-                }, 0);
+                worker.postMessage({});
             }}/>
         {
             desafioState.resolvido && 

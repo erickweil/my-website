@@ -45,7 +45,7 @@ export class Possib {
 }
 
 export type RegrasQuadro = (quadro: number[], possibs: Possib | null) => boolean;
-export type ProgressCallback = (iter: number, depth: number) => Promise<void>;
+export type ProgressCallback = (iter: number, depth: number) => void;
 
 function iniciarPossib(quadro: number[], nPossibs: number): Possib[] {
     return quadro.map((_, i) => new Possib(i, nPossibs));
@@ -68,10 +68,22 @@ function printarPossib(quadro_possib: Possib[]): void {
     }
 }
 
+//const cachePossibs = new Map<number, [Possib, Possib]>();
 // Ao mesmo tempo que analisa as possibilidades, encontra a com menor entropia
-function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): Possib | null {
+function obterMelhorPossib(depth: number, quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): Possib | null {
+    /*let _possibs = cachePossibs.get(depth);
+    if (!_possibs) {
+        _possibs = [
+            new Possib(-1, nPossibs), 
+            new Possib(-1, nPossibs)
+        ];
+        cachePossibs.set(depth, _possibs);
+    }
+
+    const [p, min_p] = _possibs;*/
     const p = new Possib(-1, nPossibs);
     const min_p = new Possib(-1, nPossibs);
+
     let min_cont = -1;
 
     // Atualizar cache
@@ -89,13 +101,16 @@ function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQ
         }
 
         const cont = p.contar();
-        if (min_cont === -1 || cont < min_cont) {
+        if (min_cont === -1 || cont < min_cont || (cont === min_cont && Math.random() < 0.5)) {
             min_cont = cont;
             min_p.receber(p);
         }
 
         if (min_cont <= 0) return null;
     }
+
+    if (min_cont <= 0) return null;
+
     return min_p;
 }
 
@@ -109,6 +124,7 @@ function checarSolucionado(quadro: number[], nPossibs: number, regrasfn: RegrasQ
         return -1;
     }
 
+    /*
     const p = new Possib(-1, nPossibs);
 
     for (let index = 0; index < quadro.length; index++) {
@@ -125,7 +141,7 @@ function checarSolucionado(quadro: number[], nPossibs: number, regrasfn: RegrasQ
         if (!p.p[v - 1]) {
             return -1;
         }
-    }
+    }*/
 
     return 1;
 }
@@ -142,53 +158,61 @@ function getRandomRange(n: number): number[] {
 /**
  * Resolve o quadro retornando o número de iterações e se obteve sucesso.
  */
-async function solucionarQuadro(
+function solucionarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback,
     maxSolucoes: number = 1
 ) {
+    //cachePossibs.clear();
     const stats = { 
         iter: 0, 
         maxSolucoes: maxSolucoes,
         solucoes: [] as number[][],
     };
-    await _solucionarQuadro(0, stats, quadro, nPossibs, regrasfn, progressCallback);
+    _solucionarQuadro(0, stats, quadro, nPossibs, regrasfn, progressCallback);
     return stats;
 }
 
-async function _solucionarQuadro(
+function _solucionarQuadro(
     depth: number,
     stats: { iter: number, solucoes: number[][], maxSolucoes: number },
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback
-): Promise<boolean> {
+): boolean {
     stats.iter++;
 
     if (stats.iter % 100000 === 0) {
-        console.log(`iter: ${stats.iter} Depth: ${depth}`);
         if (progressCallback) {
             //await progressCallback(stats.iter, depth);
-            await new Promise((resolve) => setTimeout(() => resolve(progressCallback(stats.iter, depth)), 0));
+            //await new Promise((resolve) => setTimeout(() => resolve(progressCallback(stats.iter, depth)), 0));
+            progressCallback(stats.iter, depth);
         }
     }
 
-    const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
+    const p = obterMelhorPossib(depth, quadro, nPossibs, regrasfn);
     if (!p) return false;
 
     // Uma vez escolhido o quadrado a partir do qual continuar,
     // testa cada possibilidade deste quadrado
-    const randRange = getRandomRange(p.p.length);
-    for (const k of randRange) {
+    //const randRange = getRandomRange(p.p.length);
+    //for (const k of randRange) {
+
+    // Percorre os k valores em ordem circular a partir de um offset aleatório
+    const offset = Math.floor(Math.random() * p.p.length);
+    for (let i = 0; i < p.p.length; i++) {
+        const k = (offset + i) % p.p.length;
         // Se é possível colocar o valor k neste quadrado
         if (p.p[k]) {
             quadro[p.index] = k + 1;
 
             const result = checarSolucionado(quadro, nPossibs, regrasfn);
-            if (result === 1) {
+            if (result === -1) {
+                // Essa escolha é inválida, tenta a próxima possibilidade
+            } else if (result === 1) {
                 //return true;
                 stats.solucoes.push([...quadro]);
                 if (stats.solucoes.length >= stats.maxSolucoes) {
@@ -197,7 +221,7 @@ async function _solucionarQuadro(
             } else if(result === 0) {
                 // Não está solucionado ainda, continua tentando
                 // Tenta solucionar com mais escolhas depois dessa, e se der certo retorna true
-                if (await _solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
+                if (_solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
                     return true;
                 }
             }
@@ -215,7 +239,7 @@ async function _solucionarQuadro(
  * A ideia é começar com um quadro resolvido, e ir desmarcando células até onde continue tendo só uma solução
  * Como isso é um processo aleatório, o resultado final pode variar a cada execução, mas sempre será um quadro com solução única
  */
-async function desmarcarQuadro(
+function desmarcarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
@@ -229,7 +253,7 @@ async function desmarcarQuadro(
         quadro[index] = 0;
 
         if (progressCallback) {
-            await progressCallback(iter++, index);
+            progressCallback(iter++, index);
         }
 
         // const stats = { 
@@ -239,7 +263,7 @@ async function desmarcarQuadro(
         // };
         // const copia = [...quadro];
         // _solucionarQuadro(0, stats, copia, nPossibs, regrasfn, progressCallback);
-        const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
+        const p = obterMelhorPossib(0, quadro, nPossibs, regrasfn);
         const quantos = p ? p.contar() : 0;
 
         // Se não é única a solução, volta o valor
