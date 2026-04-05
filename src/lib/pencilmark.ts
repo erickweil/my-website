@@ -26,10 +26,42 @@ export const newPossib = (index: number, nPossibs: number) => {
     return possib as Possib;
 };
 
+const getRandomRange = (n: number): number[] => {
+    const arr = Array.from({ length: n }, (_, i) => i);
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+};
+
 export type RegrasQuadro = (quadro: number[], possibs: Possib | null) => boolean;
 export type ProgressCallback = (iter: number, depth: number) => void;
 
-function printarPossib(quadro_possib: Possib[]): void {
+export class PencilmarkSolver {
+    regrasfn: RegrasQuadro;
+    quadro: number[];
+    nPossibs: number;
+    maxSolucoes: number;
+    maxIter: number | undefined;
+
+    cachePossib: Possib[];
+    solucoes: number[][];
+    iter: number;
+    
+constructor(regrasfn: RegrasQuadro, quadro: number[], nPossibs: number, maxSolucoes: number = 1, maxIter?: number) {
+    this.regrasfn = regrasfn;
+    this.quadro = quadro;
+    this.nPossibs = nPossibs;
+    this.maxSolucoes = maxSolucoes;
+    this.maxIter = maxIter;
+    
+    this.cachePossib = [];
+    this.solucoes = [];
+    this.iter = 0;
+}
+
+/*static printarPossib(quadro_possib: Possib[]): void {
     let line = "";
     for (let i = 0; i < quadro_possib.length; i++) {
         const p = quadro_possib[i];
@@ -44,26 +76,37 @@ function printarPossib(quadro_possib: Possib[]): void {
             line = "";
         }
     }
-}
+}*/
 
 // Ao mesmo tempo que analisa as possibilidades, encontra a com menor entropia
-function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQuadro): Possib | boolean {
-    const p = newPossib(-1, nPossibs);
-    const min_p = newPossib(-1, nPossibs);
-    const randomIndex = Math.floor(Math.random() * quadro.length);
+private obterMelhorPossib(depth: number): Possib | boolean {
+    //const p = newPossib(-1, nPossibs);
+    //const min_p = newPossib(-1, nPossibs);
+    let p: Possib;
+    let min_p: Possib;
+    if(this.cachePossib.length < depth * 2 + 2) {
+        p = newPossib(-1, this.nPossibs);
+        min_p = newPossib(-1, this.nPossibs);
+        this.cachePossib.push(p, min_p);
+    } else {
+        p = this.cachePossib[depth * 2];
+        min_p = this.cachePossib[depth * 2 + 1];
+    }
+
+    const randomIndex = Math.floor(Math.random() * this.quadro.length);
     let min_cont = -1;
 
     // Atualizar cache
-    if(!regrasfn(quadro, null)) {
+    if(!this.regrasfn(this.quadro, null)) {
         return false;
     }
 
-    for (let index = 0; index < quadro.length; index++) {
-        if (quadro[index] !== 0) continue;
+    for (let index = 0; index < this.quadro.length; index++) {
+        if (this.quadro[index] !== 0) continue;
 
         p.resetar(true);
         p.index = index;
-        if(!regrasfn(quadro, p)) {
+        if(!this.regrasfn(this.quadro, p)) {
             return false;
         }
 
@@ -93,16 +136,6 @@ function obterMelhorPossib(quadro: number[], nPossibs: number, regrasfn: RegrasQ
 
     return min_p;
 }
-
-function getRandomRange(n: number): number[] {
-    const arr = Array.from({ length: n }, (_, i) => i);
-    for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-}
-
 /*
 // NÃO: Parece que deixou mais lento. (Investigar melhor)
 async function solucionarQuadroConcorrente(
@@ -132,7 +165,7 @@ async function solucionarQuadroConcorrente(
  * Resolve o quadro retornando o número de iterações e se obteve sucesso.
  * @param [baseIter] irá começar em 2^baseIter a iteração (31 para desativar)
  */
-function solucionarQuadro(
+static solucionarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
@@ -147,53 +180,46 @@ function solucionarQuadro(
     };
     _solucionarQuadro(0, stats, quadro, nPossibs, regrasfn, progressCallback);
     return stats;*/
+    const solver = new PencilmarkSolver(regrasfn, [], nPossibs, maxSolucoes);
 
     // reinício a cada 2^N iterações para evitar ficar preso em um caminho ruim por muito tempo
-    const solucoes = [] as number[][];
-    const stats = {
-        iter: 0,
-        maxSolucoes: maxSolucoes,
-        solucoes: solucoes,
-        maxIter: undefined as number | undefined
-    };
     for(let iter = baseIter; iter < 32; iter++) {
-        const quadroCopy = [...quadro];
-        stats.maxIter = iter < 31 ? (1 << iter) : undefined;
-        _solucionarQuadro(0, stats, quadroCopy, nPossibs, regrasfn, progressCallback);
+        solver.maxIter = iter < 31 ? (1 << iter) : undefined;
+        solver.quadro = [...quadro];
+        solver._solucionarQuadro(0, progressCallback);
 
-        if(solucoes.length >= maxSolucoes) {
+        if(solver.solucoes.length >= maxSolucoes) {
             // Obteve sucesso, retorna as soluções encontradas
-            return stats;
+            break;
         }
     }
 
-    return stats;
+    return {
+        iter: solver.iter,
+        solucoes: solver.solucoes,
+    };
 }
 
-function _solucionarQuadro(
+_solucionarQuadro(
     depth: number,
-    stats: { iter: number, solucoes: number[][], maxSolucoes: number, maxIter?: number },
-    quadro: number[],
-    nPossibs: number,
-    regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback
 ): boolean {
-    stats.iter++;
-    if (stats.iter % 1000 === 0 && Math.random() < 0.25) {
+    this.iter++;
+    if (this.iter % 2048 === 0) {
 
-        if(stats.maxIter && stats.iter > stats.maxIter) {
+        if(this.maxIter && this.iter > this.maxIter) {
             return true;
         }
         
-        if(stats.iter % 10000 === 0 && progressCallback) {
-            progressCallback(stats.iter, depth);
+        if(progressCallback && Math.random() < 0.05) {
+            progressCallback(this.iter, depth);
         }
     }
 
-    const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
+    const p = this.obterMelhorPossib(depth);
     if(p === true) {
-        stats.solucoes.push([...quadro]);
-        return stats.solucoes.length >= stats.maxSolucoes;
+        this.solucoes.push([...this.quadro]);
+        return this.solucoes.length >= this.maxSolucoes;
     } else if (!p) {
         return false;
     }
@@ -209,16 +235,16 @@ function _solucionarQuadro(
         const k = (offset + i) % p.nFlags;
         // Se é possível colocar o valor k neste quadrado
         if (p.ler(k)) {
-            quadro[p.index] = k + 1;
+            this.quadro[p.index] = k + 1;
 
             // Não está solucionado ainda, continua tentando
             // Tenta solucionar com mais escolhas depois dessa, e se der certo retorna true
-            if (_solucionarQuadro(depth + 1, stats, quadro, nPossibs, regrasfn, progressCallback)) {
+            if (this._solucionarQuadro(depth + 1, progressCallback)) {
                 return true;
             }
 
             // Essa escolha não resolveu o sudoku, remove ela para tentar outras
-            quadro[p.index] = 0;
+            this.quadro[p.index] = 0;
         }
     }
 
@@ -229,13 +255,15 @@ function _solucionarQuadro(
 /**
  * A ideia é começar com um quadro resolvido, e ir desmarcando células até onde continue tendo só uma solução
  * Como isso é um processo aleatório, o resultado final pode variar a cada execução, mas sempre será um quadro com solução única
+ * 
+ * Para cada célula removida, resolve o quadro com maxSolucoes=2 para verificar se a solução continua única.
+ * Se encontrar mais de uma solução (ou nenhuma), restaura o valor original da célula.
  */
-function desmarcarQuadro(
+static desmarcarQuadro(
     quadro: number[],
     nPossibs: number,
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback,
-    maxSolucoes: number = 1
 ) {
     const indices = getRandomRange(quadro.length);
     let iter = 0;
@@ -247,18 +275,30 @@ function desmarcarQuadro(
             progressCallback(iter++, index);
         }
 
-        const p = obterMelhorPossib(quadro, nPossibs, regrasfn);
+        const solver = new PencilmarkSolver(regrasfn, [...quadro], nPossibs, 2, undefined);
+        const p = solver.obterMelhorPossib(0);
         const quantos = typeof p !== "boolean" ? p.contar() : 0;
-
-        // Se não é única a solução, volta o valor
-        if (quantos === 0 || quantos > maxSolucoes) {
-            quadro[index] = originalValue;
+        if (quantos === 0) {
+            // Não encontrou nenhuma solução, ou seja, o quadro ficou inválido, avisa
+            console.warn(`INCONSISTENTE: Quadro inválido ao remover célula ${index} (valor original: ${originalValue})`);
         }
+
+        if (quantos === 1) {
+            // Agora verifica se a solução é única.
+            solver._solucionarQuadro(0);
+            if (solver.solucoes.length === 0) {
+                // Não encontrou nenhuma solução, ou seja, o quadro ficou inválido, avisa
+                console.warn(`INCONSISTENTE: Quadro inválido ao remover célula ${index} (valor original: ${originalValue})`)
+            }
+
+            if (solver.solucoes.length === 1) {
+                // A solução continua única, pode manter a célula vazia
+                continue;
+            }
+        }
+
+        quadro[index] = originalValue;
     }
 }
 
-export class PencilmarkSolver {
-    static solucionarQuadro = solucionarQuadro;
-    static printarPossib = printarPossib;
-    static desmarcarQuadro = desmarcarQuadro;
 }

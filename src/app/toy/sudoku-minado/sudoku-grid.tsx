@@ -4,10 +4,9 @@ import styles from "./sudoku.module.css";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/classMerge";
-import { useEffect, useState } from "react";
-import { raceWorkers } from "@/lib/workerRace";
-import { RegrasSudokuMinado, WorkerTaskValue } from "./sudoku-minado-solver";
-import { PencilmarkSolver } from "@/lib/pencilmark";
+import { useState } from "react";
+import { raceWorkers, WorkerResponseMsg } from "@/lib/workerRace";
+import { WorkerTaskValue } from "./sudoku-minado-solver";
 
 function mapTextoParaValor(v: string): number {
     v = v.trim();
@@ -46,6 +45,7 @@ async function executarSolverWorkers(
 ): Promise<{ solucaoCompleta: number[]; desmarcado: number[] }> {    
     const resultado = await raceWorkers<WorkerTaskValue>({
         n: n,
+        initMessage: { action: "solucionarQuadro", quadro: Array.from({ length: 36 }, () => 0) },
         createWorker: () => new Worker(new URL('./solve-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if(!msg.value) return;
@@ -58,13 +58,29 @@ async function executarSolverWorkers(
         throw new Error("Falha ao gerar solução!");
     }
 
-    const regrasSudokuMinado = new RegrasSudokuMinado();
-    regrasSudokuMinado.quadro = quadro;
-    regrasSudokuMinado.printarQuadro();
-
-    // 2. Remover valores para criar desafio
-    const desmarcado = [...quadro];
-    PencilmarkSolver.desmarcarQuadro(desmarcado, 12, regrasSudokuMinado.gerarRegrasFn());
+    const desmarcarWorker = new Worker(new URL('./solve-task.worker.ts', import.meta.url));
+    const desmarcado = await new Promise<number[]>((resolve, reject) => {
+        desmarcarWorker.onmessage = (event: MessageEvent) => {
+            const result = event.data as WorkerResponseMsg<WorkerTaskValue>;
+            if (result.type === "success") {
+                if(result.value?.solucao)
+                resolve(result.value.solucao);
+                else
+                reject(new Error("Resposta de sucesso recebida, mas sem solução!"));
+            } else if (result.type === "error") {
+                reject(new Error(result.message || "Erro desconhecido ao desmarcar quadro"));
+            } else if (result.type === "message") {
+                progressCallback(-1, result.value?.iter || 0, result.value?.depth || 0);
+            }
+        };
+        desmarcarWorker.onerror = (err) => {
+            reject(new Error(`Worker de desmarcar quadro falhou: ${err.message}`));
+        };
+        desmarcarWorker.postMessage({ action: "desmarcarQuadro", quadro: quadro });
+    }).finally(() => {
+        // Garantir que o worker seja terminado após a conclusão da tarefa
+        desmarcarWorker.terminate();
+    });
     
     return { solucaoCompleta: quadro, desmarcado };
 }
@@ -202,12 +218,15 @@ export default function SudokuGrid() {
 
                 const nWorkers = navigator.hardwareConcurrency || 8;
                 executarSolverWorkers(nWorkers, (workerID, iter, depth) => {
-                    const progresso = calcularProgressoGeracao(iter, depth);
+                    const progresso = workerID === -1 ? 95 : calcularProgressoGeracao(iter, depth);
                     setDesafioState((prevState) => ({
                         ...prevState,
-                        progresso: Math.max(prevState.progresso!, progresso),
-                        etapa: `Gerando um novo desafio com ${nWorkers} workers paralelos...`,
-                        status: `ID:${workerID} Iterações: ${iter}, Profundidade: ${depth}`,
+                        progresso: prevState.progresso! < progresso ? progresso : prevState.progresso,
+                        etapa: 
+                            workerID === -1 ? "Desmarcando quadro para criar desafio" :
+                            `Gerando um novo desafio com ${nWorkers} workers paralelos...`
+                        ,
+                        status: prevState.progresso! < progresso ? `ID:${workerID} Iterações: ${iter}, Profundidade: ${depth}` : prevState.status,
                     }));
                 }).then(({ solucaoCompleta, desmarcado }) => {
                     setDesafioState({
