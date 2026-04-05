@@ -36,7 +36,12 @@ export default function Home() {
       status: "Em construção",
       description: "Desafio a ser resolvido durante a semana do ADS",
     },
-    { href: null, text: "Gerador de Horário", status: "A Fazer" },
+    { 
+      href: "/toy/gerador-horario", 
+      text: "Gerador de Horário",
+      status: "Em construção",
+      description: "Gerador de horário escolar, com base em restrições de professores, turmas e horários disponíveis",
+    },
     { href: null, text: "Avaliador automático", status: "A Fazer" },
     { href: null, text: "Busca DFS e BFS", status: "A Fazer" },
     { href: null, text: "Pilha, Fila, Deque", status: "A Fazer" },
