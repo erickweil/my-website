@@ -1,9 +1,8 @@
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import LiveTitle from "@/components/live-title";
 import { cn } from "@/lib/utils";
-
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+import { ThemeProvider } from "@/components/theme-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,14 +20,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={cn("font-sans", inter.variable)}>
+    <html
+      lang="pt-BR" 
+      suppressHydrationWarning
+      className={cn("antialiased", geistMono.variable, "font-sans", geistSans.variable)}
+      >
       <head>
         <LiveTitle />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
