@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { Trash2, Plus, X, Loader2, TriangleAlert, CheckCircle2 } from "lucide-react";
+import { Trash2, Plus, X, Loader2, TriangleAlert, CheckCircle2, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -167,8 +167,39 @@ export default function GeradorHorario() {
             return TODOS_OS_DIAS.filter((d) => prox.includes(d));
         });
     };
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const { control, register, watch, handleSubmit, reset } = useForm<FormularioHorario>({
+    const handleExportar = () => {
+        const exportData = { formData: getValues(), config: { quantidadeTempos, diasAtivos } };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "horario.json";
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportar = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const parsed = JSON.parse(ev.target?.result as string);
+                if (parsed.formData) reset(parsed.formData);
+                if (parsed.config) {
+                    if (typeof parsed.config.quantidadeTempos === "number") setQuantidadeTempos(parsed.config.quantidadeTempos);
+                    if (Array.isArray(parsed.config.diasAtivos)) setDiasAtivos(parsed.config.diasAtivos);
+                }
+            } catch {
+                setError("Erro ao importar o arquivo JSON.");
+            }
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        };
+        reader.readAsText(file);
+    };
+    const { control, register, watch, handleSubmit, reset, getValues } = useForm<FormularioHorario>({
         defaultValues: {
             turmas: [],
             disciplinas: [],
@@ -331,14 +362,39 @@ export default function GeradorHorario() {
                                 </div>
                             </div>
 
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => reset({ turmas: [], disciplinas: [], disciplinas_unidas: [], professores: [] })}
-                            >
-                                <X className="size-4" /> Limpar tudo
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleExportar}
+                                >
+                                    <Download className="size-4" /> Exportar JSON
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => fileInputRef.current?.click()}
+                                >
+                                    <Upload className="size-4" /> Importar JSON
+                                </Button>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".json,application/json"
+                                    className="hidden"
+                                    onChange={handleImportar}
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => reset({ turmas: [], disciplinas: [], disciplinas_unidas: [], professores: [] })}
+                                >
+                                    <X className="size-4" /> Limpar tudo
+                                </Button>
+                            </div>
                         </CardContent>
                     </Card>
                     {/* ── 1. Turmas ──────────────────────────────────────────────────── */}
