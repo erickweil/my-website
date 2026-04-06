@@ -26,6 +26,7 @@ export interface FormularioHorario {
         turma: string;
         aulas: number;
         agrupar: number;
+        dividir: boolean;
     }[];
     disciplinas_unidas: {
         grupo: string;
@@ -148,6 +149,7 @@ class Disciplina {
     
     aulas: number;
     agrupar: number;
+    dividir: boolean;
     nome: string;
 
     turma: Turma;
@@ -162,6 +164,7 @@ class Disciplina {
         turma: string;
         aulas: number;
         agrupar: number;
+        dividir: boolean;
     }, id: number) {
         this.id = id;
         this.turma = {} as unknown as Turma;
@@ -169,6 +172,7 @@ class Disciplina {
         this.professores = [];
         this.aulas = dados.aulas;
         this.agrupar = dados.agrupar;
+        this.dividir = dados.dividir;
         this.nome = dados.nome;
 
         this.contAulas = 0;
@@ -302,6 +306,48 @@ export class RegrasHorario {
             }
         }
 
+        // Verificar consistência dos agrupamentos já definidos no quadro.
+        // Necessário pois o solver pode alocar uma disciplina isolada e só perceber
+        // depois (ao fechar os vizinhos) que o grupo não pode atingir o tamanho G.
+        for (const disc of this.disciplinas) {
+            if (disc.agrupar <= 0) continue;
+            const G = disc.agrupar;
+            const turmaId = disc.turma.id;
+
+            for (let dia = 0; dia < QUANTOS_DIAS; dia++) {
+                let runStart = -1;
+
+                for (let tempo = 0; tempo <= this.nTempos; tempo++) {
+                    // sentinela no final do dia: força o fechamento do último run
+                    const v = tempo < this.nTempos
+                        ? this.quadro[this.toQuadroIndex(turmaId, dia, tempo)]
+                        : -1;
+
+                    if (v === disc.id + 1) {
+                        if (runStart === -1) runStart = tempo;
+                    } else if (runStart !== -1) {
+                        const runLength = tempo - runStart;
+
+                        // Run fechado dos dois lados com tamanho não múltiplo de G — inválido
+                        // v !== 0 significa: OOB (-1), sem-aula (-1) ou outra disciplina (> 0)
+                        const rightBlocked = v !== 0;
+                        const leftBoundaryV = runStart > 0
+                            ? this.quadro[this.toQuadroIndex(turmaId, dia, runStart - 1)]
+                            : -1; // OOB = bloqueado
+                        const leftBlocked = leftBoundaryV !== 0;
+
+                        if (leftBlocked && rightBlocked) {
+                            // dividir → run deve ser exatamente G (grupos não podem se tocar)
+                            // !dividir → run deve ser múltiplo de G
+                            if (disc.dividir ? runLength !== G : runLength % G !== 0) return false;
+                        }
+
+                        runStart = -1;
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
@@ -357,26 +403,70 @@ export class RegrasHorario {
             if (!prof.matriz.possui(dia, tempo)) return false;
         }
 
-        // As aulas devem ser agrupadas de acordo com o especificado
-        // Regra só funciona no horário atual
-        // A FAZER: depois tem que ver uma regra que funcione mesmo!
-        if (disc.agrupar === 1) {
-            if (this.getQuadroValor(idTurma, dia, tempo + 1) === idDisc + 1 ||
-                this.getQuadroValor(idTurma, dia, tempo - 1) === idDisc + 1) return false;
-        } else if (disc.agrupar === 2) {
-            if(disc.contAulas > 0 &&
-                this.getQuadroValor(idTurma, dia, 0) !== idDisc + 1 &&
-                this.getQuadroValor(idTurma, dia, 1) !== idDisc + 1
-            ) return false;
+        // As aulas devem ser agrupadas em blocos de exatamente G aulas consecutivas.
+        // agrupar = 0 → sem restrição; agrupar = G → todos os runs desta disciplina no dia
+        // devem ter comprimento exatamente G.
+        if (disc.agrupar > 0) {
+            const G = disc.agrupar;
+
+            // Conta aulas consecutivas desta disciplina imediatamente à esquerda
+            let leftRun = 0;
+            for (let t = tempo - 1; t >= 0; t--) {
+                if (this.getQuadroValor(idTurma, dia, t) === idDisc + 1) leftRun++;
+                else break;
+            }
+
+            // Conta aulas consecutivas desta disciplina imediatamente à direita
+            let rightRun = 0;
+            for (let t = tempo + 1; t < this.nTempos; t++) {
+                if (this.getQuadroValor(idTurma, dia, t) === idDisc + 1) rightRun++;
+                else break;
+            }
+
+            const currentRun = leftRun + 1 + rightRun;
+
+            // Se dividir está ativo, o run não pode ultrapassar G (grupos não se tocam)
+            if (disc.dividir && currentRun > G) return false;
+
+            // Verifica se o grupo está bloqueado dos dois lados (não pode mais crescer).
+            // getQuadroValor retorna -1 para OOB, que é ≠ 0 → bloqueado.
+            // Valor 0 = slot livre → não bloqueado (pode crescer).
+            const leftBoundaryV  = this.getQuadroValor(idTurma, dia, tempo - leftRun  - 1);
+            const rightBoundaryV = this.getQuadroValor(idTurma, dia, tempo + rightRun + 1);
+            const leftBlocked  = leftBoundaryV  !== 0;
+            const rightBlocked = rightBoundaryV !== 0;
+
+            // Grupo fechado: dividir → deve ser exatamente G; senão → múltiplo de G
+            if (leftBlocked && rightBlocked) {
+                if (disc.dividir ? currentRun !== G : currentRun % G !== 0) return false;
+            }
         }
 
 	    // As disciplinas unidas devem ser escolhidas juntas
+        // Checagem direta: se disc tem unidas, as turmas parceiras devem estar vazias ou com a disciplina correta
         const unidas = disc.disciplinasUnidas;
         for (const unida of unidas) {
             const valor = this.getQuadroValor(unida.turma.id, dia, tempo);
             if (valor !== 0 && valor !== unida.id + 1) {
                 // Se foi escolhido, deve ser a mesma disciplina
                 return false;
+            }
+        }
+
+        // Checagem reversa: se alguma disciplina já alocada em outra turma neste (dia, tempo)
+        // exige que uma disciplina unida específica esteja NESTA turma, então somente essa
+        // disciplina pode ser colocada aqui.
+        for (const outraTurma of this.turmas) {
+            if (outraTurma.id === idTurma) continue;
+            const valorOutra = this.getQuadroValor(outraTurma.id, dia, tempo);
+            if (valorOutra <= 0) continue;
+
+            const discOutra = this.disciplinas[valorOutra - 1];
+            for (const unidaDaOutra of discOutra.disciplinasUnidas) {
+                // Se a unida da outra disciplina deve estar nesta turma, e não sou eu → inválido
+                if (unidaDaOutra.turma.id === idTurma && unidaDaOutra.id !== idDisc) {
+                    return false;
+                }
             }
         }
 
@@ -431,11 +521,13 @@ export class RegrasHorario {
 
 export type HorarioWorkerTaskValue = {
     solucao?: TurmaHorarioResult[];
+    completo?: boolean;
     iter: number;
     depth: number;
 };
 
 export function solucionarQuadroHorario(
+    baseIter: number | null,
     formData: FormularioHorario,
     diasAtivos: HorarioDia[],
     postMessage?: (msg: WorkerResponseMsg<HorarioWorkerTaskValue>) => void
@@ -453,12 +545,22 @@ export function solucionarQuadroHorario(
             postMessage?.({ type: "message", value: { iter, depth } });
         },
         1, // maxSolucoes
-        10 // baseIter - começa a iterar a partir de 2^8 iterações
+        baseIter // baseIter - começa a iterar a partir de 2^8 iterações
     );
 
-    const solucaoCompleta = stats?.solucoes.at(0);
-    if (!solucaoCompleta) {
-        throw new Error("Falha ao gerar solução!");
+    let quadroSolucionado = stats?.solucoes.at(0);
+    if(!quadroSolucionado && stats?.melhor) {
+        // Se não encontrou solução completa, mas encontrou uma solução parcial melhor que o quadro inicial, usar essa solução parcial
+        quadroSolucionado = stats.melhor;
+    }
+    if (!quadroSolucionado) {
+        // Retorno normal, para parar os outros workers, já que é impossível resolver
+        return {
+            solucao: undefined,
+            completo: false,
+            iter: stats?.iter || 0,
+            depth: 0
+        };
     }
 
     // Converter solução para formato de saída
@@ -468,7 +570,7 @@ export function solucionarQuadroHorario(
             const diaIdx = Horario.diaSemanaMap[dia];
             const tempos: (string | null)[] = [];
             for (let tempo = 0; tempo < regras.nTempos; tempo++) {
-                const valor = solucaoCompleta[regras.toQuadroIndex(turma.id, diaIdx, tempo)];
+                const valor = quadroSolucionado[regras.toQuadroIndex(turma.id, diaIdx, tempo)];
                 if (valor === 0) {
                     tempos.push("???"); // Não resolvido
                 } else if(valor === -1) {
@@ -484,6 +586,7 @@ export function solucionarQuadroHorario(
 
     return {
         solucao: resultado,
+        completo: stats.solucoes.length > 0,
         iter: stats?.iter || 0,
         depth: 0
     };

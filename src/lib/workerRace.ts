@@ -16,7 +16,7 @@ export interface RaceWorkersOptions<T> {
     /** Fábrica que cria cada worker */
     createWorker: () => Worker;
     /** Mensagem enviada para iniciar cada worker (padrão: `null`) */
-    initMessage?: unknown;
+    initMessage?: (worker: number) => unknown;
 
     /** Callback para mensagens intermediárias (opcional) */
     onMessage?: (worker: number, msg: WorkerResponseMsg<T>) => void;
@@ -27,7 +27,7 @@ export interface RaceWorkersOptions<T> {
  * Ao finalizar (sucesso ou todos falharam), todos os workers são terminados.
  */
 export function raceWorkers<T>(options: RaceWorkersOptions<T>): Promise<T> {
-    const { n, createWorker, onMessage, initMessage = null } = options;
+    const { n, createWorker, onMessage, initMessage } = options;
     const workers: Worker[] = [];
 
     const promise = new Promise<T>((resolve, reject) => {
@@ -66,7 +66,7 @@ export function raceWorkers<T>(options: RaceWorkersOptions<T>): Promise<T> {
                 }
             };
 
-            worker.postMessage(initMessage);
+            worker.postMessage(initMessage ? initMessage(workerID) : null);
         }
     });
 

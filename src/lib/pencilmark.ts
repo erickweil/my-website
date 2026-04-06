@@ -49,9 +49,13 @@ export class PencilmarkSolver {
     solucoes: number[][];
     iter: number;
     
+    melhor: number[]; // Melhor solução encontrada até agora, mesmo que não seja completa
+    melhorPreenchidos: number;
 constructor(regrasfn: RegrasQuadro, quadro: number[], nPossibs: number, maxSolucoes: number = 1, maxIter?: number) {
     this.regrasfn = regrasfn;
     this.quadro = quadro;
+    this.melhor = [...quadro];
+    this.melhorPreenchidos = quadro.filter(v => v !== 0).length;
     this.nPossibs = nPossibs;
     this.maxSolucoes = maxSolucoes;
     this.maxIter = maxIter;
@@ -95,6 +99,7 @@ private obterMelhorPossib(depth: number): Possib | boolean {
 
     const randomIndex = Math.floor(Math.random() * this.quadro.length);
     let min_cont = -1;
+    let preenchidos = 0;
 
     // Atualizar cache
     if(!this.regrasfn(this.quadro, null)) {
@@ -102,7 +107,10 @@ private obterMelhorPossib(depth: number): Possib | boolean {
     }
 
     for (let index = 0; index < this.quadro.length; index++) {
-        if (this.quadro[index] !== 0) continue;
+        if (this.quadro[index] !== 0) {
+            preenchidos++;
+            continue;
+        }
 
         p.resetar(true);
         p.index = index;
@@ -127,6 +135,11 @@ private obterMelhorPossib(depth: number): Possib | boolean {
                 min_p.index = p.index;
             }
         }
+    }
+
+    if(preenchidos > this.melhorPreenchidos) {
+        this.melhorPreenchidos = preenchidos;
+        this.melhor = [...this.quadro];
     }
 
     if(min_cont === -1) {
@@ -163,7 +176,7 @@ async function solucionarQuadroConcorrente(
 
 /**
  * Resolve o quadro retornando o número de iterações e se obteve sucesso.
- * @param [baseIter] irá começar em 2^baseIter a iteração (31 para desativar)
+ * @param [baseIter] irá começar em 2^baseIter a iteração (31 ou null para desativar)
  */
 static solucionarQuadro(
     quadro: number[],
@@ -171,7 +184,7 @@ static solucionarQuadro(
     regrasfn: RegrasQuadro,
     progressCallback?: ProgressCallback,
     maxSolucoes: number = 1,
-    baseIter: number = 10
+    baseIter: number | null = 10
 ) {
     /*const stats = { 
         iter: 0, 
@@ -182,11 +195,20 @@ static solucionarQuadro(
     return stats;*/
     const solver = new PencilmarkSolver(regrasfn, [], nPossibs, maxSolucoes);
 
-    // reinício a cada 2^N iterações para evitar ficar preso em um caminho ruim por muito tempo
-    for(let iter = baseIter; iter < 32; iter++) {
-        solver.maxIter = iter < 31 ? (1 << iter) : undefined;
+    if(baseIter === null) {
+        solver.maxIter = undefined;
         solver.quadro = [...quadro];
         solver._solucionarQuadro(0, progressCallback);
+    } else for(let iter = baseIter; iter < 32; iter++) {
+        // reinício a cada 2^N iterações para evitar ficar preso em um caminho ruim por muito tempo
+        solver.maxIter = iter < 31 ? (1 << iter) : undefined;
+        solver.quadro = [...quadro];
+        const result = solver._solucionarQuadro(0, progressCallback);
+
+        if(result === false) {
+            // Se deu falso, é porque chegou no fim
+            break;
+        }
 
         if(solver.solucoes.length >= maxSolucoes) {
             // Obteve sucesso, retorna as soluções encontradas
@@ -197,6 +219,7 @@ static solucionarQuadro(
     return {
         iter: solver.iter,
         solucoes: solver.solucoes,
+        melhor: solver.melhor
     };
 }
 

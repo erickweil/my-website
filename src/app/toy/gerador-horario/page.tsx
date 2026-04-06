@@ -44,11 +44,13 @@ const execQuadroHorarioWorker = async (formData: FormularioHorario, diasAtivos: 
     const nWorkers = navigator.hardwareConcurrency || 8;
     const resultado = await raceWorkers<HorarioWorkerTaskValue>({
         n: nWorkers,
-        initMessage: {
+        initMessage: (workerID) => ({
             action: "solucionarQuadroHorario",
+            // Worker 0 irá tentar resolver sem reinícios
+            baseIter: workerID === 0 ? null : 10,
             formData,
             diasAtivos
-        },
+        }),
         createWorker: () => new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if (!msg.value) return;
@@ -62,7 +64,7 @@ const execQuadroHorarioWorker = async (formData: FormularioHorario, diasAtivos: 
         throw new Error("Falha ao gerar solução!");
     }
 
-    return quadro;
+    return resultado;
 };
 
 // ─── Componente: TabelaHorariosCheckbox ──────────────────────────────────────
@@ -221,7 +223,7 @@ export default function GeradorHorario() {
     const handleGerar = async (formData: FormularioHorario) => {
         setIsLoading(true);
         setError(null);
-        setHorarioGerado(null);
+        //setHorarioGerado(null);
 
         // Monta mapas de cores e professor→disciplina
         const cores: Record<string, string> = {};
@@ -253,7 +255,10 @@ export default function GeradorHorario() {
 
         try {
             const resultado = await execQuadroHorarioWorker(formData, diasAtivos);
-            setHorarioGerado(resultado);
+            setHorarioGerado(resultado.solucao ?? null);
+            if (!resultado.completo) {
+                setError("Não foi possível gerar um horário completo com as configurações fornecidas.");
+            }
         } catch (e) {
             console.error("Erro ao gerar horário:", e);
             setError("Erro ao gerar o horário:" + (e instanceof Error ? ` ${e.message}` : " Desconecido."));
@@ -434,6 +439,7 @@ export default function GeradorHorario() {
                                                                 <TableHead>Disciplina</TableHead>
                                                                 <TableHead className="w-32 text-center">Aulas/sem.</TableHead>
                                                                 <TableHead className="w-32 text-center">Agrupar</TableHead>
+                                                                <TableHead className="w-20 text-center">Dividir</TableHead>
                                                                 <TableHead className="w-12" />
                                                             </TableRow>
                                                         </TableHeader>
@@ -441,7 +447,7 @@ export default function GeradorHorario() {
                                                             {disciplinasDaTurma.length === 0 ? (
                                                                 <TableRow>
                                                                     <TableCell
-                                                                        colSpan={4}
+                                                                        colSpan={5}
                                                                         className="text-center text-muted-foreground py-6"
                                                                     >
                                                                         Nenhuma disciplina. Clique em &ldquo;Adicionar&rdquo; para começar.
@@ -479,6 +485,21 @@ export default function GeradorHorario() {
                                                                                 )}
                                                                             />
                                                                         </TableCell>
+                                                                        <TableCell>
+                                                                            <div className="flex justify-center">
+                                                                                <Controller
+                                                                                    control={control}
+                                                                                    name={`disciplinas.${disciplina.globalIndex}.dividir`}
+                                                                                    render={({ field }) => (
+                                                                                        <Checkbox
+                                                                                            className="size-5"
+                                                                                            checked={!!field.value}
+                                                                                            onCheckedChange={field.onChange}
+                                                                                        />
+                                                                                    )}
+                                                                                />
+                                                                            </div>
+                                                                        </TableCell>
                                                                         <TableCell className="text-center">
                                                                             <Button
                                                                                 type="button"
@@ -508,6 +529,7 @@ export default function GeradorHorario() {
                                                             turma: turma.nome,
                                                             aulas: 2,
                                                             agrupar: 0,
+                                                            dividir: false,
                                                         })
                                                     }
                                                 >

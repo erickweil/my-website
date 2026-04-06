@@ -45,7 +45,7 @@ async function executarSolverWorkers(
 ): Promise<{ solucaoCompleta: number[]; desmarcado: number[] }> {    
     const resultado = await raceWorkers<WorkerTaskValue>({
         n: n,
-        initMessage: { action: "solucionarQuadro", quadro: Array.from({ length: 36 }, () => 0) },
+        initMessage: (workerID) => ({ action: "solucionarQuadro", quadro: Array.from({ length: 36 }, () => 0) }),
         createWorker: () => new Worker(new URL('./solve-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if(!msg.value) return;
