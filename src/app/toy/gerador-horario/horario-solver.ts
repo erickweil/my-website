@@ -553,7 +553,7 @@ export function solucionarQuadroHorario(
         // Se não encontrou solução completa, mas encontrou uma solução parcial melhor que o quadro inicial, usar essa solução parcial
         quadroSolucionado = stats.melhor;
     }
-    if (!quadroSolucionado) {
+    if (!quadroSolucionado || quadroSolucionado.length <= 0) {
         // Retorno normal, para parar os outros workers, já que é impossível resolver
         return {
             solucao: undefined,

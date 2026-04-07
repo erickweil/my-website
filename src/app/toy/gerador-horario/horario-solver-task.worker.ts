@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 
-import { PencilmarkSolver } from "@/lib/pencilmark";
 import { WorkerResponseMsg } from "@/lib/workerRace";
 import { HorarioWorkerTaskValue, solucionarQuadroHorario } from "./horario-solver";
 

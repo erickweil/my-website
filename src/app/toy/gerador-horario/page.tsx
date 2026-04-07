@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { Trash2, Plus, X, Loader2, TriangleAlert, CheckCircle2, Download, Upload } from "lucide-react";
+import { Trash2, Plus, X, Loader2, TriangleAlert, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -269,12 +269,25 @@ export default function GeradorHorario() {
         setProfessoresDisciplinas(discProf);
 
         // Normalizar dados fora dos intervalos configurados
+        const diasAtivosSet = new Set<string>(diasAtivos);
         formData.turmas.forEach((turma) => {
+            // Bug A: remover dias que foram desativados
+            (Object.keys(turma.horarios) as HorarioDia[]).forEach((dia) => {
+                if (!diasAtivosSet.has(dia)) {
+                    delete turma.horarios[dia];
+                }
+            });
             Object.entries(turma.horarios).forEach(([dia, tempos]) => {
                 turma.horarios[dia as HorarioDia] = tempos.filter((t) => t >= 1 && t <= quantidadeTempos);
             });
         });
         formData.professores.forEach((prof) => {
+            // Bug A: remover dias que foram desativados
+            (Object.keys(prof.horarios) as HorarioDia[]).forEach((dia) => {
+                if (!diasAtivosSet.has(dia)) {
+                    delete prof.horarios[dia];
+                }
+            });
             Object.entries(prof.horarios).forEach(([dia, tempos]) => {
                 prof.horarios[dia as HorarioDia] = tempos.filter((t) => t >= 1 && t <= quantidadeTempos);
             });
