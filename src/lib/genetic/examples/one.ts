@@ -1,4 +1,4 @@
-import { GAProblem } from "./problem";
+import { GAProblem } from "../problem.ts";
 
 /**
  * OneMax: maximizar o número de bits `1` em um vetor binário.
@@ -6,7 +6,7 @@ import { GAProblem } from "./problem";
  * "Hello World" dos algoritmos genéticos
  * Solução ótima: todos os bits = 1, fitness = size.
  */
-export class OneMaxProblem implements GAProblem<boolean[]> {
+export class OneMaxGAProblem implements GAProblem<boolean[]> {
     maxFitness?: number | undefined;
     constructor(private readonly size: number) { 
         this.maxFitness = size;
@@ -49,5 +49,9 @@ export class OneMaxProblem implements GAProblem<boolean[]> {
                 childB[i] = parentA[i];
             }
         }
+    }
+
+    toString(genes: boolean[]): string {
+        return genes.map(bit => bit ? "1" : "0").join("");
     }
 }

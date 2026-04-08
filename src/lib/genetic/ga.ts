@@ -1,4 +1,4 @@
-import { GAProblem } from "./problem";
+import { GAProblem } from "./problem.ts";
 
 /**
  * Um indivíduo da população.
@@ -11,7 +11,7 @@ export interface Individual<G> {
 }
 
 /** Configuração completa do motor genético. */
-export interface GAConfig {
+export interface GAConfig<G> {
     /** Tamanho da população por geração. Padrão: 100 */
     populationSize?: number;
     /** Limite de gerações antes de desistir. Padrão: 1_000_000 */
@@ -34,6 +34,7 @@ export interface GAConfig {
 
     /** Função chamada a cada melhora no melhor fitness encontrado. */
     progressCallback?: (event: {
+        genes: G;
         generation: number;
         fitness: number;
         /** Quantas gerações se passaram desde a última melhora. */
@@ -58,11 +59,11 @@ const DEFAULTS = {
  * Estratégia: elitismo + mutação + crossover + seleção por torneio.
  */
 export class GeneticAlgorithm<G extends object> {
-    private readonly config: Required<GAConfig>;
+    private readonly config: Required<GAConfig<G>>;
     private readonly population: Individual<G>[];
     constructor(
         private readonly problem: GAProblem<G>,
-        config: GAConfig = {},
+        config: GAConfig<G> = {},
     ) {
         this.config = {
             populationSize: config.populationSize ?? DEFAULTS.populationSize,
@@ -92,6 +93,7 @@ export class GeneticAlgorithm<G extends object> {
             generation: 0,
             stagnatedFor: 0,
             fitness: bestFitness,
+            genes: bestGenes
         });
         let lastImprovementGen = 0;
 
@@ -118,6 +120,7 @@ export class GeneticAlgorithm<G extends object> {
                 this.config.progressCallback({
                     generation: gen,
                     stagnatedFor: gen - lastImprovementGen,
+                    genes: bestGenes,
                     fitness: bestFitness,
                 });
             }
@@ -132,7 +135,7 @@ export class GeneticAlgorithm<G extends object> {
             }
 
             // DEBUG
-            // await new Promise(resolve => setTimeout(resolve, 1000));
+            //await new Promise(resolve => setTimeout(resolve, 100));
         }
 
         return {
@@ -194,21 +197,38 @@ export class GeneticAlgorithm<G extends object> {
             }
         }
         const survivorsCount = left;
-        // Atravessa o restante da população (os eliminados) e preenche com novos indivíduos derivados dos sobreviventes
-        for(let i = survivorsCount; i < this.population.length; i += 2) {
-            const childA = this.population[i];
-            const childB = (i+1) < this.population.length ? this.population[i + 1] : this.population[survivorsCount];
-
-            // Seleciona pais aleatório entre os sobreviventes
+        if(survivorsCount === this.population.length - 1) {
+            // Só 1 indivíduo foi eliminado, podemos otimizar e evitar criar filhos novos
+            const childA = this.population[survivorsCount];
             const parentA = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
-            const parentB = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
-            
-            // Crossover entre os pais para criar os filhos com a taxa definida
-            if (Math.random() < this.config.crossoverRate) {
-                this.problem.crossover(childA.genes, childB.genes, parentA.genes, parentB.genes);
-            } else {
+            this.problem.clone(childA.genes, parentA.genes);
+            if (Math.random() < this.config.mutationRate) {
+                this.problem.mutate(childA.genes, this.config.mutationGeneRate);
+            }
+            childA.fitness = undefined;
+        } else for(let i = survivorsCount; i < this.population.length; i += 2) {
+            // Atravessa o restante da população (os eliminados) e preenche com novos indivíduos derivados dos sobreviventes
+            const childA = this.population[i];
+            const childB = (i+1) < this.population.length ? this.population[i + 1] : this.population[i - 1];
+
+            // Aplicar crossover
+            if (survivorsCount === 1) {
+                // Só um sobrevivente, então o cruzamento é inútil, o filho é uma cópia do sobrevivente com possível mutação
+                const parentA = this.population[0];
                 this.problem.clone(childA.genes, parentA.genes);
-                this.problem.clone(childB.genes, parentB.genes);
+                this.problem.clone(childB.genes, parentA.genes);                
+            } else {
+                // Seleciona pais aleatório entre os sobreviventes
+                const parentA = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
+                const parentB = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize, parentA);
+                
+                // Crossover entre os pais para criar os filhos com a taxa definida
+                if (Math.random() < this.config.crossoverRate) {
+                    this.problem.crossover(childA.genes, childB.genes, parentA.genes, parentB.genes);
+                } else {
+                    this.problem.clone(childA.genes, parentA.genes);
+                    this.problem.clone(childB.genes, parentB.genes);
+                }
             }
 
             // Aplica mutação com a taxa definida
@@ -234,10 +254,13 @@ export class GeneticAlgorithm<G extends object> {
      * @param tournamentSize Número de indivíduos a serem comparados no torneio.
      * @returns 
      */
-    static tournamentSelection<G>(survivors: Individual<G>[], survivorsCount: number, tournamentSize: number): Individual<G> {
+    static tournamentSelection<G>(survivors: Individual<G>[], survivorsCount: number, tournamentSize: number, exclude?: Individual<G>): Individual<G> {
         let best: Individual<G> | undefined;
         do {
             let individual = survivors[Math.floor(Math.random() * survivorsCount)];
+            if (individual === exclude) {
+                continue;
+            }
             if(
                 best?.fitness === undefined 
                 || individual.fitness! > best.fitness
@@ -246,6 +269,15 @@ export class GeneticAlgorithm<G extends object> {
             }
         } while (--tournamentSize > 0);
 
-        return best;
+        if(best) return best;
+
+        for (let i = 0; i < survivorsCount; i++) {
+            const individual = survivors[i];
+            if (individual !== exclude) {
+                return individual;
+            }
+        }
+
+        throw new Error("Não foi possível selecionar um indivíduo (todos os sobreviventes foram excluídos)");
     }
 }
