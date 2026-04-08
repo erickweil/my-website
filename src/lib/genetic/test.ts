@@ -29,7 +29,11 @@ async function runTest() {
         populationSize: POP_SIZE,
         maxGenerations: MAX_GENS,
         survivalRate: 0.5,
-        onImprovement: (event): void => {
+        crossoverRate: 0.90,
+        mutationRate: 1.0, 
+        mutationGeneRate: 2 / PROBLEM_SIZE, // 2 flips em cada um em média
+        tournamentSize: 8,
+        progressCallback: (event): void => {
             const { generation, fitness, stagnatedFor } = event;
             const bar = progressBar(fitness, nearestPowerOfTwo(fitness));
             const stag = stagnatedFor > 0 ? ` (+${stagnatedFor} gens)` : " (início)";
@@ -43,13 +47,13 @@ async function runTest() {
     const result = await ga.run();
     const fim = performance.now();
 
-    console.log(`\nTempo total: ${((fim - inicio) / 1000).toFixed(2)}s`);
     console.log(`\n${"─".repeat(60)}`);
     console.log(`Resultado: OneMax (${PROBLEM_SIZE} bits)`);
     console.log(`${"─".repeat(60)}`);
     console.log(`  Status     : ${result.bestFitness >= problem.maxFitness! ? "✓ Resolvido" : "✗ Limite atingido"}`);
-    console.log(`  Gerações   : ${result.generations.toLocaleString()}`);
-    console.log(`  Fitness    : ${result.bestFitness}`);
+    console.log(`  Fitness    : ${result.bestFitness}/${problem.maxFitness}`);
+    console.log(`  Gerações   : ${result.generations}`);
+    console.log(`  Tempo total: ${((fim - inicio) / 1000).toFixed(2)}s (${(result.generations / ((fim - inicio) / 1000)).toFixed(1)} gen/s)`);
     console.log(`${"─".repeat(60)}\n`);
 
 

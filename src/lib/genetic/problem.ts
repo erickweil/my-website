@@ -17,10 +17,10 @@ export interface GAProblem<G extends object> {
     clone(genes: G, other: G): void;
 
     /** Mutação: Aplique uma mutação neste genoma */
-    mutate(genes: G): void;
+    mutate(genes: G, mutationRate: number): void;
 
-    /* Crossover entre dois genomas para criar um filho */
-    crossover?(genes: G, parentA: G, parentB: G): void;
+    /* Crossover entre dois genomas para criar dois filhos */
+    crossover(childA: G, childB: G, parentA: G, parentB: G): void;
 
     /** Fitness Máximo, solução perfeita */
     readonly maxFitness?: number;

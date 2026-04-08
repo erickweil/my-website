@@ -3,10 +3,7 @@ import { GAProblem } from "./problem";
 /**
  * OneMax: maximizar o número de bits `1` em um vetor binário.
  *
- * É o "Hello World" dos algoritmos genéticos — simples o suficiente para
- * verificar que o motor está funcionando corretamente, mas não trivial
- * para populações pequenas com alta dimensão.
- *
+ * "Hello World" dos algoritmos genéticos
  * Solução ótima: todos os bits = 1, fitness = size.
  */
 export class OneMaxProblem implements GAProblem<boolean[]> {
@@ -33,15 +30,24 @@ export class OneMaxProblem implements GAProblem<boolean[]> {
         }
     }
 
-    mutate(genes: boolean[]) {
-        const randomIndex = Math.floor(Math.random() * genes.length);
-        genes[randomIndex] = !genes[randomIndex];
+    mutate(genes: boolean[], mutationRate: number): void {
+        const mutations = Math.random() * Math.round(genes.length * mutationRate * 2);
+        for(let i = 0; i < mutations; i++) {
+            const randomIndex = Math.floor(Math.random() * genes.length);
+            genes[randomIndex] = !genes[randomIndex];
+        }
     }
 
-    crossover(genes: boolean[], parentA: boolean[], parentB: boolean[]): void {
-        const crossoverPoint = Math.floor(Math.random() * genes.length);
-        for(let i = 0; i < genes.length; i++) {
-            genes[i] = i < crossoverPoint ? parentA[i] : parentB[i];
+    crossover(childA: boolean[], childB: boolean[], parentA: boolean[], parentB: boolean[]): void {
+        const crossoverPoint = Math.floor(Math.random() * this.size);
+        for(let i = 0; i < this.size; i++) {
+            if (i < crossoverPoint) {
+                childA[i] = parentA[i];
+                childB[i] = parentB[i];
+            } else {
+                childA[i] = parentB[i];
+                childB[i] = parentA[i];
+            }
         }
     }
 }

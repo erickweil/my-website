@@ -1,4 +1,3 @@
-import { boolean } from "zod";
 import { GAProblem } from "./problem";
 
 /**
@@ -15,17 +14,26 @@ export interface Individual<G> {
 export interface GAConfig {
     /** Tamanho da população por geração. Padrão: 100 */
     populationSize?: number;
-    /** Limite de gerações antes de desistir. Padrão: 10_000 */
+    /** Limite de gerações antes de desistir. Padrão: 1_000_000 */
     maxGenerations?: number;
     /** Limiar da população que sobrevive para a próxima geração em relação à mediana (0–1). Padrão: 0.5 */
     survivalRate?: number;
-    /** Tamanho do torneio para seleção de pais. Padrão: 5 */
+    /** Tamanho do torneio para seleção de pais. Padrão: 10 */
     tournamentSize?: number;
     /** Limite de gerações sem melhora antes de desistir. Padrão: indefinido (sem limite) */
     maxStagnation?: number;
 
+    /** Taxa de crossover entre indivíduos (probabilidade de cruzar dois indivíduos). Padrão: 0.5 */
+    crossoverRate?: number;
+
+    /** Taxa de mutação por indivíduo (probabilidade de mutar um indivíduo). Padrão: 0.5 */
+    mutationRate?: number;
+    /** Taxa de mutação por gene (probabilidade de mutar um gene). Padrão: 0.01 */
+    mutationGeneRate?: number;
+
+
     /** Função chamada a cada melhora no melhor fitness encontrado. */
-    onImprovement?: (event: {
+    progressCallback?: (event: {
         generation: number;
         fitness: number;
         /** Quantas gerações se passaram desde a última melhora. */
@@ -35,22 +43,19 @@ export interface GAConfig {
 
 const DEFAULTS = {
     populationSize: 100,
-    maxGenerations: 10_000,
+    maxGenerations: 1_000_000,
     survivalRate: 0.5,
     tournamentSize: 10,
     maxStagnation: -1,
+    crossoverRate: 0.5,
+    mutationRate: 0.5,
+    mutationGeneRate: 0.01,
 } as const;
 
 /**
  * Motor genético genérico.
  *
- * Estratégia: elitismo + mutação.
- * - Os `survivalRate`% melhores sobrevivem intactos (elitismo garante que nunca regredimos).
- * - O restante é preenchido com mutações de sobreviventes escolhidos aleatoriamente.
- * - Crossover será adicionado na Etapa 2, junto com genomas de permutação.
- *
- * Complexidade por geração: O(P log P) por causa do sort de fitness.
- * Para P ≤ 1000 isso é irrelevante; acima disso considere um heap parcial.
+ * Estratégia: elitismo + mutação + crossover + seleção por torneio.
  */
 export class GeneticAlgorithm<G extends object> {
     private readonly config: Required<GAConfig>;
@@ -65,7 +70,10 @@ export class GeneticAlgorithm<G extends object> {
             survivalRate: config.survivalRate ?? DEFAULTS.survivalRate,
             tournamentSize: config.tournamentSize ?? DEFAULTS.tournamentSize,
             maxStagnation: config.maxStagnation ?? DEFAULTS.maxStagnation,
-            onImprovement: config.onImprovement ?? ((event) => {
+            crossoverRate: config.crossoverRate ?? DEFAULTS.crossoverRate,
+            mutationRate: config.mutationRate ?? DEFAULTS.mutationRate,
+            mutationGeneRate: config.mutationGeneRate ?? DEFAULTS.mutationGeneRate,
+            progressCallback: config.progressCallback ?? ((event) => {
                 console.log(`Gen ${event.generation} | fitness ${event.fitness} (melhora após ${event.stagnatedFor} gens)`);
             }),
         };
@@ -80,7 +88,7 @@ export class GeneticAlgorithm<G extends object> {
         let bestGenes = this.problem.randomGenes();
         this.problem.clone(bestGenes, this.population[0].genes);
         let bestFitness = this.problem.fitness(bestGenes);
-        this.config.onImprovement({
+        this.config.progressCallback({
             generation: 0,
             stagnatedFor: 0,
             fitness: bestFitness,
@@ -107,7 +115,7 @@ export class GeneticAlgorithm<G extends object> {
             }
 
             if (improved || gen % 100 === 0) {
-                this.config.onImprovement({
+                this.config.progressCallback({
                     generation: gen,
                     stagnatedFor: gen - lastImprovementGen,
                     fitness: bestFitness,
@@ -150,8 +158,7 @@ export class GeneticAlgorithm<G extends object> {
         let worse = this.population[1];
         for (const ind of this.population) {
             if (ind.fitness === undefined) {
-                const fitness = this.problem.fitness(ind.genes);
-                ind.fitness = fitness;
+                ind.fitness = this.problem.fitness(ind.genes);
             }
             if (ind.fitness > best.fitness!) {
                 best = ind;
@@ -168,48 +175,65 @@ export class GeneticAlgorithm<G extends object> {
         // 0.5 survivalRate:  abaixo de 1.0x a mediana é eliminada
         // 1.0 survivalRate: só o pior é eliminado
         const threshold = worse.fitness! + (best.fitness! - worse.fitness!) * this.config.survivalRate;
-        let survivorsCount = 0;
-        for (let i = this.population.length - 1; i >= survivorsCount;) {
-            const ind = this.population[i];
+        // Particiona a população em sobreviventes (fitness > threshold) e eliminados (fitness ≤ threshold)
+        let left = 0;
+        let right = this.population.length - 1;
+        while (left <= right) {
+            const current = this.population[left];
             if (
-                ind !== worse // o pior sempre morre
-                && (ind === best // o melhor sempre sobrevive
-                || ind.fitness! > threshold)
+                current !== worse // o pior sempre morre
+                && (current === best // o melhor sempre sobrevive
+                || current.fitness! > threshold)
             ) {
-                //this.survivors[survivorsCount++] = ind;
-                
-                // 1. Troca o sobrevivente para o início do array (in-place)
-                // 2. Incrementa apenas o contador de sobreviventes
-                // (No próximo loop vai repetir para o indivíduo trocado)
-                this.population[i] = this.population[survivorsCount];
-                this.population[survivorsCount] = ind;
-                survivorsCount++;
+                left++;
             } else {
-                i--;
+                // [this.population[left], this.population[right]] = [this.population[right--], this.population[left]];
+                this.population[left] = this.population[right];
+                this.population[right] = current;
+                right--;
             }
         }
-
+        const survivorsCount = left;
         // Atravessa o restante da população (os eliminados) e preenche com novos indivíduos derivados dos sobreviventes
-        for(let i = survivorsCount; i < this.population.length; i++) {
-            const ind = this.population[i];
-            // Seleciona um pai aleatório entre os sobreviventes
-            const parent = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
+        for(let i = survivorsCount; i < this.population.length; i += 2) {
+            const childA = this.population[i];
+            const childB = (i+1) < this.population.length ? this.population[i + 1] : this.population[survivorsCount];
+
+            // Seleciona pais aleatório entre os sobreviventes
+            const parentA = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
+            const parentB = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
             
-            if (this.problem.crossover && Math.random() < 0.5) {
-                // Crossover entre o pai e outro indivíduo aleatório
-                const otherParent = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
-                this.problem.crossover(ind.genes, parent.genes, otherParent.genes);
+            // Crossover entre os pais para criar os filhos com a taxa definida
+            if (Math.random() < this.config.crossoverRate) {
+                this.problem.crossover(childA.genes, childB.genes, parentA.genes, parentB.genes);
             } else {
-                // Mutação simples a partir do pai
-                this.problem.clone(ind.genes, parent.genes);
-                this.problem.mutate(ind.genes);
+                this.problem.clone(childA.genes, parentA.genes);
+                this.problem.clone(childB.genes, parentB.genes);
             }
-            ind.fitness = undefined;
+
+            // Aplica mutação com a taxa definida
+            if (Math.random() < this.config.mutationRate) {
+                this.problem.mutate(childA.genes, this.config.mutationGeneRate);
+            }
+            if (Math.random() < this.config.mutationRate) {
+                this.problem.mutate(childB.genes, this.config.mutationGeneRate);
+            }
+            childA.fitness = undefined;
+            childB.fitness = undefined;
         }
 
         return best;
     }
 
+    /**
+     * Seleciona um indivíduo dos sobreviventes usando seleção por torneio:
+     *   1. Escolhe N indivíduos aleatórios dos sobreviventes.
+     *   2. Retorna o indivíduo com o melhor fitness entre eles.
+     * @param survivors Array de indivíduos sobreviventes (fitness > threshold).
+     * @param survivorsCount Número de sobreviventes no array.
+     * @param tournamentSize Número de indivíduos a serem comparados no torneio.
+     * @returns 
+     */
     static tournamentSelection<G>(survivors: Individual<G>[], survivorsCount: number, tournamentSize: number): Individual<G> {
         let best: Individual<G> | undefined;
         do {
