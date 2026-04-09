@@ -116,7 +116,7 @@ export class GeneticAlgorithm<G extends object> {
                 }
             }
 
-            if (improved || gen % 100 === 0) {
+            if (improved || gen % 500 === 0) {
                 this.config.progressCallback({
                     generation: gen,
                     stagnatedFor: gen - lastImprovementGen,

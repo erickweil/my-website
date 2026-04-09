@@ -15,10 +15,10 @@ const progressBar = (current: number, total: number, width = 30): string => {
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const PROBLEM_SIZE = 128;   // bits no vetor
+const PROBLEM_SIZE = 256;   // bits no vetor
 const POP_SIZE = PROBLEM_SIZE * 2;   // indivíduos por geração
-const MAX_GENS = 1_000_000; // limite de gerações
-const MAX_STAGNATION = 50_000; // gerações sem melhoria para considerar estagnado
+const MAX_GENS = 10_000_000; // limite de gerações
+const MAX_STAGNATION = 100_000; // gerações sem melhoria para considerar estagnado
 // ─── Execução ─────────────────────────────────────────────────────────────────
 
 async function runTest() {
@@ -65,7 +65,7 @@ async function runTest() {
 
     console.log(`Melhor solução encontrada:`);
     console.log(problem.toString(result.bestGenes));
-    const setNumbers = new Set(result.bestGenes as number[]);
+    /*const setNumbers = new Set(result.bestGenes as number[]);
     const allUnique = setNumbers.size === (result.bestGenes as number[]).length;
     console.log(`Verificação independente: ${allUnique ? "✓ todos os números são únicos" : "✗ erro"}`);
     for(let i = 0; i < PROBLEM_SIZE; i++) {
@@ -76,7 +76,7 @@ async function runTest() {
             console.log(`✗ erro: ${a} não é menor que ${b} na posição ${i}`);
             break;
         }
-    }
+    }*/
     // Confirma que todos os bits são true
     //const allOnes = (result.bestGenes as boolean[]).every(Boolean);
     //console.log(`Verificação independente: ${allOnes ? "✓ todos os bits são 1" : "✗ erro"}`);

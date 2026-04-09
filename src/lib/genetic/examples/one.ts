@@ -1,3 +1,4 @@
+import { crossover1PointOperator } from "../operators.ts";
 import { GAProblem } from "../problem.ts";
 
 /**
@@ -8,7 +9,10 @@ import { GAProblem } from "../problem.ts";
  */
 export class OneMaxGAProblem implements GAProblem<boolean[]> {
     maxFitness?: number | undefined;
-    constructor(private readonly size: number) { 
+    constructor(
+        private readonly size: number,
+        public crossover = crossover1PointOperator(size)
+    ) { 
         this.maxFitness = size;
     }
 
@@ -38,20 +42,7 @@ export class OneMaxGAProblem implements GAProblem<boolean[]> {
         }
     }
 
-    crossover(childA: boolean[], childB: boolean[], parentA: boolean[], parentB: boolean[]): void {
-        const crossoverPoint = Math.floor(Math.random() * this.size);
-        for(let i = 0; i < this.size; i++) {
-            if (i < crossoverPoint) {
-                childA[i] = parentA[i];
-                childB[i] = parentB[i];
-            } else {
-                childA[i] = parentB[i];
-                childB[i] = parentA[i];
-            }
-        }
-    }
-
     toString(genes: boolean[]): string {
-        return genes.map(bit => bit ? "1" : "0").join("");
+        return genes.slice(0,32).map(bit => bit ? "1" : "0").join("");
     }
 }

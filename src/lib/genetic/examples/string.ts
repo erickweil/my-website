@@ -1,3 +1,4 @@
+import { crossover1PointOperator } from "../operators.ts";
 import { GAProblem } from "../problem.ts";
 
 /**
@@ -117,23 +118,13 @@ export class StringGAProblem implements GAProblem<number[]> {
         }        
     }
 
-    crossover(childA: number[], childB: number[], parentA: number[], parentB: number[]): void {
-        const crossoverPoint = Math.floor(Math.random() * this.size);
-        for(let i = 0; i < this.size; i++) {
-            if (i < crossoverPoint) {
-                childA[i] = parentA[i];
-                childB[i] = parentB[i];
-            } else {
-                childA[i] = parentB[i];
-                childB[i] = parentA[i];
-            }
-        }
-    }
+    crossover = crossover1PointOperator(this.size);
 
     toString(genes: number[]): string {
         let strResult = "";
         for(const gene of genes) {
             strResult += String.fromCharCode(gene);
+            if(strResult.length > 64) break;
         }
         return strResult;
     }
