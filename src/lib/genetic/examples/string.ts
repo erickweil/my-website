@@ -1,5 +1,6 @@
-import { crossover1PointOperator } from "../operators.ts";
-import { GAProblem } from "../problem.ts";
+import { crossover1PointOperator } from "../crossoverOperators.ts";
+import { mutationCombineOperator, mutationNeighborSwapOperator, mutationRandomSwapOperator, mutationReplaceOperator, mutationShiftSwapOperator } from "../mutationOperators.ts";
+import { GAProblemArray } from "../problem.ts";
 
 /**
  * String: produzir um texto qualquer com palavras reais, onde cada gene é um caractere.
@@ -7,16 +8,37 @@ import { GAProblem } from "../problem.ts";
  * Solução ótima: apenas palavras que existem, 
  * fitness: número de palavras corretas + número de caracteres corretos na posição correta / 10 (para evitar que seja muito baixo no início).
  */
-export class StringGAProblem implements GAProblem<number[]> {
-    maxFitness?: number | undefined;
+export class StringGAProblem extends GAProblemArray<number[]> {
     palavras: number[][];
-    constructor(private readonly size: number) { 
-        this.maxFitness = size * size * 10;
+    constructor(size: number) { 
+        super(
+            size,
+            size * size * 10 /* maxFitness */
+        );
         this.palavras = palavras.map(p => {
             let normalized = p.normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // Remove acentos
             return normalized.split("").map(c => c.charCodeAt(0))
         });
     }
+
+    crossover = crossover1PointOperator(this.size);
+    mutate = mutationCombineOperator([
+        { 
+            operator: mutationRandomSwapOperator<number[]>(), 
+            chance: 0.25 
+        }, { 
+            operator: mutationNeighborSwapOperator<number[]>(), 
+            chance: 0.25 
+        }, { 
+            operator: mutationReplaceOperator<number[]>(
+                () => 32 + Math.floor(Math.random() * 95)
+            ), 
+            chance: 0.25 
+        }, {
+            operator: mutationShiftSwapOperator<number[]>(), 
+            chance: 0.25 
+        },
+    ]);
 
     randomGenes(): number[] {
         return Array.from({ length: this.size }, 
@@ -78,53 +100,11 @@ export class StringGAProblem implements GAProblem<number[]> {
         return fitness;
     }
 
-    clone(result: number[], genes: number[]): void {
-        for(let i = 0; i < genes.length; i++) {
-            result[i] = genes[i];
-        }
-    }
-
-    mutate(genes: number[], mutationRate: number): void {
-        const mutations = Math.random() * Math.round(genes.length * mutationRate * 2);
-        
-        for(let i = 0; i < mutations; i++) {
-            const randomIndex = Math.floor(Math.random() * genes.length);
-            if(Math.random() > 0.5) {
-                // Faz alguns swaps
-                const swapWith = Math.floor(Math.random() * genes.length);
-                const temp = genes[randomIndex];
-                genes[randomIndex] = genes[swapWith];
-                genes[swapWith] = temp;        
-            } else if(Math.random() > 0.5) {
-                // Muda para um caractere aleatório
-                let newChar = 32 + Math.floor(Math.random() * 95);
-                if(Math.random() > 0.5) {
-                    // Substitui
-                    genes[randomIndex] = newChar;
-                } else if(Math.random() > 0.5) {
-                    // Deleta um caractere (desloca tudo para a esquerda e coloca ele no final)
-                    for(let j = randomIndex; j < genes.length - 1; j++) {
-                        genes[j] = genes[j + 1];
-                    }
-                    genes[genes.length - 1] = newChar;
-                } else {
-                    // Insere um caractere (desloca tudo para a direita e coloca o novo char no índice)
-                    for(let j = genes.length - 1; j > randomIndex; j--) {
-                        genes[j] = genes[j - 1];
-                    }
-                    genes[randomIndex] = newChar;
-                }
-            }
-        }        
-    }
-
-    crossover = crossover1PointOperator(this.size);
-
-    toString(genes: number[]): string {
+    toStatusString(genes: number[], maxLength: number = 64): string {
         let strResult = "";
         for(const gene of genes) {
             strResult += String.fromCharCode(gene);
-            if(strResult.length > 64) break;
+            if(strResult.length > maxLength) break;
         }
         return strResult;
     }

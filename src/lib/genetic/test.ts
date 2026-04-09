@@ -2,6 +2,7 @@ import { GeneticAlgorithm } from "./ga.ts";
 import { OneMaxGAProblem } from "./examples/one.ts";
 import { StringGAProblem } from "./examples/string.ts";
 import { SortingGAProblem } from "./examples/sorting.ts";
+import { SudokuGAProblem } from "./examples/sudoku.ts";
 
 function nearestPowerOfTwo(n: number) {
   return Math.pow(2, Math.ceil(Math.log2(n)))
@@ -15,36 +16,40 @@ const progressBar = (current: number, total: number, width = 30): string => {
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const PROBLEM_SIZE = 256;   // bits no vetor
-const POP_SIZE = PROBLEM_SIZE * 2;   // indivíduos por geração
+const PROBLEM_SIZE = 9 * 9;   // bits no vetor
+const POP_SIZE = PROBLEM_SIZE * 4;   // indivíduos por geração
 const MAX_GENS = 10_000_000; // limite de gerações
-const MAX_STAGNATION = 100_000; // gerações sem melhoria para considerar estagnado
+const MAX_STAGNATION = 1_500_000; // gerações sem melhoria para considerar estagnado
 // ─── Execução ─────────────────────────────────────────────────────────────────
 
 async function runTest() {
     console.log(`\n${PROBLEM_SIZE} bits`);
     console.log(`População: ${POP_SIZE}  |  Limite: ${MAX_GENS.toLocaleString()} gerações\n`);
 
-    const problem = new SortingGAProblem(PROBLEM_SIZE);
+    //const problem = new SortingGAProblem(PROBLEM_SIZE);
     //const problem = new OneMaxGAProblem(PROBLEM_SIZE);
     //const problem = new StringGAProblem(PROBLEM_SIZE);
+    const problem = SudokuGAProblem.fromString(
+      "530070000600195000098000060800060003400803001700020006060000280000419005000080079"
+      //  "000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    );
     const ga = new GeneticAlgorithm(
         problem, {
         populationSize: POP_SIZE,
         maxGenerations: MAX_GENS,
-        survivalRate: 0.5,
+        survivalRate: 0.75,
         crossoverRate: 0.90,
         mutationRate: 0.90, 
-        mutationGeneRate: 3 / PROBLEM_SIZE,
-        tournamentSize: Math.ceil(PROBLEM_SIZE / 20) + 1, // 5% da população
+        mutationGeneRate: 2 / PROBLEM_SIZE,
+        tournamentSize: Math.ceil(PROBLEM_SIZE / 10) + 1, // % da população
         maxStagnation: MAX_STAGNATION,
         progressCallback: (event): void => {
             const { generation, stagnatedFor, genes, fitness } = event;
             const bar = progressBar(fitness, nearestPowerOfTwo(fitness));
             const maxgenlen = ("" + MAX_GENS).length;
-            const stag = stagnatedFor > 0 ? ` (+${(""+stagnatedFor).padStart(maxgenlen)} gens)` : " (início)";
+            const stag = stagnatedFor > 0 ? ` (+${(""+stagnatedFor).padStart(maxgenlen)} gens, mutation:${ga.mutationMultiplier.toFixed(3)})` : " (início)";
             process.stdout.write(
-                `\rGen ${("" + generation).padStart(maxgenlen, " ")} | fitness ${("" + fitness).padStart(4)} / ${problem.maxFitness} ${bar} ${stag} Best:\t${problem.toString(genes)}`,
+                `\rGen ${("" + generation).padStart(maxgenlen, " ")} | fitness ${("" + fitness).padStart(4)} / ${problem.maxFitness} ${bar} ${stag} Best:\n${problem.toStatusString(genes, 32)}`,
             );
         },
     });
@@ -64,7 +69,7 @@ async function runTest() {
 
 
     console.log(`Melhor solução encontrada:`);
-    console.log(problem.toString(result.bestGenes));
+    console.log(problem.toStatusString(result.bestGenes, 4096));
     /*const setNumbers = new Set(result.bestGenes as number[]);
     const allUnique = setNumbers.size === (result.bestGenes as number[]).length;
     console.log(`Verificação independente: ${allUnique ? "✓ todos os números são únicos" : "✗ erro"}`);

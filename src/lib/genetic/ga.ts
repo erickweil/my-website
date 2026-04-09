@@ -61,6 +61,7 @@ const DEFAULTS = {
 export class GeneticAlgorithm<G extends object> {
     private readonly config: Required<GAConfig<G>>;
     private readonly population: Individual<G>[];
+    public mutationMultiplier: number;
     constructor(
         private readonly problem: GAProblem<G>,
         config: GAConfig<G> = {},
@@ -83,6 +84,8 @@ export class GeneticAlgorithm<G extends object> {
             genes: this.problem.randomGenes(),
             fitness: undefined,
         }));
+
+        this.mutationMultiplier = 1;
     }
 
     async run() {        
@@ -127,11 +130,26 @@ export class GeneticAlgorithm<G extends object> {
 
             if (improved) {
                 lastImprovementGen = gen;
-            } else if (
-                this.config.maxStagnation >= 0
-                && (gen - lastImprovementGen) >= this.config.maxStagnation
-            ) {
-                break;
+                this.mutationMultiplier = 1;
+            } else {
+                // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
+                // Aumenta a taxa de mutação em até 2x após STAG/2 gerações sem melhora, e continua aumentando linearmente depois disso
+                const stagnatedFor = gen - lastImprovementGen;
+                /*const halfStagnation = this.config.maxStagnation * 0.5;
+                if (stagnatedFor < halfStagnation) {
+                    // 1 ... 0.5
+                    this.mutationMultiplier = 1 - stagnatedFor / halfStagnation * 0.5;
+                } else {
+                    // 0.5 ... 2.0+
+                    this.mutationMultiplier = 1 + (stagnatedFor - halfStagnation) / halfStagnation * 1.5;
+                }*/
+
+                if (
+                    this.config.maxStagnation >= 0
+                    && stagnatedFor >= this.config.maxStagnation
+                ) {
+                    break;
+                }
             }
 
             // DEBUG
@@ -202,8 +220,8 @@ export class GeneticAlgorithm<G extends object> {
             const childA = this.population[survivorsCount];
             const parentA = GeneticAlgorithm.tournamentSelection(this.population, survivorsCount, this.config.tournamentSize);
             this.problem.clone(childA.genes, parentA.genes);
-            if (Math.random() < this.config.mutationRate) {
-                this.problem.mutate(childA.genes, this.config.mutationGeneRate);
+            if (Math.random() < this.config.mutationRate * this.mutationMultiplier) {
+                this.problem.mutate(childA.genes, this.config.mutationGeneRate * this.mutationMultiplier);
             }
             childA.fitness = undefined;
         } else for(let i = survivorsCount; i < this.population.length; i += 2) {
@@ -232,11 +250,11 @@ export class GeneticAlgorithm<G extends object> {
             }
 
             // Aplica mutação com a taxa definida
-            if (Math.random() < this.config.mutationRate) {
-                this.problem.mutate(childA.genes, this.config.mutationGeneRate);
+            if (Math.random() < this.config.mutationRate * this.mutationMultiplier) {
+                this.problem.mutate(childA.genes, this.config.mutationGeneRate * this.mutationMultiplier);
             }
-            if (Math.random() < this.config.mutationRate) {
-                this.problem.mutate(childB.genes, this.config.mutationGeneRate);
+            if (Math.random() < this.config.mutationRate * this.mutationMultiplier) {
+                this.problem.mutate(childB.genes, this.config.mutationGeneRate * this.mutationMultiplier);
             }
             childA.fitness = undefined;
             childB.fitness = undefined;

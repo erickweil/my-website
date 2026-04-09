@@ -1,5 +1,6 @@
-import { crossover1PointOperator } from "../operators.ts";
-import { GAProblem } from "../problem.ts";
+import { crossover1PointOperator } from "../crossoverOperators.ts";
+import { mutationReplaceOperator } from "../mutationOperators.ts";
+import { GAProblemArray } from "../problem.ts";
 
 /**
  * OneMax: maximizar o número de bits `1` em um vetor binário.
@@ -7,14 +8,16 @@ import { GAProblem } from "../problem.ts";
  * "Hello World" dos algoritmos genéticos
  * Solução ótima: todos os bits = 1, fitness = size.
  */
-export class OneMaxGAProblem implements GAProblem<boolean[]> {
-    maxFitness?: number | undefined;
-    constructor(
-        private readonly size: number,
-        public crossover = crossover1PointOperator(size)
-    ) { 
-        this.maxFitness = size;
+export class OneMaxGAProblem extends GAProblemArray<boolean[]> {
+    constructor(size: number) { 
+        super(
+            size, 
+            size // fitness máximo é quando todos os bits são 1
+        );
     }
+
+    crossover = crossover1PointOperator<boolean[]>(this.size);
+    mutate = mutationReplaceOperator<boolean[]>((v) => !v);
 
     randomGenes(): boolean[] {
         return Array.from({ length: this.size }, () => Math.random() < 0.5);
@@ -28,21 +31,7 @@ export class OneMaxGAProblem implements GAProblem<boolean[]> {
         return count;
     }
 
-    clone(result: boolean[], genes: boolean[]): void {
-        for(let i = 0; i < genes.length; i++) {
-            result[i] = genes[i];
-        }
-    }
-
-    mutate(genes: boolean[], mutationRate: number): void {
-        const mutations = Math.random() * Math.round(genes.length * mutationRate * 2);
-        for(let i = 0; i < mutations; i++) {
-            const randomIndex = Math.floor(Math.random() * genes.length);
-            genes[randomIndex] = !genes[randomIndex];
-        }
-    }
-
-    toString(genes: boolean[]): string {
-        return genes.slice(0,32).map(bit => bit ? "1" : "0").join("");
+    toStatusString(genes: boolean[], maxLength: number = 64): string {
+        return genes.slice(0,maxLength).map(bit => bit ? "1" : "0").join("");
     }
 }

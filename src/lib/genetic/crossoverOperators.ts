@@ -1,6 +1,6 @@
-export type CrossoverOperator<G> = (childA: G, childB: G, parentA: G, parentB: G) => void;
+import { ArrayOrView, CrossoverOperator } from "./problem";
 
-export function crossoverUniformOperator<G extends Array<unknown>>(size: number): CrossoverOperator<G> {
+export function crossoverUniformOperator<G extends ArrayOrView>(size: number): CrossoverOperator<G> {
     return (childA: G, childB: G, parentA: G, parentB: G) => {
         for (let i = 0; i < size; i++) {
             if (Math.random() < 0.5) {
@@ -14,7 +14,7 @@ export function crossoverUniformOperator<G extends Array<unknown>>(size: number)
     };
 }
 
-export function crossover1PointOperator<G extends Array<unknown>>(size: number): CrossoverOperator<G> {
+export function crossover1PointOperator<G extends ArrayOrView>(size: number): CrossoverOperator<G> {
     return (childA: G, childB: G, parentA: G, parentB: G) => {
         const crossoverPoint = Math.floor(Math.random() * size);
         for(let i = 0; i < size; i++) {
@@ -29,7 +29,7 @@ export function crossover1PointOperator<G extends Array<unknown>>(size: number):
     };
 }
 
-export function crossover2PointOperator<G extends Array<unknown>>(size: number): CrossoverOperator<G> {
+export function crossover2PointOperator<G extends ArrayOrView>(size: number): CrossoverOperator<G> {
     return (childA: G, childB: G, parentA: G, parentB: G) => {
         let point1 = Math.floor(Math.random() * size);
         let point2 = Math.floor(Math.random() * size);
@@ -54,7 +54,7 @@ export function crossover2PointOperator<G extends Array<unknown>>(size: number):
     };
 }
 
-export function crossoverOX1Operator<G extends Array<unknown>, K = G[number]>(size: number, getIndex: (gene: K) => number): CrossoverOperator<G> {
+export function crossoverOX1Operator<G extends ArrayOrView, K = G[number]>(size: number, getIndex: (gene: K) => number): CrossoverOperator<G> {
     const markedA = Array.from({ length: size }, () => 0);
     const markedB = Array.from({ length: size }, () => 0);
     let epoch = 0;

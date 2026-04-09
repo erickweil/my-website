@@ -1,12 +1,29 @@
-import { crossoverOX1Operator } from "../operators.ts";
-import { GAProblem } from "../problem.ts";
+import { crossoverOX1Operator } from "../crossoverOperators.ts";
+import { mutationCombineOperator, mutationNeighborSwapOperator, mutationRandomSwapOperator, mutationShiftSwapOperator } from "../mutationOperators.ts";
+import { cloneArrayOperator, GAProblem, GAProblemArray } from "../problem.ts";
 
 
-export class SortingGAProblem implements GAProblem<number[]> {
-    maxFitness?: number | undefined;
-    constructor(private readonly size: number) { 
-        this.maxFitness = (size - 1) * (size + 2);
+export class SortingGAProblem extends GAProblemArray<number[]> {
+    constructor(size: number) { 
+        super(
+            size,
+            (size - 1) * (size + 2) /* maxFitness */
+        );
     }
+
+    mutate = mutationCombineOperator([
+        { 
+            operator: mutationRandomSwapOperator<number[]>(), 
+            chance: 0.5 
+        }, { 
+            operator: mutationNeighborSwapOperator<number[]>(), 
+            chance: 0.5 
+        }, /*{
+            operator: mutationShiftSwapOperator<number[]>(), 
+            chance: 0.50
+        },*/
+    ]);
+    crossover = crossoverOX1Operator<number[]>(this.size, gene => gene);
 
     randomGenes(): number[] {
         // Iniciar com um array ordenado
@@ -39,38 +56,7 @@ export class SortingGAProblem implements GAProblem<number[]> {
         return fitness;
     }
 
-    clone(result: number[], genes: number[]): void {
-        for(let i = 0; i < this.size; i++) {
-            result[i] = genes[i];
-        }
-    }
-
-    mutate(genes: number[], mutationRate: number): void {
-        const mutations = Math.random() * Math.round(genes.length * mutationRate * 2);
-        for(let i = 0; i < mutations; i++) {
-            let randomIndex, swapWith;
-            if(Math.random() < 0.5) {
-                // Swap aleatório
-                randomIndex = Math.floor(Math.random() * genes.length);
-                swapWith = Math.floor(Math.random() * genes.length);
-            } else {
-                // Swap com vizinho
-                randomIndex = Math.floor(Math.random() * genes.length);
-                swapWith = randomIndex + (Math.random() < 0.5 ? -1 : 1);
-                if (swapWith < 0) swapWith = 0;
-                if (swapWith >= genes.length) swapWith = genes.length - 1;
-            }
-            
-            // Faz alguns swaps
-            const temp = genes[randomIndex];
-            genes[randomIndex] = genes[swapWith];
-            genes[swapWith] = temp;  
-        }
-    }
-
-    crossover = crossoverOX1Operator<number[]>(this.size, gene => gene);
-
-    toString(genes: number[]): string {
-        return genes.slice(0,16).map(num => num.toString()).join(", ");
+    toStatusString(genes: number[], maxLength: number = 64): string {
+        return genes.slice(0,maxLength/2).map(num => num.toString()).join(", ").substring(0, maxLength);
     }
 }
