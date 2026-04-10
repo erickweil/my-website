@@ -100,6 +100,14 @@ export class StringGAProblem extends GAProblemArray<number[]> {
         return fitness;
     }
 
+    hash(genes: number[]): number {
+        let h = 0;
+        for (let i = 0; i < genes.length; i++) {
+            h = (Math.imul(h, 31) + genes[i]) | 0;
+        }
+        return h;
+    }
+
     toStatusString(genes: number[], maxLength: number = 64): string {
         let strResult = "";
         for(const gene of genes) {

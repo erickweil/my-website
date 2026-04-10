@@ -1,7 +1,6 @@
-import { extend } from "zod/v4-mini";
 import { crossoverOX1Operator } from "../crossoverOperators.ts";
-import { calcMutationAmount, mutationCombineOperator, mutationNeighborSwapOperator, mutationRandomSwapOperator, mutationShiftSwapOperator } from "../mutationOperators.ts";
-import { CloneOperator, CrossoverOperator, GAProblem, GAProblemArray } from "../problem.ts";
+import { calcMutationAmount} from "../mutationOperators.ts";
+import { GAProblem } from "../problem.ts";
 
 /**
  * Representação dos genes:
@@ -26,32 +25,6 @@ const BOX_CELLS: number[][] = (() => {
     }
     return boxes;
 })();
-
-const createView = <T extends Array<unknown>>() => {
-    const ret = {
-        bind(arr: T, start: number, end: number) {
-            ret.arr = arr;
-            ret.start = start;
-            ret.end = end;
-            return ret.view;
-        },
-        arr: undefined as T | undefined,
-        start: 0,
-        end: 0,
-        view: new Proxy({}, {
-            get: (_, prop) => {
-                if (prop === 'length') return ret.end - ret.start;
-                // Converte a string do índice para número e soma o deslocamento
-                return ret.arr![ret.start + Number(prop)];
-            },
-            set: (_, prop, value) => {
-                ret.arr![ret.start + Number(prop)] = value;
-                return true;
-            }
-        }) as unknown as T
-    };
-    return ret;
-};
 
 class SudokuGenes {
     public quadro: Int32Array; // 81 células, valores 0-9 (0 = livre)
@@ -109,13 +82,10 @@ export class SudokuGAProblem implements GAProblem<SudokuGenes> {
     constructor(clues: number[]) {
         if (clues.length !== 81) throw new Error("clues deve ter 81 elementos");
 
-        // maxFitness = linhas + colunas + boxes completamente sem repetição
-        // Cada unidade perfeita vale 9 pontos (valores únicos 1-9).
-        // 27 unidades × 9 = 243 … mas usamos contagem de conflitos (ver fitness),
-        // então maxFitness = 0 conflitos → representamos como 27*9 pares únicos.
         this.size = 81;
-        this.maxFitness = 243;
         this.clues = clues;
+        const clueCount = clues.filter(c => c !== 0).length;
+        this.maxFitness = (3 * 9 * 9) + (clueCount * 8);
     }
 
     clone = (genes: SudokuGenes, other: SudokuGenes) => {
@@ -123,52 +93,44 @@ export class SudokuGAProblem implements GAProblem<SudokuGenes> {
     };
 
     mutate = (genes: SudokuGenes, mutationRate: number) => {
-        // Escolhe uma linha aleatória (0-8)
-        const rowIndex = Math.floor(Math.random() * 9);
-        const rowOffset = rowIndex * 9;
-        const row = genes.rows[rowIndex];
-        // Aplica mutação de swap na linha, respeitando os locked
-        for(let c1 = 0; c1 < 9; c1++) {
-            if (this.clues[rowOffset + c1] !== 0) continue; // Não mexe em clues
+        const mutations = calcMutationAmount(this.size, mutationRate);
+        for(let i = 0; i < mutations; i++) {
+            // Swap aleatório entre duas posições
+            let idx1: number, idx2: number, attempts = 0;
+            do {
+                idx1 = Math.floor(Math.random() * this.size); // Escolhe uma posição aleatória
+                // Escolhe outra posição aleatória, mas na mesma linha
+                const rowStart = Math.floor(idx1 / 9) * 9;
+                idx2 = rowStart + Math.floor(Math.random() * 9);
+            } while(attempts++ < 20 && (idx2 === idx1 || this.clues[idx1] !== 0 || this.clues[idx2] !== 0));
+            if(attempts >= 20) continue; // Falhou em encontrar posições válidas, pula esta mutação
 
-            for(let c2 = c1 + 1; c2 < 9; c2++) {
-                if (this.clues[rowOffset + c2] !== 0) continue; // Não mexe em clues
-                if (Math.random() >= mutationRate) continue; // Decide se muta esta posição
-
-                // Swap simples entre genes[c1] e genes[c2]
-                const temp = row[c1];
-                row[c1] = row[c2];
-                row[c2] = temp;                
-            }
+            // Swap simples entre genes[idx1] e genes[idx2]
+            const temp = genes.quadro[idx1];
+            genes.quadro[idx1] = genes.quadro[idx2];
+            genes.quadro[idx2] = temp;  
         }
     };
 
     op = crossoverOX1Operator<Int32Array>(9, gene => gene);
     crossover = (childA: SudokuGenes, childB: SudokuGenes, parentA: SudokuGenes, parentB: SudokuGenes) => {
-        // Crossover OX1, entre duas linhas correspondentes dos pais
-        const row = Math.floor(Math.random() * 9);
-        this.op(
-            childA.rows[row],
-            childB.rows[row],
-            parentA.rows[row],
-            parentB.rows[row]
-        );
-
-        // Copia as outras linhas (não crossover) dos pais para os filhos, respeitando os locked
-        for(let r = 0; r < 9; r++) {
-            if (r === row) continue; // linha crossover já foi processada
-
-            const base = r * 9;
-            for(let c = 0; c < 9; c++) {
-                const i = base + c;
-                if (this.clues[i] !== 0) {
-                    // Célula fixa: copia do pai correspondente (pode ser qualquer um, pois são iguais)
-                    childA.quadro[i] = parentA.quadro[i];
-                    childB.quadro[i] = parentB.quadro[i];
+        for(let row = 0; row < 9; row++) {
+            if(Math.random() < 0.5) {
+                // Crossover OX1, as linhas correspondentes dos pais
+                this.op(
+                    childA.rows[row],
+                    childB.rows[row],
+                    parentA.rows[row],
+                    parentB.rows[row]
+                );
+            } else {
+                // Apenas copia as linhas dos pais aleatoriamente
+                if(Math.random() < 0.5) {
+                    childA.rows[row].set(parentA.rows[row]);
+                    childB.rows[row].set(parentB.rows[row]);
                 } else {
-                    // Célula livre: mantém o valor do filho (que pode ter sido modificado por crossover)
-                    childA.quadro[i] = childA.quadro[i] || parentA.quadro[i];
-                    childB.quadro[i] = childB.quadro[i] || parentB.quadro[i];
+                    childA.rows[row].set(parentB.rows[row]);
+                    childB.rows[row].set(parentA.rows[row]);
                 }
             }
         }
@@ -236,7 +198,26 @@ export class SudokuGAProblem implements GAProblem<SudokuGenes> {
             }
         }
 
-        return score; // Max Fitness = 243 (81*3)
+        for(let i = 0; i < this.clues.length; i++) {
+            if(this.clues[i] !== 0 && this.clues[i] === quadro[i]) {
+                score += 8; // Recompensa extra por cada clue corretamente mantido
+            }
+        }
+
+        return score; // Max Fitness = 243 (81*3) + (8 pontos por cada clue corretamente mantido)
+    }
+
+    // ------------------------------------------------------------------ //
+    //  hash: polynomial rolling hash sobre o quadro (para diversityCheck)  //
+    // ------------------------------------------------------------------ //
+    hash(genes: SudokuGenes): number {
+        let h = 0;
+        const q = genes.quadro;
+        for (let i = 0; i < 81; i++) {
+            // Polynomial rolling hash com Math.imul (mantém no espaço int32)
+            h = (Math.imul(h, 31) + q[i]) | 0;
+        }
+        return h;
     }
 
     // ------------------------------------------------------------------ //

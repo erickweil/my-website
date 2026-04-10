@@ -27,8 +27,11 @@ export interface GAProblem<G extends object> {
     /** Mutação: Aplique uma mutação neste genoma */
     mutate: MutationOperator<G>;
 
-    /* Crossover entre dois genomas para criar dois filhos */
+    /** Crossover entre dois genomas para criar dois filhos */
     crossover: CrossoverOperator<G>;
+
+    /** Opcional: função de hash para detectar indivíduos idênticos */
+    hash?(genes: G): number;
 
     toStatusString?(genes: G, maxLength?: number): string;
 }
