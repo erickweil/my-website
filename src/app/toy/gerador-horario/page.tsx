@@ -41,7 +41,8 @@ const getContrastColor = (hex: string) => {
 };
 
 const execQuadroHorarioWorker = async (formData: FormularioHorario, diasAtivos: HorarioDia[]) => {
-    const nWorkers = navigator.hardwareConcurrency || 8;
+    //const nWorkers = navigator.hardwareConcurrency || 8;
+    const nWorkers = 1;
     const resultado = await raceWorkers<HorarioWorkerTaskValue>({
         n: nWorkers,
         initMessage: (workerID) => ({

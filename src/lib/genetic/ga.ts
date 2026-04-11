@@ -77,7 +77,7 @@ export class GeneticAlgorithm<G extends object> {
         this.populationHashes = new Set();
     }
 
-    async run(_config: GAConfig<G> = {}) {
+    run(_config: GAConfig<G> = {}) {
         const config = {
             populationSize: _config.populationSize ?? DEFAULTS.populationSize,
             maxGenerations: _config.maxGenerations ?? DEFAULTS.maxGenerations,
