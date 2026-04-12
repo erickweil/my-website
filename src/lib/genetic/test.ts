@@ -33,12 +33,8 @@ async function runTest() {
       //"530070000600195000098000060800060003400803001700020006060000280000419005000080079"
       "000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
-    const ga = new GeneticAlgorithm(problem);
-
-    const inicio = performance.now();
-    const result = await ga.run({
+    const ga = new GeneticAlgorithm(problem, {
         populationSize: POP_SIZE,
-        maxGenerations: MAX_GENS,
         crossoverRate: 0.9,
         mutationRate: 0.9, 
         mutationGeneRate: 1 / PROBLEM_SIZE,
@@ -55,20 +51,23 @@ async function runTest() {
             );
         },
     });
+
+    const inicio = performance.now();
+    const result = ga.run(MAX_GENS);
     const fim = performance.now();
 
     console.log(`\n${"─".repeat(60)}`);
     console.log(`Resultado, size: ${PROBLEM_SIZE}`);
     console.log(`${"─".repeat(60)}`);
-    console.log(`  Status     : ${result.bestFitness >= problem.maxFitness! ? "✓ Resolvido" : "✗ Limite atingido"}`);
-    console.log(`  Fitness    : ${result.bestFitness}/${problem.maxFitness}`);
-    console.log(`  Gerações   : ${result.generations}`);
-    console.log(`  Tempo total: ${((fim - inicio) / 1000).toFixed(2)}s (${(result.generations / ((fim - inicio) / 1000)).toFixed(1)} gen/s)`);
+    console.log(`  Status     : ${result.fitness >= problem.maxFitness! ? "✓ Resolvido" : "✗ Limite atingido"}`);
+    console.log(`  Fitness    : ${result.fitness}/${problem.maxFitness}`);
+    console.log(`  Gerações   : ${result.generation}`);
+    console.log(`  Tempo total: ${((fim - inicio) / 1000).toFixed(2)}s (${(result.generation / ((fim - inicio) / 1000)).toFixed(1)} gen/s)`);
     console.log(`${"─".repeat(60)}\n`);
 
 
     console.log(`Melhor solução encontrada:`);
-    console.log(problem.toStatusString(result.bestGenes, 4096));
+    console.log(problem.toStatusString(result.genes, 4096));
     /*const setNumbers = new Set(result.bestGenes as number[]);
     const allUnique = setNumbers.size === (result.bestGenes as number[]).length;
     console.log(`Verificação independente: ${allUnique ? "✓ todos os números são únicos" : "✗ erro"}`);

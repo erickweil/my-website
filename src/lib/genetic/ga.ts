@@ -12,12 +12,19 @@ export interface Individual<G> {
     hash: number | undefined;
 }
 
+export interface GAProgressEvent<G> {
+    genes: G;
+    generation: number;
+    fitness: number;
+    current: number;
+    /** Quantas gerações se passaram desde a última melhora. */
+    stagnatedFor: number;    
+}
+
 /** Configuração completa do motor genético. */
 export interface GAConfig<G> {
     /** Tamanho da população por geração. Padrão: 100 */
     populationSize?: number;
-    /** Limite de gerações antes de desistir. Padrão: 1_000_000 */
-    maxGenerations?: number;
     /** Tamanho do torneio para seleção de pais. Padrão: 10 */
     tournamentSize?: number;
     /** Limite de gerações sem melhora antes de desistir. Padrão: indefinido (sem limite) */
@@ -39,26 +46,24 @@ export interface GAConfig<G> {
     diversityCheck?: boolean;
 
     /** Função chamada a cada melhora no melhor fitness encontrado. */
-    progressCallback?: (event: {
-        genes: G;
-        generation: number;
-        fitness: number;
-        current: number;
-        /** Quantas gerações se passaram desde a última melhora. */
-        stagnatedFor: number;
-    }) => void;
+    progressCallback?: (event: GAProgressEvent<G>) => void;
+
+    resetPopulation?: boolean;
 }
 
 const DEFAULTS = {
     populationSize: 100,
-    maxGenerations: 1_000_000,
     tournamentSize: 10,
     maxStagnation: -1,
     crossoverRate: 0.5,
     mutationRate: 0.5,
     mutationGeneRate: 0.01,
     diversityCheck: false,
-} as const;
+    resetPopulation: true,
+    progressCallback: (event) => {
+        console.log(`Gen ${event.generation} | fitness ${event.fitness} (melhora após ${event.stagnatedFor} gens)`);
+    }
+} satisfies GAConfig<unknown>;
 
 /**
  * Motor genético genérico.
@@ -66,119 +71,117 @@ const DEFAULTS = {
  * Estratégia: elitismo + mutação + crossover + seleção por torneio.
  */
 export class GeneticAlgorithm<G extends object> {
-    private population: Individual<G>[];
+    population: Individual<G>[];
     private offspring: Individual<G>[];
     private populationHashes: Set<number>;
+
+    private gen: number;
+    private bestGenes: G;
+    private bestFitness: number;
+    private stagFitness: number;
+    private lastImprovementGen: number;
+    private mutationMultiplier: number;
+
+    private config: Required<GAConfig<G>>;
+    private hashFn?: (genes: G) => number;
+
     constructor(
-        private readonly problem: GAProblem<G>
+        private readonly problem: GAProblem<G>,
+        _config: GAConfig<G> = {}
     ) {
         this.population = [];
         this.offspring = [];
         this.populationHashes = new Set();
+
+        // Controle da execução
+        this.gen = 0;
+        this.bestGenes = this.problem.randomGenes();
+        this.bestFitness = 0;
+        this.stagFitness = 0;
+        this.lastImprovementGen = 0;
+        this.mutationMultiplier = 1;
+        this.config = {
+            ...DEFAULTS,
+            ..._config
+        };
+        this.hashFn = this.problem.hash?.bind(this.problem);        
     }
 
-    run(_config: GAConfig<G> = {}) {
-        const config = {
-            populationSize: _config.populationSize ?? DEFAULTS.populationSize,
-            maxGenerations: _config.maxGenerations ?? DEFAULTS.maxGenerations,
-            tournamentSize: _config.tournamentSize ?? DEFAULTS.tournamentSize,
-            maxStagnation: _config.maxStagnation ?? DEFAULTS.maxStagnation,
-            crossoverRate: _config.crossoverRate ?? DEFAULTS.crossoverRate,
-            mutationRate: _config.mutationRate ?? DEFAULTS.mutationRate,
-            mutationGeneRate: _config.mutationGeneRate ?? DEFAULTS.mutationGeneRate,
-            progressCallback: _config.progressCallback ?? ((event) => {
-                console.log(`Gen ${event.generation} | fitness ${event.fitness} (melhora após ${event.stagnatedFor} gens)`);
-            }),
-            diversityCheck: _config.diversityCheck ?? DEFAULTS.diversityCheck,
-
-            mutationMultiplier: 1,
+    updateConfig(newConfig: Partial<GAConfig<G>>) {
+        this.config = {
+            ...this.config,
+            ...newConfig
         };
+    }
 
-        const runGenConfig = {
-            tournamentSize: config.tournamentSize,
-            crossoverRate: config.crossoverRate,
-            mutationRate: config.mutationRate,
-            mutationGeneRate: config.mutationGeneRate, 
-            hashFn: config.diversityCheck ? this.problem.hash?.bind(this.problem) : undefined,
-        };
-        
-        let bestGenes = this.problem.randomGenes();
-        let bestFitness = 0;
-        let stagFitness = 0;
-        let lastImprovementGen = 0;
-        config.progressCallback({
-            generation: 0,
-            stagnatedFor: 0,
-            fitness: bestFitness,
-            current: bestFitness,
-            genes: bestGenes
-        });
-
+    run(generations: number): GAProgressEvent<G> {                
         // 0. Inicializa a população (gera indivíduos aleatórios para preencher a população até o tamanho definido)
-        this.initializePopulation(config.populationSize);
+        this.initializePopulation(this.config.populationSize, this.config.resetPopulation);
 
-        let gen = 0;
-        for (; gen < config.maxGenerations; gen++) {
+        if(this.population.length === 0) {
+            return {
+                generation: 0,
+                stagnatedFor: 0,
+                genes: this.bestGenes,
+                fitness: this.bestFitness,
+                current: this.stagFitness,
+            }
+        }
+
+        const maxGenerations = this.gen + generations;
+        for (; this.gen < maxGenerations; this.gen++) {
             // 1. Avalia a geração atual e produz a próxima, retornando o melhor indivíduo desta geração
-            runGenConfig.mutationRate = config.mutationRate * config.mutationMultiplier;
-            runGenConfig.mutationGeneRate = config.mutationGeneRate * config.mutationMultiplier;
-            const currentBest = this.runGeneration(runGenConfig);
+            const currentBest = this.runGeneration();
 
             // 2. Verifica melhora global
-            if (currentBest.fitness! > bestFitness) {
-                this.problem.clone(bestGenes, currentBest.genes);
-                bestFitness = currentBest.fitness!;
+            if (currentBest.fitness! > this.bestFitness) {
+                this.problem.clone(this.bestGenes, currentBest.genes);
+                this.bestFitness = currentBest.fitness!;
 
                 // Se atingiu o fitness máximo possível, podemos parar
-                if (this.problem.maxFitness !== undefined && bestFitness >= this.problem.maxFitness) {
+                if (this.problem.maxFitness !== undefined && this.bestFitness >= this.problem.maxFitness) {
                     break;
                 }
             }
 
             let improved = false;
-            if (currentBest.fitness! > stagFitness) {
-                stagFitness = currentBest.fitness!;
+            if (currentBest.fitness! > this.stagFitness) {
+                this.stagFitness = currentBest.fitness!;
+                this.lastImprovementGen = this.gen;
+                this.mutationMultiplier = 1;
                 improved = true;
-            }
-
-            if (improved || gen % 1000 === 0) {
-                config.progressCallback({
-                    generation: gen,
-                    stagnatedFor: gen - lastImprovementGen,
-                    genes: bestGenes,
-                    fitness: bestFitness,
-                    current: stagFitness,
-                });
-            }
-
-            if (improved) {
-                lastImprovementGen = gen;
-                config.mutationMultiplier = 1;
-            } else if (config.maxStagnation > 0) {
+            } else if (this.config.maxStagnation > 0) {
                 // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
                 // Aumenta a taxa de mutação em até 2x após STAG/2 gerações sem melhora, e continua aumentando linearmente depois disso
-                const stagnatedFor = gen - lastImprovementGen;
+                const stagnatedFor = this.gen - this.lastImprovementGen;
                 
                 // Experimento: aumentar taxa de mutação gradualmente
-                const halfStagnation = config.maxStagnation * 0.5;
+                const halfStagnation = this.config.maxStagnation * 0.5;
                 // 1.0 ... 2.0+
-                config.mutationMultiplier = 1 + Math.max(0, stagnatedFor - halfStagnation) / halfStagnation;
+                this.mutationMultiplier = 1 + Math.max(0, stagnatedFor - halfStagnation) / halfStagnation;
 
-                if (stagnatedFor >= config.maxStagnation) {
+                if(stagnatedFor >= this.config.maxStagnation * 0.5 && this.stagFitness < this.bestFitness) {
+                    // Re-introduz o melhor indivíduo
+                    this.problem.clone(this.population[0].genes, this.bestGenes);
+                    this.population[0].fitness = this.bestFitness;
+                    this.population[0].hash = undefined;
+                }
+
+                if (stagnatedFor >= this.config.maxStagnation) {
                     console.log(`Estagnado por ${stagnatedFor} gerações, realizando assassinato de TODOS`);
-                    this.initializePopulation(config.populationSize);
-                    stagFitness = 0;
-                }/* else if(stagnatedFor > config.maxStagnation * 0.50 && Math.random() < 0.0001) {
-                    const survivor = this.population[Math.floor(Math.random() * this.population.length)];
-                    const copy = this.problem.randomGenes();
-                    this.problem.clone(copy, survivor.genes);
+                    this.initializePopulation(this.config.populationSize, true);
+                    this.stagFitness = 0;
+                }
+            }
 
-                    this.initializePopulation(config.populationSize);
-
-                    // Mantém o aleatório
-                    this.problem.clone(this.population[0].genes, copy);
-                    this.population[0].fitness = undefined;
-                }*/
+            if (improved || this.gen % 1000 === 0) {
+                this.config.progressCallback({
+                    generation: this.gen,
+                    stagnatedFor: this.gen - this.lastImprovementGen,
+                    genes: this.bestGenes,
+                    fitness: this.bestFitness,
+                    current: this.stagFitness,
+                });
             }
 
             // DEBUG
@@ -186,9 +189,11 @@ export class GeneticAlgorithm<G extends object> {
         }
 
         return {
-            bestGenes: bestGenes,
-            bestFitness: bestFitness,
-            generations: gen
+            generation: this.gen,
+            stagnatedFor: this.gen - this.lastImprovementGen,
+            genes: this.bestGenes,
+            fitness: this.bestFitness,
+            current: this.stagFitness,
         };
     }
 
@@ -200,9 +205,9 @@ export class GeneticAlgorithm<G extends object> {
      * Inicializa a população para a primeira geração.
      * Se a população já tiver indivíduos (de execuções anteriores), eles serão re-inicializados
      */
-    private initializePopulation(populationSize: number) {
+    private initializePopulation(populationSize: number, resetPopulation: boolean) {
         // Re-inicializa os indivíduos existentes
-        for(let i = 0; i < this.population.length; i++) {
+        if(resetPopulation) for(let i = 0; i < this.population.length; i++) {
             const ind = this.population[i];
             this.problem.clone(ind.genes, this.problem.randomGenes());
             ind.fitness = undefined;
@@ -236,28 +241,22 @@ export class GeneticAlgorithm<G extends object> {
      * 3. Torna os filhos a população da próxima geração
      * 4. Retorna o melhor indivíduo da geração (fitness mais alto).
      */
-    private runGeneration(config: {
-        tournamentSize: number;
-        crossoverRate: number;
-        mutationRate: number;
-        mutationGeneRate: number;
-        hashFn?: (genes: G) => number;
-    }): Individual<G> {
-        if (config.hashFn) {
+    private runGeneration(): Individual<G> {
+        const crossoverRate = this.config.crossoverRate;
+        const mutationRate = this.config.mutationRate * this.mutationMultiplier;
+        const mutationGeneRate = this.config.mutationGeneRate * this.mutationMultiplier;
+
+        if (this.config.diversityCheck && this.hashFn) {
             this.populationHashes.clear();
         }
         // Avalia fitness e encontra melhor e pior indivíduo da geração
         let best = this.population[0];
-        let worse = this.population[1];
         for (const ind of this.population) {
             if (ind.fitness === undefined) {
                 ind.fitness = this.problem.fitness(ind.genes);
             }
             if (ind.fitness > best.fitness!) {
                 best = ind;
-            }
-            if (ind.fitness < worse.fitness!) {
-                worse = ind;
             }
         }  
        
@@ -268,11 +267,11 @@ export class GeneticAlgorithm<G extends object> {
             const childB = (i+1) < this.population.length ? this.offspring[i + 1] : this.offspring[i - 1];
 
             // Seleciona pais aleatório entre os sobreviventes
-            const parentA = GeneticAlgorithm.tournamentSelection(this.population, this.population.length, config.tournamentSize);
-            const parentB = GeneticAlgorithm.tournamentSelection(this.population, this.population.length, config.tournamentSize, parentA);
+            const parentA = GeneticAlgorithm.tournamentSelection(this.population, this.population.length, this.config.tournamentSize);
+            const parentB = GeneticAlgorithm.tournamentSelection(this.population, this.population.length, this.config.tournamentSize, parentA);
             
             // Crossover entre os pais para criar os filhos com a taxa definida
-            if (Math.random() < config.crossoverRate) {
+            if (Math.random() < crossoverRate) {
                 this.problem.crossover(childA.genes, childB.genes, parentA.genes, parentB.genes);
             } else {
                 this.problem.clone(childA.genes, parentA.genes);
@@ -280,28 +279,28 @@ export class GeneticAlgorithm<G extends object> {
             }
             
             // Aplica mutação com a taxa definida
-            if (Math.random() < config.mutationRate) {
-                this.problem.mutate(childA.genes, config.mutationGeneRate);
+            if (Math.random() < mutationRate) {
+                this.problem.mutate(childA.genes, mutationGeneRate);
             }
-            if (Math.random() < config.mutationRate) {
-                this.problem.mutate(childB.genes, config.mutationGeneRate);
+            if (Math.random() < mutationRate) {
+                this.problem.mutate(childB.genes, mutationGeneRate);
             }
             childA.fitness = undefined;
             childB.fitness = undefined;
 
             // Verificação de diversidade: remuta filhos duplicados da geração atual
-            if (config.hashFn) {
-                childA.hash = config.hashFn(childA.genes);
-                childB.hash = config.hashFn(childB.genes);
+            if (this.config.diversityCheck && this.hashFn) {
+                childA.hash = this.hashFn(childA.genes);
+                childB.hash = this.hashFn(childB.genes);
 
                 let attempts = 0;
                 while (this.populationHashes.has(childA.hash) && attempts++ < 10) {
-                    this.problem.mutate(childA.genes, config.mutationGeneRate * attempts);
-                    childA.hash = config.hashFn(childA.genes);
+                    this.problem.mutate(childA.genes, mutationGeneRate * attempts);
+                    childA.hash = this.hashFn(childA.genes);
                 }
                 while (this.populationHashes.has(childB.hash) && attempts++ < 20) {
-                    this.problem.mutate(childB.genes, config.mutationGeneRate * attempts);
-                    childB.hash = config.hashFn(childB.genes);
+                    this.problem.mutate(childB.genes, mutationGeneRate * attempts);
+                    childB.hash = this.hashFn(childB.genes);
                 }
 
                 this.populationHashes.add(childA.hash!);
@@ -335,7 +334,7 @@ export class GeneticAlgorithm<G extends object> {
      */
     static tournamentSelection<G>(population: Individual<G>[], populationCount: number, tournamentSize: number, exclude?: Individual<G>): Individual<G> {
         let best: Individual<G> | undefined;
-        do {
+        for (let i = 0; i < tournamentSize; i++) {
             let individual = population[Math.floor(Math.random() * populationCount)];
             if (individual === exclude) {
                 continue;
@@ -346,7 +345,7 @@ export class GeneticAlgorithm<G extends object> {
             ) {
                 best = individual;
             }
-        } while (--tournamentSize > 0);
+        }
 
         if(best) return best;
 

@@ -33,7 +33,7 @@ export function crossover2PointOperator<G extends ArrayOrView>(size: number): Cr
     return (childA: G, childB: G, parentA: G, parentB: G) => {
         let point1 = Math.floor(Math.random() * size);
         let point2 = Math.floor(Math.random() * size);
-        while (point2 === point1) {
+        if (point2 === point1) {
             point2 = Math.floor(Math.random() * size);
         }
         if (point1 > point2) { 
@@ -71,7 +71,7 @@ export function crossoverOX1Operator<G extends ArrayOrView, K = G[number]>(size:
 
         let crossoverPoint1 = Math.floor(Math.random() * size);
         let crossoverPoint2 = Math.floor(Math.random() * size);
-        while(crossoverPoint2 === crossoverPoint1) {
+        if(crossoverPoint2 === crossoverPoint1) {
             crossoverPoint2 = Math.floor(Math.random() * size);
         }
         if (crossoverPoint1 > crossoverPoint2) {

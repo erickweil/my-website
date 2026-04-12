@@ -26,8 +26,9 @@ export function mutationRandomSwapOperator<G extends ArrayOrView>(): MutationOpe
             // Swap aleatório
             let randomIndex = Math.floor(Math.random() * genes.length);
             let swapWith = Math.floor(Math.random() * genes.length);
-            while(swapWith === randomIndex) {
+            if(swapWith === randomIndex) {
                 swapWith = Math.floor(Math.random() * genes.length);
+                if(swapWith === randomIndex) continue;
             }
 
             const temp = genes[randomIndex];
@@ -39,6 +40,7 @@ export function mutationRandomSwapOperator<G extends ArrayOrView>(): MutationOpe
 
 export function mutationNeighborSwapOperator<G extends ArrayOrView>(): MutationOperator<G> {
     return (genes: G, mutationRate: number) => {
+        if(genes.length < 3) return;
         const mutations = calcMutationAmount(genes.length, mutationRate);
         for(let i = 0; i < mutations; i++) {
             // Swap com vizinho
@@ -72,8 +74,9 @@ export function mutationShiftSwapOperator<G extends ArrayOrView>(): MutationOper
         for(let i = 0; i < mutations; i++) {
             let randomIndexSource = Math.floor(Math.random() * genes.length);
             let randomIndexDest = Math.floor(Math.random() * genes.length);
-            while(randomIndexDest === randomIndexSource) {
+            if(randomIndexDest === randomIndexSource) {
                 randomIndexDest = Math.floor(Math.random() * genes.length);
+                if(randomIndexDest === randomIndexSource) continue;
             }
             
             const temp = genes[randomIndexSource];
