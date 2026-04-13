@@ -42,7 +42,7 @@ const getContrastColor = (hex: string) => {
     return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
 };
 
-const execQuadroHorarioWorker = async (
+const execQuadroHorarioWorker = (
     formData: FormularioHorario, 
     diasAtivos: HorarioDia[], 
     solverType: "pencilmark" | "genetic",
@@ -50,7 +50,7 @@ const execQuadroHorarioWorker = async (
 ) => {
     //const nWorkers = navigator.hardwareConcurrency || 8;
     const nWorkers = 1;
-    const resultado = await raceWorkers<HorarioWorkerTaskValue>({
+    const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
         n: nWorkers,
         initMessage: (workerID) => ({
             action: "solucionarQuadroHorario",
@@ -68,12 +68,13 @@ const execQuadroHorarioWorker = async (
         }
     });
 
-    const quadro = resultado.solucao;
-    if (!quadro) {
-        throw new Error("Falha ao gerar solução!");
-    }
-
-    return resultado;
+    return {
+        promise: promise.then((resultado) => {
+            if (!resultado.solucao) throw new Error("Falha ao gerar solução!");
+            return resultado;
+        }),
+        abort,
+    };
 };
 
 // ─── Componente: TabelaHorariosCheckbox ──────────────────────────────────────
@@ -160,6 +161,7 @@ function LegendaProfessores({ cores }: { cores: Record<string, string> }) {
 export default function GeradorHorario() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const abortRef = useRef<(() => void) | null>(null);
     const [horarioGerado, setHorarioGerado] = useState<TurmaHorarioResult[] | null>(null);
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
@@ -308,19 +310,26 @@ export default function GeradorHorario() {
         localStorage.setItem("configGeracaoHorario", JSON.stringify({ quantidadeTempos, diasAtivos }));
 
         try {
-            const resultado = await execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, solucao) => {
+            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, solucao) => {
                 if (solucao) {
                     setHorarioGerado(solucao);
                 }
             });
+            abortRef.current = abort;
+            const resultado = await promise;
             setHorarioGerado(resultado.solucao ?? null);
             if (!resultado.completo) {
                 setError("Não foi possível gerar um horário completo com as configurações fornecidas.");
             }
         } catch (e) {
-            console.error("Erro ao gerar horário:", e);
-            setError("Erro ao gerar o horário:" + (e instanceof Error ? ` ${e.message}` : " Desconecido."));
+            if (e instanceof DOMException && e.name === "AbortError") {
+                // Interrompido pelo usuário — não exibe erro
+            } else {
+                console.error("Erro ao gerar horário:", e);
+                setError("Erro ao gerar o horário:" + (e instanceof Error ? ` ${e.message}` : " Desconhecido."));
+            }
         } finally {
+            abortRef.current = null;
             setIsLoading(false);
         }
     };
@@ -784,21 +793,34 @@ export default function GeradorHorario() {
                                         </button>
                                     ))}
                                 </div>
-                                <Button
-                                    type="submit"
-                                    size="lg"
-                                    disabled={isLoading}
-                                    className="min-w-44 gap-2"
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="size-4 animate-spin" />
-                                            Gerando...
-                                        </>
-                                    ) : (
-                                        "Gerar Horário"
+                                <div className="flex gap-3">
+                                    <Button
+                                        type="submit"
+                                        size="lg"
+                                        disabled={isLoading}
+                                        className="min-w-44 gap-2"
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 className="size-4 animate-spin" />
+                                                Gerando...
+                                            </>
+                                        ) : (
+                                            "Gerar Horário"
+                                        )}
+                                    </Button>
+                                    {isLoading && (
+                                        <Button
+                                            type="button"
+                                            size="lg"
+                                            variant="outline"
+                                            onClick={() => abortRef.current?.()}
+                                        >
+                                            <X className="size-4" />
+                                            Interromper
+                                        </Button>
                                     )}
-                                </Button>
+                                </div>
                             </div>
 
                             {error && (

@@ -1,5 +1,5 @@
 import { cloneArrayOperator, GAProblem } from "@/lib/genetic/problem";
-import { Disciplina, FormularioHorario, Horario, Professor, QUANTOS_DIAS, RegrasHorario, Turma } from "./horario-regras";
+import { FormularioHorario, QUANTOS_DIAS, RegrasHorario } from "./horario-regras";
 import { calcMutationAmount } from "@/lib/genetic/mutationOperators";
 
 export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[]> {
@@ -10,7 +10,21 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
         super(formData);
 
         this.size = this.turmas.length * QUANTOS_DIAS * this.nTempos;
-        this.maxFitness = undefined;
+
+        // Calcula o fitness máximo teórico (pode não ser atingível dependendo do problema)
+        let maxFit = 0;
+        for (const disc of this.disciplinas) {
+            // Recompensa por professor disponível e sem conflito
+            maxFit += disc.aulas * disc.professores.length * 5;
+            // Recompensa por disciplinas unidas alocadas juntas
+            maxFit += disc.aulas * disc.disciplinasUnidas.length * 5;
+            // Recompensa por agrupamento correto
+            if (disc.agrupar > 0) {
+                const numGroups = Math.floor(disc.aulas / disc.agrupar);
+                maxFit += numGroups * 8;
+            }
+        }
+        this.maxFitness = maxFit > 0 ? maxFit : undefined;
     }
 
     // Funções Solver Genético
@@ -52,6 +66,7 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
     fitness(quadro: number[]): number {
         let fitness = 0;
 
+        // Reseta matrizes de ocupação dos professores (cópia da disponibilidade original)
         for (const prof of this.professores) {
             prof.matriz.copiar(prof.horarios);
         }
@@ -60,34 +75,69 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
             for (let dia = 0; dia < QUANTOS_DIAS; dia++) {
                 for (let tempo = 0; tempo < this.nTempos; tempo++) {
                     const index = this.toQuadroIndex(turma.id, dia, tempo);
-                    if (!turma.horarios.possui(dia, tempo)) {
-                        if (quadro[index] === -1) {
-                            fitness += 10; // recompensa por respeitar slot sem aula
-                        }
-                        continue;
-                    }
-                    const idDisciplina = quadro[index] - 1;
-                    if (idDisciplina < 0) continue; // sem aula nesse espaço
 
-                    // Recompensa por respeitar slot com aula
-                    fitness += 10;
+                    // Slots inativos: nada a verificar
+                    if (!turma.horarios.possui(dia, tempo)) continue;
+
+                    const idDisciplina = quadro[index] - 1;
+                    if (idDisciplina < 0) continue; // slot vazio
 
                     const disciplina = this.disciplinas[idDisciplina];
 
+                    // Regra: Disponibilidade do professor E sem conflito entre turmas
+                    // prof.matriz começa como cópia de prof.horarios e é zerada conforme
+                    // o professor é alocado. Se prof.matriz.possui(dia, tempo) == true,
+                    // o professor está disponível E ainda não está em outra turma.
                     for (const prof of disciplina.professores) {
-                        if(prof.horarios.possui(dia, tempo)) {
-                            // recompensa por respeitar disponibilidade do professor
+                        if (prof.matriz.possui(dia, tempo)) {
                             fitness += 5;
                         }
                         prof.matriz.dias[dia][tempo] = 0;
                     }
 
-                    for(const unida of disciplina.disciplinasUnidas) {
+                    // Regra: Disciplinas unidas devem ocupar o mesmo (dia, tempo)
+                    for (const unida of disciplina.disciplinasUnidas) {
                         const valor = this.getQuadroValor(quadro, unida.turma.id, dia, tempo);
                         if (valor === unida.id + 1) {
-                            // recompensa por respeitar disciplina unida alocada junto
                             fitness += 5;
                         }
+                    }
+                }
+            }
+        }
+
+        // Regra: Agrupamento em blocos de G aulas consecutivas
+        // Mesma lógica de verificaQuadro do pencilmark, mas como recompensa
+        for (const disc of this.disciplinas) {
+            if (disc.agrupar <= 0) continue;
+            const G = disc.agrupar;
+            const turmaId = disc.turma.id;
+
+            for (let dia = 0; dia < QUANTOS_DIAS; dia++) {
+                let runStart = -1;
+
+                for (let tempo = 0; tempo <= this.nTempos; tempo++) {
+                    // Sentinela no final do dia: força o fechamento do último run
+                    const v = tempo < this.nTempos
+                        ? quadro[this.toQuadroIndex(turmaId, dia, tempo)]
+                        : -1;
+
+                    if (v === disc.id + 1) {
+                        if (runStart === -1) runStart = tempo;
+                    } else if (runStart !== -1) {
+                        const runLength = tempo - runStart;
+
+                        // dividir → run deve ser exatamente G
+                        // !dividir → run deve ser múltiplo de G
+                        const valid = disc.dividir
+                            ? (runLength === G)
+                            : (runLength % G === 0);
+
+                        if (valid) {
+                            fitness += 8;
+                        }
+
+                        runStart = -1;
                     }
                 }
             }
@@ -110,8 +160,8 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
             const index1 = this.toQuadroIndex(turma.id, dia1, tempo1);
             const index2 = this.toQuadroIndex(turma.id, dia2, tempo2);
 
-            // Só troca se ambos os slots forem de aula
-            if (quadro[index1] > 0 && quadro[index2] > 0) {
+            // Troca se ambos os slots forem ativos (>= 0) e diferentes
+            if (quadro[index1] >= 0 && quadro[index2] >= 0 && quadro[index1] !== quadro[index2]) {
                 const temp = quadro[index1];
                 quadro[index1] = quadro[index2];
                 quadro[index2] = temp;
@@ -122,17 +172,16 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
     }
 
     crossover = (childA: number[], childB: number[], parentA: number[], parentB: number[]) => {
-        // Crossover por blocos de turmas: para cada turma, escolhe aleatoriamente um dos pais para copiar a turma inteira
+        // Crossover por blocos de turmas: para cada turma, escolhe aleatoriamente um dos pais
+        // Os filhos recebem blocos complementares (se childA ← parentA, childB ← parentB)
         for (const turma of this.turmas) {
-            const source = Math.random() < 0.5 ? parentA : parentB;
-            const destA = childA;
-            const destB = childB;
+            const useA = Math.random() < 0.5;
 
             for (let dia = 0; dia < QUANTOS_DIAS; dia++) {
                 for (let tempo = 0; tempo < this.nTempos; tempo++) {
                     const index = this.toQuadroIndex(turma.id, dia, tempo);
-                    destA[index] = source[index];
-                    destB[index] = source[index];
+                    childA[index] = useA ? parentA[index] : parentB[index];
+                    childB[index] = useA ? parentB[index] : parentA[index];
                 }
             }
         }

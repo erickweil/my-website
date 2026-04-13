@@ -22,16 +22,30 @@ export interface RaceWorkersOptions<T> {
     onMessage?: (worker: number, msg: WorkerResponseMsg<T>) => void;
 }
 
+export interface RaceWorkersHandle<T> {
+    /** Promise que resolve com o resultado do vencedor */
+    promise: Promise<T>;
+    /** Termina todos os workers e rejeita a promise com AbortError */
+    abort: () => void;
+}
+
 /**
  * Executa N workers em paralelo e resolve com o resultado do primeiro que tiver sucesso.
  * Ao finalizar (sucesso ou todos falharam), todos os workers são terminados.
+ * Retorna também uma função `abort` para cancelamento externo.
  */
-export function raceWorkers<T>(options: RaceWorkersOptions<T>): Promise<T> {
+export function raceWorkers<T>(options: RaceWorkersOptions<T>): RaceWorkersHandle<T> {
     const { n, createWorker, onMessage, initMessage } = options;
     const workers: Worker[] = [];
 
+    const terminateAll = () => workers.forEach(w => w.terminate());
+
+    // Captura reject fora da Promise para poder chamar via abort()
+    let rejectFn!: (reason?: unknown) => void;
+    let finished = false;
+
     const promise = new Promise<T>((resolve, reject) => {
-        let finished = false;
+        rejectFn = reject;
         let errorCount = 0;
 
         for (let i = 0; i < n; i++) {
@@ -68,9 +82,14 @@ export function raceWorkers<T>(options: RaceWorkersOptions<T>): Promise<T> {
 
             worker.postMessage(initMessage ? initMessage(workerID) : null);
         }
-    });
+    }).finally(terminateAll);
 
-    return promise.finally(() => {
-        workers.forEach(w => w.terminate());
-    });
+    const abort = () => {
+        if (finished) return;
+        finished = true;
+        terminateAll();
+        rejectFn(new DOMException("Geração interrompida pelo usuário.", "AbortError"));
+    };
+
+    return { promise, abort };
 }
