@@ -21,9 +21,11 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-import { DIAS_SEMANA_MAP, FormularioHorario, HorarioDia, HorariosPorDia, HorarioWorkerTaskValue, TODOS_OS_DIAS, type TurmaHorarioResult } from "./horario-solver";
 import { MultiSelect } from "@/components/multiSelect";
 import { raceWorkers } from "@/lib/workerRace";
+
+import { DIAS_SEMANA_MAP, FormularioHorario, HorarioDia, HorariosPorDia, TODOS_OS_DIAS, type TurmaHorarioResult } from "./horario-regras";
+import { HorarioWorkerTaskValue } from "./horario-solver";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const PALETA_CORES = [
@@ -40,7 +42,12 @@ const getContrastColor = (hex: string) => {
     return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
 };
 
-const execQuadroHorarioWorker = async (formData: FormularioHorario, diasAtivos: HorarioDia[]) => {
+const execQuadroHorarioWorker = async (
+    formData: FormularioHorario, 
+    diasAtivos: HorarioDia[], 
+    solverType: "pencilmark" | "genetic",
+    progressCallback?: (workerID: number, iter: number, depth: number, solucao?: TurmaHorarioResult[]) => void
+) => {
     //const nWorkers = navigator.hardwareConcurrency || 8;
     const nWorkers = 1;
     const resultado = await raceWorkers<HorarioWorkerTaskValue>({
@@ -50,13 +57,14 @@ const execQuadroHorarioWorker = async (formData: FormularioHorario, diasAtivos: 
             // Worker 0 irá tentar resolver sem reinícios
             baseIter: workerID === 0 ? null : 10,
             formData,
-            diasAtivos
+            diasAtivos,
+            solverType,
         }),
         createWorker: () => new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if (!msg.value) return;
             console.log(`Worker ${workerID}: Iteração ${msg.value.iter}, profundidade ${msg.value.depth}`);
-            //progressCallback(workerID, msg.value.iter, msg.value.depth);
+            progressCallback?.(workerID, msg.value.iter, msg.value.depth, msg.value.solucao);
         }
     });
 
@@ -156,6 +164,7 @@ export default function GeradorHorario() {
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
     const [professoresDisciplinas, setProfessoresDisciplinas] = useState<Record<string, string>>({});
+    const [solverType, setSolverType] = useState<"pencilmark" | "genetic">("pencilmark");
 
     // ─── Configurações de grade ───────────────────────────────────────────────
     const [quantidadeTempos, setQuantidadeTempos] = useState(5);
@@ -299,7 +308,11 @@ export default function GeradorHorario() {
         localStorage.setItem("configGeracaoHorario", JSON.stringify({ quantidadeTempos, diasAtivos }));
 
         try {
-            const resultado = await execQuadroHorarioWorker(formData, diasAtivos);
+            const resultado = await execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, solucao) => {
+                if (solucao) {
+                    setHorarioGerado(solucao);
+                }
+            });
             setHorarioGerado(resultado.solucao ?? null);
             if (!resultado.completo) {
                 setError("Não foi possível gerar um horário completo com as configurações fornecidas.");
@@ -753,7 +766,24 @@ export default function GeradorHorario() {
                             <CardTitle>5. Gerar e Visualizar Horário</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="flex justify-center">
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    {(["pencilmark", "genetic"] as const).map((tipo) => (
+                                        <button
+                                            key={tipo}
+                                            type="button"
+                                            onClick={() => setSolverType(tipo)}
+                                            className={cn(
+                                                "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+                                                solverType === tipo
+                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            {tipo === "pencilmark" ? "Pencilmark" : "Genético"}
+                                        </button>
+                                    ))}
+                                </div>
                                 <Button
                                     type="submit"
                                     size="lg"

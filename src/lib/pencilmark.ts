@@ -36,7 +36,7 @@ const getRandomRange = (n: number): number[] => {
 };
 
 export type RegrasQuadro = (quadro: number[], possibs: Possib | null) => boolean;
-export type ProgressCallback = (iter: number, depth: number) => void;
+export type ProgressCallback = (iter: number, depth: number, melhor?: number[]) => void;
 
 export class PencilmarkSolver {
     regrasfn: RegrasQuadro;
@@ -235,7 +235,7 @@ _solucionarQuadro(
         }
         
         if(progressCallback && Math.random() < 0.05) {
-            progressCallback(this.iter, depth);
+            progressCallback(this.iter, depth, this.melhor);
         }
     }
 

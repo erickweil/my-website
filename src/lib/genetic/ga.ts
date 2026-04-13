@@ -160,7 +160,7 @@ export class GeneticAlgorithm<G extends object> {
                 this.mutationMultiplier = 1;
                 this.tournamentMultiplier = 1;
                 improved = true;
-            } else {
+            } else if (this.config.maxStagnation > 0) {
                 // Experimento: Controle de estagnação adaptativo
                 // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
 
@@ -276,8 +276,17 @@ export class GeneticAlgorithm<G extends object> {
             if (ind.fitness > best.fitness!) {
                 best = ind;
             }
-        }  
-       
+        }
+
+        // O melhor indivíduo da geração atual é copiado para a próxima geração (elitismo)
+        this.problem.clone(this.offspring[0].genes, best.genes);
+        this.offspring[0].fitness = best.fitness;
+        if (this.config.diversityCheck && this.hashFn) {
+            const bestHash = best.hash ?? this.hashFn(best.genes);
+            this.offspring[0].hash = bestHash;
+            this.populationHashes.add(bestHash);
+        }
+
         // Faz a seleção + reprodução, para criar a próxima geração
         for(let i = 1; i < this.population.length; i += 2) {
             const childA = this.offspring[i];
@@ -333,11 +342,6 @@ export class GeneticAlgorithm<G extends object> {
                 break;
             }
         }
-
-        // O melhor indivíduo da geração atual é copiado para a próxima geração (elitismo)
-        this.problem.clone(this.offspring[0].genes, best.genes);
-        this.offspring[0].fitness = best.fitness;
-        this.offspring[0].hash = best.hash;
 
         // Torna os filhos a população da próxima geração
         // Em vez de criar um novo array, podemos simplesmente trocar os papéis dos arrays population e offspring para evitar cópias desnecessárias
