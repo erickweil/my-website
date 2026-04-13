@@ -30,8 +30,8 @@ async function runTest() {
     //const problem = new SortingGAProblem(PROBLEM_SIZE);
     //const problem = new StringGAProblem(PROBLEM_SIZE);
     const problem = SudokuGAProblem.fromString(
-      //"530070000600195000098000060800060003400803001700020006060000280000419005000080079"
-      "000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      "530070000600195000098000060800060003400803001700020006060000280000419005000080079"
+      //"000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
     const ga = new GeneticAlgorithm(problem, {
         populationSize: POP_SIZE,
@@ -47,7 +47,7 @@ async function runTest() {
             const maxgenlen = ("" + MAX_GENS).length;
             const stag = stagnatedFor > 0 ? ` (+${(""+stagnatedFor).padStart(maxgenlen)} gens` : " (início)";
             process.stdout.write(
-                `\rGen ${("" + generation).padStart(maxgenlen, " ")} | fitness ${("" + current).padStart(4)} / ${problem.maxFitness} (best ${("" + fitness).padStart(4)}) ${bar} ${stag} Best:\n${problem.toStatusString(genes, 32)}`,
+                `\rGen ${("" + generation).padStart(maxgenlen, " ")} | fitness ${("" + current).padStart(4)} / ${problem.maxFitness} (best ${("" + fitness).padStart(4)}) ${bar} ${stag} Best:\n${problem.toStatusString(genes, 80)}`,
             );
         },
     });

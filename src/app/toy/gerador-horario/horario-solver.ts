@@ -685,7 +685,7 @@ export function solucionarQuadroHorario(
 
     console.log(`Carregou ${regras.turmas.length} turmas, ${regras.disciplinas.length} disciplinas, ${regras.professores.length} professores. com ${regras.nTempos} tempos, total espaços no quadro: ${regras.quadro.length} (${regras.nPossibs} possibilidades cada espaço) Gerando soluções...`);
     
-    /*const stats = PencilmarkSolver.solucionarQuadro(
+    const stats = PencilmarkSolver.solucionarQuadro(
         regras.quadro,
         regras.nPossibs,
         regras.gerarRegrasFn(),
@@ -694,8 +694,10 @@ export function solucionarQuadroHorario(
         },
         1, // maxSolucoes
         baseIter // baseIter - começa a iterar a partir de 2^8 iterações
-    );*/
+    );
 
+    /*
+    DEPOIS: usar solver genético quando terminar de fazer experimentos
     const ga = new GeneticAlgorithm(regras);
     const {bestFitness, bestGenes, generations} = ga.run({
         populationSize: regras.size * 2,
@@ -717,7 +719,7 @@ export function solucionarQuadroHorario(
         solucoes: bestGenes ? [bestGenes] : [],
         melhor: bestGenes,
         iter: generations
-    }
+    }*/
 
     let quadroSolucionado = stats?.solucoes.at(0);
     if(!quadroSolucionado && stats?.melhor) {

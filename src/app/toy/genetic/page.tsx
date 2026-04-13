@@ -4,7 +4,6 @@ import { mesclarEstado } from "@/components/Canvas/CanvasController";
 import ZoomableCanvas, { ZoomEstadoType } from "@/components/Canvas/ZoomableCanvas";
 import NonSSRWrapper from "@/components/nonSSRWrapper";
 import { UIEvent, useCallback, useEffect, useRef, useState } from "react";
-import { GeneticAlgorithmHandler } from "./geneticAlgorithmHandler";
 import { GAConfig, GAProgressEvent, GeneticAlgorithm } from "@/lib/genetic/ga";
 import { TSPCity, TSPProblem } from "@/lib/genetic/examples/tsp-problem";
 import { GAProblem } from "@/lib/genetic/problem";
@@ -15,9 +14,8 @@ type GeneticEstado = ZoomEstadoType & {
     cliques: number,
     cities: TSPCity[],
 
-    handler: GeneticAlgorithmHandler,
-
-    progress: GAProgressEvent<object>
+    ga: GeneticAlgorithm<object> | null;
+    progress: GAProgressEvent<object> | null;
 };
 
 
@@ -65,9 +63,10 @@ function drawTSPPath(ctx: CanvasRenderingContext2D, cities: { x: number; y: numb
     ctx.stroke();
 }
 
-function drawTSP(ctx: CanvasRenderingContext2D, ga: GeneticAlgorithm<number[]> | null, problem: TSPProblem | null, progress: GAProgressEvent<number[]> | null) {
-    if(!ga || !problem || !progress) return;
-    
+function drawTSP(ctx: CanvasRenderingContext2D, ga: GeneticAlgorithm<number[]> | null, progress: GAProgressEvent<number[]> | null) {
+    if(!ga || !progress) return;
+    const problem = ga.problem as TSPProblem;
+
     ctx.strokeStyle = ROUTE_COLOR_2;
     ctx.lineWidth = 0.5;
     for(let i = 0; i < ga.population.length && i < 10; i++) {
@@ -107,7 +106,8 @@ export default function Genetic() {
                     py: 0,
                     cliques: 0,
                     cities: [],
-                    handler: new GeneticAlgorithmHandler()
+                    ga: null,
+                    progress: null
                 }
             }}
 			draw={(ctx, estado) => {
@@ -130,57 +130,66 @@ export default function Genetic() {
 
                 if(estado.progress) {
                     const { generation, fitness, stagnatedFor } = estado.progress;
-                    const gaConfig = estado.handler.gaConfig;
                     ctx.fillText(`Gen: ${generation}`, 10, 30);
                     ctx.fillText(`Fitness: ${fitness}`, 10, 60);
                     ctx.fillText(`Stagnated for: ${stagnatedFor} gens`, 10, 90);
-                    ctx.fillText(`Pop size: ${gaConfig?.populationSize ?? 0}`, 10, 120);
-                    ctx.fillText(`Cities: ${estado.cities.length}`, 10, 150);
-                }
+                    //ctx.fillText(`Pop size: ${gaConfig?.populationSize ?? 0}`, 10, 120);
 
-                if(estado.handler.problem instanceof TSPProblem) {
-                    drawTSP(
-                        ctx,
-                        estado.handler.ga as GeneticAlgorithm<number[]>, 
-                        estado.handler.problem as TSPProblem,
-                        estado.progress as GAProgressEvent<number[]>
-                    );
+                    const ga = estado.ga;
+                    ctx.fillText(`Pop size: ${ga?.population.length ?? 0}`, 10, 120);
+
+                    if(ga?.problem && ga.problem instanceof TSPProblem) {
+                        drawTSP(
+                            ctx,
+                            ga as GeneticAlgorithm<number[]>, 
+                            estado.progress! as GAProgressEvent<number[]>
+                        );
+                    }
                 }
             }}
             everyFrame={(estado) => {
-                if(!estado.handler.ga) {
+                let ga = estado.ga;
+                if(!ga) {
                     const size = estado.cities.length;
                     
                     const problem = new TSPProblem([...estado.cities]);
-                    estado.handler.initialize(problem as GAProblem<object>, {
+                    const gaConfig = {
                         populationSize: size * 2,
                         crossoverRate: 0.9,
                         mutationRate: 0.9, 
                         mutationGeneRate: 1 / size,
                         tournamentSize: 8,
                         maxStagnation: 20000,
-                        diversityCheck: true
-                    });
-                    
+                        diversityCheck: true,
+                        resetPopulation: false
+                    };
+                    ga = new GeneticAlgorithm(problem, gaConfig) as GeneticAlgorithm<object>;
                 }
 
-                const progress = estado.handler.runStep();
-                if(progress) {
-                    mesclarEstado(estado, {
-                        progress: progress
-                    });
-                }
+                let result;
+                const timeStart = performance.now();
+                do {
+                    //ga.updateConfig(estado.gaConfig!);
+                    
+                    result = ga.run(50);
+                } while(performance.now() - timeStart < 10); // limita a execução a ~10ms por passo para manter a UI responsiva
+
+                mesclarEstado(estado, {
+                    ga: ga,
+                    progress: result
+                });
 
                 return null;
             }}
 			events={{
 				onClick: (e, estado) => {
-                    estado.handler.ga = null;
                     const cities = estado.cities;
                     cities.push(unproject(estado.mouse.x, estado.mouse.y, estado.width, estado.height));
                     return {
                         cliques: estado.cliques + 1,
-                        cities: cities
+                        cities: cities,
+                        ga: null,
+                        progress: null
                     }
                 },
 				//onKeyPress:onKeyPress,
