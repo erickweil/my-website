@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { Trash2, Plus, X, Loader2, TriangleAlert, CheckCircle2, Download, Upload } from "lucide-react";
+import { Trash2, Plus, X, Loader2, TriangleAlert, Download, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -21,9 +21,11 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-import { DIAS_SEMANA_MAP, FormularioHorario, HorarioDia, HorariosPorDia, HorarioWorkerTaskValue, TODOS_OS_DIAS, type TurmaHorarioResult } from "./horario-solver";
 import { MultiSelect } from "@/components/multiSelect";
 import { raceWorkers } from "@/lib/workerRace";
+
+import { DIAS_SEMANA_MAP, FormularioHorario, HorarioDia, HorariosPorDia, TODOS_OS_DIAS, type TurmaHorarioResult } from "./horario-regras";
+import { HorarioWorkerTaskValue } from "./horario-solver";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const PALETA_CORES = [
@@ -40,31 +42,39 @@ const getContrastColor = (hex: string) => {
     return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
 };
 
-const execQuadroHorarioWorker = async (formData: FormularioHorario, diasAtivos: HorarioDia[]) => {
-    const nWorkers = navigator.hardwareConcurrency || 8;
-    const resultado = await raceWorkers<HorarioWorkerTaskValue>({
+const execQuadroHorarioWorker = (
+    formData: FormularioHorario, 
+    diasAtivos: HorarioDia[], 
+    solverType: "pencilmark" | "genetic",
+    progressCallback?: (workerID: number, iter: number, depth: number, solucao?: TurmaHorarioResult[]) => void
+) => {
+    //const nWorkers = navigator.hardwareConcurrency || 8;
+    const nWorkers = 1;
+    const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
         n: nWorkers,
         initMessage: (workerID) => ({
             action: "solucionarQuadroHorario",
             // Worker 0 irá tentar resolver sem reinícios
             baseIter: workerID === 0 ? null : 10,
             formData,
-            diasAtivos
+            diasAtivos,
+            solverType,
         }),
         createWorker: () => new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if (!msg.value) return;
             console.log(`Worker ${workerID}: Iteração ${msg.value.iter}, profundidade ${msg.value.depth}`);
-            //progressCallback(workerID, msg.value.iter, msg.value.depth);
+            progressCallback?.(workerID, msg.value.iter, msg.value.depth, msg.value.solucao);
         }
     });
 
-    const quadro = resultado.solucao;
-    if (!quadro) {
-        throw new Error("Falha ao gerar solução!");
-    }
-
-    return resultado;
+    return {
+        promise: promise.then((resultado) => {
+            if (!resultado.solucao) throw new Error("Falha ao gerar solução!");
+            return resultado;
+        }),
+        abort,
+    };
 };
 
 // ─── Componente: TabelaHorariosCheckbox ──────────────────────────────────────
@@ -151,10 +161,12 @@ function LegendaProfessores({ cores }: { cores: Record<string, string> }) {
 export default function GeradorHorario() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const abortRef = useRef<(() => void) | null>(null);
     const [horarioGerado, setHorarioGerado] = useState<TurmaHorarioResult[] | null>(null);
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
     const [professoresDisciplinas, setProfessoresDisciplinas] = useState<Record<string, string>>({});
+    const [solverType, setSolverType] = useState<"pencilmark" | "genetic">("pencilmark");
 
     // ─── Configurações de grade ───────────────────────────────────────────────
     const [quantidadeTempos, setQuantidadeTempos] = useState(5);
@@ -269,12 +281,25 @@ export default function GeradorHorario() {
         setProfessoresDisciplinas(discProf);
 
         // Normalizar dados fora dos intervalos configurados
+        const diasAtivosSet = new Set<string>(diasAtivos);
         formData.turmas.forEach((turma) => {
+            // Bug A: remover dias que foram desativados
+            (Object.keys(turma.horarios) as HorarioDia[]).forEach((dia) => {
+                if (!diasAtivosSet.has(dia)) {
+                    delete turma.horarios[dia];
+                }
+            });
             Object.entries(turma.horarios).forEach(([dia, tempos]) => {
                 turma.horarios[dia as HorarioDia] = tempos.filter((t) => t >= 1 && t <= quantidadeTempos);
             });
         });
         formData.professores.forEach((prof) => {
+            // Bug A: remover dias que foram desativados
+            (Object.keys(prof.horarios) as HorarioDia[]).forEach((dia) => {
+                if (!diasAtivosSet.has(dia)) {
+                    delete prof.horarios[dia];
+                }
+            });
             Object.entries(prof.horarios).forEach(([dia, tempos]) => {
                 prof.horarios[dia as HorarioDia] = tempos.filter((t) => t >= 1 && t <= quantidadeTempos);
             });
@@ -285,15 +310,26 @@ export default function GeradorHorario() {
         localStorage.setItem("configGeracaoHorario", JSON.stringify({ quantidadeTempos, diasAtivos }));
 
         try {
-            const resultado = await execQuadroHorarioWorker(formData, diasAtivos);
+            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, solucao) => {
+                if (solucao) {
+                    setHorarioGerado(solucao);
+                }
+            });
+            abortRef.current = abort;
+            const resultado = await promise;
             setHorarioGerado(resultado.solucao ?? null);
             if (!resultado.completo) {
                 setError("Não foi possível gerar um horário completo com as configurações fornecidas.");
             }
         } catch (e) {
-            console.error("Erro ao gerar horário:", e);
-            setError("Erro ao gerar o horário:" + (e instanceof Error ? ` ${e.message}` : " Desconecido."));
+            if (e instanceof DOMException && e.name === "AbortError") {
+                // Interrompido pelo usuário — não exibe erro
+            } else {
+                console.error("Erro ao gerar horário:", e);
+                setError("Erro ao gerar o horário:" + (e instanceof Error ? ` ${e.message}` : " Desconhecido."));
+            }
         } finally {
+            abortRef.current = null;
             setIsLoading(false);
         }
     };
@@ -739,22 +775,52 @@ export default function GeradorHorario() {
                             <CardTitle>5. Gerar e Visualizar Horário</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-6">
-                            <div className="flex justify-center">
-                                <Button
-                                    type="submit"
-                                    size="lg"
-                                    disabled={isLoading}
-                                    className="min-w-44 gap-2"
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="size-4 animate-spin" />
-                                            Gerando...
-                                        </>
-                                    ) : (
-                                        "Gerar Horário"
+                            <div className="flex flex-col items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    {(["pencilmark", "genetic"] as const).map((tipo) => (
+                                        <button
+                                            key={tipo}
+                                            type="button"
+                                            onClick={() => setSolverType(tipo)}
+                                            className={cn(
+                                                "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+                                                solverType === tipo
+                                                    ? "border-primary bg-primary text-primary-foreground"
+                                                    : "border-border bg-background text-muted-foreground hover:text-foreground"
+                                            )}
+                                        >
+                                            {tipo === "pencilmark" ? "Pencilmark" : "Genético"}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-3">
+                                    <Button
+                                        type="submit"
+                                        size="lg"
+                                        disabled={isLoading}
+                                        className="min-w-44 gap-2"
+                                    >
+                                        {isLoading ? (
+                                            <>
+                                                <Loader2 className="size-4 animate-spin" />
+                                                Gerando...
+                                            </>
+                                        ) : (
+                                            "Gerar Horário"
+                                        )}
+                                    </Button>
+                                    {isLoading && (
+                                        <Button
+                                            type="button"
+                                            size="lg"
+                                            variant="outline"
+                                            onClick={() => abortRef.current?.()}
+                                        >
+                                            <X className="size-4" />
+                                            Interromper
+                                        </Button>
                                     )}
-                                </Button>
+                                </div>
                             </div>
 
                             {error && (

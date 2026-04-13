@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 
-import { PencilmarkSolver } from "@/lib/pencilmark";
 import { WorkerResponseMsg } from "@/lib/workerRace";
 import { HorarioWorkerTaskValue, solucionarQuadroHorario } from "./horario-solver";
 
@@ -18,7 +17,7 @@ self.onmessage = async (message) => {
             case "solucionarQuadroHorario":
                 postMessage({ 
                     type: "success", 
-                    value: solucionarQuadroHorario(data.baseIter, data.formData, data.diasAtivos, postMessage)
+                    value: solucionarQuadroHorario(data.baseIter, data.formData, data.diasAtivos, data.solverType, postMessage)
                 });
             break;
             default: throw new Error(`Ação desconhecida: ${data.action}`);

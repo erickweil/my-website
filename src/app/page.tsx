@@ -42,7 +42,12 @@ export default function Home() {
       status: "Em construção",
       description: "Gerador de horário escolar, com base em restrições de professores, turmas e horários disponíveis",
     },
-    { href: null, text: "Avaliador automático", status: "A Fazer" },
+    { 
+      href: "/toy/genetic", 
+      text: "Algoritmos Genéticos",
+      status: "Em construção",
+      description: "Visualização algoritmos genéticos",
+    },
     { href: null, text: "Busca DFS e BFS", status: "A Fazer" },
     { href: null, text: "Pilha, Fila, Deque", status: "A Fazer" },
     { href: null, text: "Análise Big O", status: "A Fazer" },
