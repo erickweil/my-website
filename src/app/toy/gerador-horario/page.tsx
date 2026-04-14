@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { Trash2, Plus, X, Loader2, TriangleAlert, Download, Upload } from "lucide-react";
+import { Trash2, Plus, X, Loader2, TriangleAlert, Download, Upload, CircleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -312,14 +312,16 @@ export default function GeradorHorario() {
         try {
             const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, solucao) => {
                 if (solucao) {
+                    console.log(solucao);
                     setHorarioGerado(solucao);
                 }
             });
             abortRef.current = abort;
             const resultado = await promise;
             setHorarioGerado(resultado.solucao ?? null);
-            if (!resultado.completo) {
-                setError("Não foi possível gerar um horário completo com as configurações fornecidas.");
+            if (resultado.violacoes && !resultado.violacoes.every((v) => v === undefined)) {
+                const errorMesage = resultado.violacoes.at(-1) || "Não foi possível gerar um horário completo com as configurações fornecidas.";
+                setError(errorMesage);
             }
         } catch (e) {
             if (e instanceof DOMException && e.name === "AbortError") {
@@ -834,9 +836,11 @@ export default function GeradorHorario() {
                             {horarioGerado && (
                                 <div className="space-y-8">
                                     <div>
-                                        <h3 className="mb-3 text-base font-semibold text-green-600 dark:text-green-400">
-                                            ✓ Horário gerado com sucesso!
-                                        </h3>
+                                        {!isLoading && (
+                                            <h3 className="mb-3 text-base font-semibold text-green-600 dark:text-green-400">
+                                                ✓ Horário gerado com sucesso!
+                                            </h3>
+                                        )}
                                         <LegendaProfessores cores={professoresCores} />
                                     </div>
 
@@ -867,22 +871,30 @@ export default function GeradorHorario() {
                                                                     {t + 1}
                                                                 </TableCell>
                                                                 {resultado.horario.map(({ dia, tempos }) => {
-                                                                    const disc = tempos[t];
-                                                                    const prof = disc
-                                                                        ? professoresDisciplinas[disc]
+                                                                    const { descricao, violacao } = tempos[t];
+                                                                    const prof = descricao
+                                                                        ? professoresDisciplinas[descricao]
                                                                         : undefined;
                                                                     const cor = prof ? professoresCores[prof] : undefined;
                                                                     return (
                                                                         <TableCell
                                                                             key={dia}
-                                                                            className="border border-border text-center text-xs overflow-hidden"
+                                                                            className="relative border border-border text-center text-xs overflow-hidden"
                                                                             style={{
                                                                                 backgroundColor: cor,
                                                                                 color: cor ? getContrastColor(cor) : undefined,
                                                                             }}
                                                                         >
+                                                                            {violacao && (
+                                                                                <span
+                                                                                    className="absolute top-0 right-0 p-0.5 text-red-500"
+                                                                                    title={violacao}
+                                                                                >
+                                                                                    <CircleAlert size={32} fill="#ffffff" color="#ed333b" />
+                                                                                </span>
+                                                                            )}
                                                                             <p className="line-clamp-2 text-balance">
-                                                                                {disc ?? "—"}
+                                                                                {descricao ?? "—"}
                                                                             </p>
                                                                         </TableCell>
                                                                     );

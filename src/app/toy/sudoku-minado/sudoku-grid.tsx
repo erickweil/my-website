@@ -43,7 +43,7 @@ async function executarSolverWorkers(
     n: number, 
     progressCallback: (workerID: number, iter: number, depth: number) => void
 ): Promise<{ solucaoCompleta: number[]; desmarcado: number[] }> {    
-    const resultado = await raceWorkers<WorkerTaskValue>({
+    const {promise, abort} = raceWorkers<WorkerTaskValue>({
         n: n,
         initMessage: (workerID) => ({ action: "solucionarQuadro", quadro: Array.from({ length: 36 }, () => 0) }),
         createWorker: () => new Worker(new URL('./solve-task.worker.ts', import.meta.url)),
@@ -52,6 +52,7 @@ async function executarSolverWorkers(
             progressCallback(workerID, msg.value.iter, msg.value.depth);
         }
     });
+    const resultado = await promise;
 
     const quadro = resultado.solucao;
     if (!quadro) {

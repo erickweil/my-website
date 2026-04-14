@@ -7,27 +7,37 @@ import { HorarioGAProblem } from "./horario-genetic";
 
 export type HorarioWorkerTaskValue = {
     solucao?: TurmaHorarioResult[];
-    completo?: boolean;
+    violacoes?: Array<string | undefined>;
     iter: number;
     depth: number;
 };
 
-function construirQuadro(quadro: number[], regras: RegrasHorario, diasAtivos: HorarioDia[]): TurmaHorarioResult[] {
+function construirQuadro(quadro: number[], violacoes: Array<string | undefined>, regras: RegrasHorario, diasAtivos: HorarioDia[]): TurmaHorarioResult[] {
     const resultado: TurmaHorarioResult[] = regras.turmas.map((turma) => ({
         turma: turma.nome,
         horario: diasAtivos.map((dia) => {
             const diaIdx = Horario.diaSemanaMap[dia];
-            const tempos: (string | null)[] = [];
+            const tempos: Array<{
+                descricao: string | null; // nome da disciplina, "???" para não resolvido, null para sem aula
+                violacao?: string; // descrição da violação, se houver
+            }> = [];
             for (let tempo = 0; tempo < regras.nTempos; tempo++) {
-                const valor = quadro[regras.toQuadroIndex(turma.id, diaIdx, tempo)];
+                const quadroIndex = regras.toQuadroIndex(turma.id, diaIdx, tempo);
+                const valor = quadro[quadroIndex];
+                let descricao: string | null = null;
                 if (valor === 0) {
-                    tempos.push("???"); // Não resolvido
+                    descricao = "???"; // Não resolvido
                 } else if(valor === -1) {
-                    tempos.push(null); // Sem aula
+                    descricao = null; // Sem aula
                 } else {
                     const disc = regras.disciplinas[valor - 1];
-                    tempos.push(disc?.nome || "Disciplina Desconhecida");
+                    descricao = disc?.nome || "Disciplina Desconhecida";
                 }
+
+                tempos.push({
+                    descricao,
+                    violacao: violacoes[quadroIndex] || undefined
+                });
             }
             return { dia, tempos };
         }),
@@ -35,19 +45,21 @@ function construirQuadro(quadro: number[], regras: RegrasHorario, diasAtivos: Ho
     return resultado;
 }
 
-function obterRegrasVioladas(
+export function obterRegrasVioladas(
     quadro: number[], 
     regras: HorarioSolverPencilmark
-): string[] {
-    const violacoes: string[] = [];
+): { violacoes: Array<string | undefined>, algumaViolacao: boolean } {
+    let algumaViolacao = false;
+    const violacoes: Array<string | undefined> = quadro.map(() => undefined); // inicialmente sem violações
+    violacoes.push(undefined);
     
     const regrasFn = regras.gerarRegrasFn();
-    const possibs = newPossib(0, regras.nPossibs);
+    const possibs = newPossib(-1, regras.nPossibs);
 
     // Atualizar cache, verificar Todo o quadro
     if(!regrasFn(quadro, null)) {
-        violacoes.push("Regras básicas violadas (ex: número de aulas, alocação em horários possíveis, etc)");
-        return violacoes;
+        violacoes[violacoes.length - 1] = "Regras básicas violadas (ex: número de aulas, alocação em horários possíveis, etc)";
+        algumaViolacao = true;
     }
 
     for(let i = 0; i < quadro.length; i++) {
@@ -55,21 +67,34 @@ function obterRegrasVioladas(
         const valor = quadro[i];
         if(valor === -1) continue; // espaço vazio ou sem aula, não tem regra a violar
         if(valor === 0) {
-            violacoes.push(`Espaço ${i} não alocado`);
+            violacoes[i] = "Este espaço não deveria estar vazio";
+            algumaViolacao = true;
             continue;
         }
         
+        // Remove a marcação atual para testar as possibilidades restantes
+        quadro[i] = 0;
+        // Atualiza o cache para refletir a remoção, já que algumas regras dependem do estado atual do quadro
+        regrasFn(quadro, null);
+
         possibs.resetar(true);
         possibs.index = i;
         if(!regrasFn(quadro, possibs)) {
-            violacoes.push(`Marcações no espaço ${i} violam as regras`);
+            violacoes[i] = "Algo de errado não está certo";
+            algumaViolacao = true;
+        } else if(possibs.contar() <= 0 || !possibs.ler(valor - 1)) {
+            violacoes[i] = "Marcação não deveria estar aqui";
+            algumaViolacao = true;
         }
-        if(possibs.contar() <= 0 || !possibs.ler(valor - 1)) {
-            violacoes.push(`Valor ${valor} no espaço ${i} não é uma possibilidade válida`);
-        }
+        
+        // Restaura o valor original para a próxima iteração
+        quadro[i] = valor;
     }
 
-    return violacoes;
+    return {
+        violacoes,
+        algumaViolacao
+    };
 }
 
 export function solucionarQuadroHorario(
@@ -99,7 +124,7 @@ export function solucionarQuadroHorario(
                 postMessage?.({ 
                     type: "message", 
                     value: { 
-                        solucao: melhor ? construirQuadro(melhor, regras, diasAtivos) : undefined,
+                        solucao: melhor ? construirQuadro(melhor, melhor.map((v) => v === 0 ? "Incompleto" : undefined), regras, diasAtivos) : undefined,
                         iter, 
                         depth 
                     } 
@@ -114,38 +139,43 @@ export function solucionarQuadroHorario(
         console.log(`Carregou ${regras.turmas.length} turmas, ${regras.disciplinas.length} disciplinas, ${regras.professores.length} professores. com ${regras.nTempos} tempos, total espaços no quadro: ${regras.size} Gerando soluções com solver genético...`);
 
         const ga = new GeneticAlgorithm(regras, {
-            populationSize: regras.size * 2,
-            maxStagnation: 3000,
+            populationSize: regras.size * 4,
+            maxStagnation: 5000,
             crossoverRate: 0.9,
             mutationRate: 0.9,
             mutationGeneRate: 1 / regras.size, // em média 1 gene mutado por indivíduo
-            diversityCheck: true,
-            progressCallback: (event) => {
-                const { generation, stagnatedFor, genes, fitness, current } = event;
-                postMessage?.({ 
-                    type: "message", 
-                    value: {
-                        solucao: genes ? construirQuadro(genes, regras, diasAtivos) : undefined, 
-                        iter: generation, 
-                        depth: stagnatedFor 
-                    } 
-                });
-            },
+            diversityCheck: true
         });
 
-        
+        let lastFitness: number | undefined = undefined;
         for(let i = 0; i < 1000; i++) {
-            const {current, fitness, generation, genes, stagnatedFor} = ga.run(1000);
+            const {current, fitness, generation, genes, stagnatedFor} = ga.run(500);
             stats = {
                 iter: generation,
                 solucoes: genes ? [genes] : [],
                 melhor: genes,
             }
 
-            const violacoes = obterRegrasVioladas(genes, regrasPencilmark);
-            if(violacoes.length === 0) {
+            if(lastFitness === undefined || lastFitness < fitness) {
+                lastFitness = fitness;
+            } else {
+                continue;
+            }
+
+            const { violacoes, algumaViolacao} = obterRegrasVioladas(genes, regrasPencilmark);
+            if(!algumaViolacao) {
                 break; // solução completa encontrada, pode parar
             }
+
+            postMessage?.({ 
+                type: "message", 
+                value: {
+                    solucao: genes ? construirQuadro(genes, violacoes, regrasPencilmark, diasAtivos) : undefined, 
+                    violacoes: violacoes,
+                    iter: generation, 
+                    depth: stagnatedFor 
+                } 
+            });
         }
     } else {
         throw new Error(`Solver type "${solverType}" não reconhecido`);
@@ -160,20 +190,20 @@ export function solucionarQuadroHorario(
         // Retorno normal, para parar os outros workers, já que é impossível resolver
         return {
             solucao: undefined,
-            completo: false,
+            violacoes: [
+                ...Array.from({ length: regrasPencilmark.quadro.length }, () => undefined), 
+                "Não foi possível encontrar uma solução viável para este horário com as restrições dadas."
+            ],
             iter: stats?.iter || 0,
             depth: 0
         };
     }
 
-    const violacoes = obterRegrasVioladas(quadroSolucionado, regrasPencilmark);
-    for(const violacao of violacoes) {
-        console.warn("Quadro solucionado viola regras:", violacao);
-    }
-
+    const {violacoes, algumaViolacao} = obterRegrasVioladas(quadroSolucionado, regrasPencilmark);
+    
     return {
-        solucao: construirQuadro(quadroSolucionado, regrasPencilmark, diasAtivos),
-        completo: violacoes.length === 0,
+        solucao: construirQuadro(quadroSolucionado, violacoes, regrasPencilmark, diasAtivos),
+        violacoes: violacoes,
         iter: stats?.iter || 0,
         depth: 0
     };

@@ -46,7 +46,10 @@ export interface TurmaHorarioResult {
     turma: string;
     horario: Array<{
         dia: HorarioDia;
-        tempos: (string | null)[];
+        tempos: Array<{
+            descricao: string | null; // nome da disciplina, "???" para não resolvido, null para sem aula
+            violacao?: string; // descrição da violação, se houver
+        }>;
     }>;
 }
 
