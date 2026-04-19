@@ -144,7 +144,8 @@ export function solucionarQuadroHorario(
             crossoverRate: 0.9,
             mutationRate: 0.9,
             mutationGeneRate: 1 / regras.size, // em média 1 gene mutado por indivíduo
-            diversityCheck: true
+            diversityCheck: true,
+            resetPopulation: false
         });
 
         let lastFitness: number | undefined = undefined;
@@ -156,7 +157,7 @@ export function solucionarQuadroHorario(
                 melhor: genes,
             }
 
-            if(lastFitness === undefined || lastFitness < fitness) {
+            if(lastFitness === undefined || lastFitness < fitness!) {
                 lastFitness = fitness;
             } else {
                 continue;

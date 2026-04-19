@@ -43,7 +43,7 @@ export class HorarioSolverPencilmark extends RegrasHorario {
                     const disciplina = this.disciplinas[idDisciplina];
                     disciplina.contAulas++;
 
-                    // Isso é necessário mesmo?
+                    // Marca professor como ocupado
                     for (const prof of disciplina.professores) {
                         prof.matriz.dias[dia][tempo] = 0;
                     }

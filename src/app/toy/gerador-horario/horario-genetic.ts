@@ -10,21 +10,8 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
         super(formData);
 
         this.size = this.turmas.length * QUANTOS_DIAS * this.nTempos;
-
-        // Calcula o fitness máximo teórico (pode não ser atingível dependendo do problema)
-        let maxFit = 0;
-        for (const disc of this.disciplinas) {
-            // Recompensa por professor disponível e sem conflito
-            maxFit += disc.aulas * disc.professores.length * 5;
-            // Recompensa por disciplinas unidas alocadas juntas
-            maxFit += disc.aulas * disc.disciplinasUnidas.length * 5;
-            // Recompensa por agrupamento correto
-            if (disc.agrupar > 0) {
-                const numGroups = Math.floor(disc.aulas / disc.agrupar);
-                maxFit += numGroups * 8;
-            }
-        }
-        this.maxFitness = maxFit > 0 ? maxFit : undefined;
+        // Fitness 0 é que não tem nada errado, negativo quando tem violações. Então o máximo é 0.
+        this.maxFitness = 0;
     }
 
     // Funções Solver Genético
@@ -64,42 +51,74 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
     }
 
     fitness(quadro: number[]): number {
+        // Começa 0, para cada coisa errada subtrai
         let fitness = 0;
 
-        // Reseta matrizes de ocupação dos professores (cópia da disponibilidade original)
+        // Reseta as matrizes de disponibilidade dos professores para contagem de fitness
         for (const prof of this.professores) {
             prof.matriz.copiar(prof.horarios);
         }
 
+        // Pass 1: conta quantas turmas precisam de cada (prof, dia, tempo).
+        // Isso evita o viés em que a turma com id menor sempre "ganha" o professor.
+        for (const turma of this.turmas) {
+            for (let dia = 0; dia < QUANTOS_DIAS; dia++) {
+                for (let tempo = 0; tempo < this.nTempos; tempo++) {
+                    // Slots inativos: nada a verificar
+                    if (!turma.horarios.possui(dia, tempo)) continue;
+
+                    const idDisciplina = quadro[this.toQuadroIndex(turma.id, dia, tempo)] - 1;
+                    if (idDisciplina < 0) continue; // slot vazio
+
+                    const disciplina = this.disciplinas[idDisciplina];
+
+                    // prof.matriz começa como cópia de prof.horarios (0, 1)
+                    // Para cada disciplina alocada, decrementa a disponibilidade dos professores daquela disciplina
+                    for (const prof of disciplina.professores) {
+                        prof.matriz.dias[dia][tempo]--;
+                    }
+                }
+            }
+        }
+
+        // Pass 2: conta a pontuação de cada slot com base na disponibilidade dos professores e nas disciplinas unidas
         for (const turma of this.turmas) {
             for (let dia = 0; dia < QUANTOS_DIAS; dia++) {
                 for (let tempo = 0; tempo < this.nTempos; tempo++) {
                     const index = this.toQuadroIndex(turma.id, dia, tempo);
 
-                    // Slots inativos: nada a verificar
-                    if (!turma.horarios.possui(dia, tempo)) continue;
+                    if (!turma.horarios.possui(dia, tempo)) {
+                        // Deveria ser vazio
+                        if (quadro[index] !== -1) {
+                            fitness -= 1000;
+                        }
+                        continue;
+                    }
 
                     const idDisciplina = quadro[index] - 1;
-                    if (idDisciplina < 0) continue; // slot vazio
+                    if (idDisciplina < 0) {
+                        // Deveria ter uma disciplina alocada
+                        fitness -= 1000;
+                        continue; // slot vazio
+                    }
 
                     const disciplina = this.disciplinas[idDisciplina];
 
-                    // Regra: Disponibilidade do professor E sem conflito entre turmas
-                    // prof.matriz começa como cópia de prof.horarios e é zerada conforme
-                    // o professor é alocado. Se prof.matriz.possui(dia, tempo) == true,
-                    // o professor está disponível E ainda não está em outra turma.
+                    // Regra: Disponibilidade do professor e sem conflito entre turmas
                     for (const prof of disciplina.professores) {
-                        if (prof.matriz.possui(dia, tempo)) {
-                            fitness += 5;
+                        const disponibilidade = prof.matriz.dias[dia][tempo];
+                        // Penaliza proporcional ao Nº de conflitos
+                        if (disponibilidade <= 0) {
+                            fitness += disponibilidade * 50;
                         }
-                        prof.matriz.dias[dia][tempo] = 0;
                     }
 
                     // Regra: Disciplinas unidas devem ocupar o mesmo (dia, tempo)
                     for (const unida of disciplina.disciplinasUnidas) {
                         const valor = this.getQuadroValor(quadro, unida.turma.id, dia, tempo);
-                        if (valor === unida.id + 1) {
-                            fitness += 5;
+                        // Penaliza disciplinas que não estão juntas quando deveriam
+                        if (valor !== unida.id + 1) {
+                            fitness -= 30;
                         }
                     }
                 }
@@ -127,15 +146,20 @@ export class HorarioGAProblem extends RegrasHorario implements GAProblem<number[
                     } else if (runStart !== -1) {
                         const runLength = tempo - runStart;
 
-                        // dividir → run deve ser exatamente G
+                        /*// dividir → run deve ser exatamente G
                         // !dividir → run deve ser múltiplo de G
                         const valid = disc.dividir
                             ? (runLength === G)
                             : (runLength % G === 0);
 
                         if (valid) {
-                            fitness += 8;
-                        }
+                            fitness += 25;
+                        }*/
+
+                        // Penalizar proporcional ao quanto o run se aproxima do ideal (multiplo de G, ou igual a G se dividir)
+                        const ideal = disc.dividir ? G : Math.round(runLength / G) * G;
+                        const diff = Math.abs(runLength - ideal);
+                        fitness -= diff * 20;
 
                         runStart = -1;
                     }

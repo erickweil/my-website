@@ -15,8 +15,8 @@ export interface Individual<G> {
 export interface GAProgressEvent<G> {
     genes: G;
     generation: number;
-    fitness: number;
-    current: number;
+    fitness: number | undefined;
+    current: number | undefined;
     /** Quantas gerações se passaram desde a última melhora. */
     stagnatedFor: number;
 }
@@ -79,11 +79,11 @@ export class GeneticAlgorithm<G extends object> {
 
     private gen: number;
     private bestGenes: G;
-    private bestFitness: number;
+    private bestFitness: number | undefined;
 
     // Controle de estagnação
     private stagStart: number;   // Geração em que a estagnação começou (última melhora)
-    private stagFitness: number; // Fitness para controle de estagnação (fitness da última melhora)
+    private stagFitness: number | undefined; // Fitness para controle de estagnação (fitness da última melhora)
     private mutationMultiplier: number;
     private tournamentMultiplier: number;
 
@@ -102,8 +102,8 @@ export class GeneticAlgorithm<G extends object> {
         // Controle da execução
         this.gen = 0;
         this.bestGenes = this.problem.randomGenes();
-        this.bestFitness = 0;
-        this.stagFitness = 0;
+        this.bestFitness = undefined;
+        this.stagFitness = undefined;
         this.stagStart = 0;
         this.mutationMultiplier = 1;
         this.tournamentMultiplier = 1;
@@ -123,6 +123,12 @@ export class GeneticAlgorithm<G extends object> {
 
     run(generations: number): GAProgressEvent<G> {                
         // 0. Inicializa a população (gera indivíduos aleatórios para preencher a população até o tamanho definido)
+        if (this.config.resetPopulation) {
+            this.stagFitness = undefined;
+            this.stagStart = this.gen;
+            this.mutationMultiplier = 1;
+            this.tournamentMultiplier = 1;
+        }
         this.initializePopulation(this.config.populationSize, this.config.resetPopulation);
 
         if(this.population.length === 0) {
@@ -141,7 +147,7 @@ export class GeneticAlgorithm<G extends object> {
             const currentBest = this.runGeneration();
 
             // 2. Verifica melhora global
-            if (currentBest.fitness! > this.bestFitness) {
+            if (this.bestFitness === undefined || currentBest.fitness! > this.bestFitness) {
                 this.problem.clone(this.bestGenes, currentBest.genes);
                 this.bestFitness = currentBest.fitness!;
 
@@ -154,7 +160,7 @@ export class GeneticAlgorithm<G extends object> {
             let improved = false;
             const stagnatedFor = this.gen - this.stagStart;
             // https://stackoverflow.com/questions/4915462/how-should-i-do-floating-point-comparison
-            if (currentBest.fitness! > (this.stagFitness + Number.EPSILON)) {
+            if (this.stagFitness === undefined || currentBest.fitness! > (this.stagFitness + Number.EPSILON)) {
                 this.stagFitness = currentBest.fitness!;
                 this.stagStart = this.gen;
                 this.mutationMultiplier = 1;
@@ -184,7 +190,7 @@ export class GeneticAlgorithm<G extends object> {
                 if (stagnatedFor > this.config.maxStagnation) {
                     console.log(`Estagnado por ${stagnatedFor} gerações, realizando assassinato de TODOS`);
                     this.initializePopulation(this.config.populationSize, true);
-                    this.stagFitness = 0;
+                    this.stagFitness = undefined;
                     this.stagStart = this.gen;
                     this.mutationMultiplier = 1;
                     this.tournamentMultiplier = 1;
@@ -379,8 +385,10 @@ export class GeneticAlgorithm<G extends object> {
 
         if(best) return best;
 
+        // Fallback: varredura linear a partir de um ponto aleatório para evitar viés de posição
+        const startIdx = Math.floor(Math.random() * populationCount);
         for (let i = 0; i < populationCount; i++) {
-            const individual = population[i];
+            const individual = population[(startIdx + i) % populationCount];
             if (individual !== exclude) {
                 return individual;
             }
