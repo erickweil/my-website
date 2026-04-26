@@ -48,6 +48,12 @@ export default function Home() {
       status: "Em construção",
       description: "Visualização algoritmos genéticos",
     },
+    { 
+      href: "/toy/turing",
+      text: "Máquina de Turing",
+      status: "Em construção",
+      description: "Simulador de máquina de Turing",
+    },
     { href: null, text: "Busca DFS e BFS", status: "A Fazer" },
     { href: null, text: "Pilha, Fila, Deque", status: "A Fazer" },
     { href: null, text: "Análise Big O", status: "A Fazer" },

@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "prebuild": "cd rust-wasm && wasm-pack build --target web --out-dir ../src/pkg",
+    "build": "next build --webpack",
     "start": "next start",
-    "preview": "next build && next start",
     "lint": "eslint"
   },
   "dependencies": {
