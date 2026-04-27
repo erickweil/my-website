@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use wasm_bindgen::prelude::*;
 mod utils;
 mod framebuffer;
@@ -40,26 +40,35 @@ impl Direction {
 
 #[derive(Clone, Copy)]
 struct ProgramInstruction {
-    /// Codepoint Unicode a escrever, 0 para vazio
+    /// Codepoint Unicode a escrever, 0 para vazio, -1 para manter o valor atual
     write: i32,
-    /// Direção de movimento do cabeçote
+    /// Direção de movimento do cabeçote, ou None para não mover
     dir: Direction,
-    /// Próximo estado (-1 = halt explícito)
+    /// Próximo estado, 0 para manter o estado atual, valor negativo para Halt
     next: i32,
 }
 
+// Constante do wildcard 
+const CHAR_WILDCARD: i32 = -1;
+const STATE_WILDCARD: i32 = 0;
+
+/// Compacta dois i32 em um i64 para uso como chave de HashMap, evitando hash de tupla.
+#[inline(always)]
+fn pack(a: i32, b: i32) -> i64 {
+    ((a as i64) << 32) | (b as u32 as i64)
+}
 /// Máquina de Turing 2D com fita esparsa.
 #[wasm_bindgen]
 pub struct TuringMachine2D {
-    /// Fita esparsa: chave = (x, y), valor = unicode char
-    tape: HashMap<(i32, i32), i32>,
+    /// Fita esparsa: chave = (x, y) compactados em i64, valor = unicode char
+    tape: FxHashMap<i64, i32>,
     tape_bounds: (i32, i32, i32, i32), // (min_x, max_x, min_y, max_y) para otimização de renderização
     /// Valor que será lido em células nunca escritas (pode ser usado para simular uma fita infinita pré-carregada)
     default_value: i32,
     head: (i32, i32),
     current_state: i32, // -1 = halt, 0..N-1 = estados
-    step_count: u32,
-    transitions: HashMap<(i32, i32), ProgramInstruction>, // (state, read) -> instruction (write, dir, next)
+    step_count: u64,
+    transitions: FxHashMap<i64, ProgramInstruction>, // (state, read) compactados em i64 -> instruction
 }
 
 #[wasm_bindgen]
@@ -71,13 +80,10 @@ impl TuringMachine2D {
             panic!("Programa deve ser múltiplo de 5 (state, read, write, dir, next)");
         }
 
-        let mut transitions = HashMap::new();
+        let mut transitions = FxHashMap::default();
         for chunk in program.chunks_exact(5) {
             transitions.insert(
-                (
-                    chunk[0], 
-                    chunk[1]
-                ), 
+                pack(chunk[0], chunk[1]),
                 ProgramInstruction { 
                     write: chunk[2], 
                     dir: Direction::from_i32(chunk[3]), 
@@ -87,7 +93,7 @@ impl TuringMachine2D {
         }
 
         Self {
-            tape: HashMap::new(),
+            tape: FxHashMap::default(),
             tape_bounds: (start_x, start_x, start_y, start_y),
             default_value: default_value,
             head: (start_x, start_y),
@@ -105,15 +111,7 @@ impl TuringMachine2D {
         self.step_count = 0;
     }
 
-    /// Lê o char sob o cabeçote (0 se a célula estiver vazia).
-    fn read(&self, pos: (i32, i32)) -> i32 {
-        *self.tape.get(&pos).unwrap_or(&self.default_value)
-    }
-
-    /// Escreve um char na célula atual.
-    fn write(&mut self, pos: (i32, i32), char: i32) {
-        self.tape.insert(pos, char);
-        // Atualiza os limites da fita
+    fn expand_bounds(&mut self, pos: (i32, i32)) {
         if pos.0 < self.tape_bounds.0 { self.tape_bounds.0 = pos.0; }
         if pos.0 > self.tape_bounds.1 { self.tape_bounds.1 = pos.0; }
         if pos.1 < self.tape_bounds.2 { self.tape_bounds.2 = pos.1; }
@@ -122,29 +120,23 @@ impl TuringMachine2D {
 
     /// Executa um único ciclo. Retorna `true` se continua ou `false` em Halt.
     fn step(&mut self) -> TuringMachineResult {
-        if self.current_state == -1 {
+        if self.current_state < 0 {
             return TuringMachineResult::Halt;
         }
 
         // Lê a transição para o estado atual e o char sob o cabeçote
-        /*let instr = match self.transitions.get(&(self.current_state, self.read(self.head))).cloned() {
-            Some(instr) => instr,
-            // Se não encontrar uma transição específica para o char lido, tenta a transição wildcard (-1)
-            None => match self.transitions.get(&(self.current_state, -1)).cloned() {
-                Some(instr) => instr,
-                None => return TuringMachineResult::TransitionNotFound,
-            }
-        };*/
-        let read_char = self.read(self.head);
-        let instr =     self.transitions.get(&(self.current_state, read_char))
-            .or_else(|| self.transitions.get(&(self.current_state, -1)))   // Transição com read char *
-            .or_else(|| self.transitions.get(&(-1, read_char))) // Transição com state *
-            .or_else(|| self.transitions.get(&(-1, -1)))                   // Transição com state * e read char *
+        let read_char = *self.tape.get(&pack(self.head.0, self.head.1)).unwrap_or(&self.default_value);
+        let instr = self.transitions.get(&pack(self.current_state, read_char))
+            .or_else(|| self.transitions.get(&pack(self.current_state, CHAR_WILDCARD))) // Transição com read char *
+            .or_else(|| self.transitions.get(&pack(STATE_WILDCARD, read_char)))         // Transição com state *
+            .or_else(|| self.transitions.get(&pack(STATE_WILDCARD, CHAR_WILDCARD)))     // Transição com state * e read char *
             .cloned();
 
         if let Some(instr) = instr {
-            // 1. Escreve na fita (se instr.write == -1 precisa chamar para atualizar bounds)
-            self.write(self.head, if instr.write == -1 { read_char } else { instr.write });
+            // 1. Escreve na fita
+            if instr.write != CHAR_WILDCARD {
+                self.tape.insert(pack(self.head.0, self.head.1), instr.write);
+            }
 
             // 2. Move o cabeçote
             match instr.dir {
@@ -154,10 +146,14 @@ impl TuringMachine2D {
                 Direction::Down => self.head.1 += 1,
                 Direction::None => {}
             };
+            if instr.dir != Direction::None {
+                self.expand_bounds(self.head);
+            }
 
             // 3. Atualiza o estado
-            self.current_state = instr.next;
-
+            if instr.next != STATE_WILDCARD {
+                self.current_state = instr.next;
+            }
             self.step_count += 1;
 
             return TuringMachineResult::Continue
@@ -178,24 +174,33 @@ impl TuringMachine2D {
         TuringMachineResult::Continue
     }
 
-    pub fn get_framebuffer_width(&self) -> i32 {
-        self.tape_bounds.1 - self.tape_bounds.0 + 1        
-    }
-    pub fn get_framebuffer_height(&self) -> i32 {
-        self.tape_bounds.3 - self.tape_bounds.2 + 1        
+    pub fn get_tape_bounds(&self, result: &mut [i32]) {
+        result[0] = self.tape_bounds.0;
+        result[1] = self.tape_bounds.1;
+        result[2] = self.tape_bounds.2;
+        result[3] = self.tape_bounds.3;
     }
 
     /// Recebe um um TypedArray do JavaScript e preenche com a fita esparsa. Cada célula é um caractere Unicode
-    pub fn update_framebuffer(&self, data: &mut [i32], width: i32, height: i32) {
-        data.fill(0); // Limpa o framebuffer
-        for (&(x, y), &char) in &self.tape {
-            let px = x - self.tape_bounds.0;
-            let py = y - self.tape_bounds.2;
-            if px >= width || py >= height || px < 0 || py < 0 {
-                continue; // Ignora células fora dos limites do framebuffer
+    /// A área a ser preenchida é definida por `offsetLeft`, `offsetTop`, `width` e `height`
+    pub fn update_framebuffer(&self, data: &mut [i32], offset_left: i32, offset_top: i32, width: i32, height: i32) {
+        let expected = (width * height) as usize;
+        if data.len() < expected {
+            return; // buffer insuficiente – caller deve realocar antes de chamar novamente
+        }
+        // Agora atravessa cada posição desse buffer e pega na fita os valores (caso existam)
+        let bounds = self.tape_bounds;
+        for y in 0..height {
+            for x in 0..width {
+                let tape_x = x + offset_left;
+                let tape_y = y + offset_top;
+                let char = if tape_x >= bounds.0 && tape_x <= bounds.1 && tape_y >= bounds.2 && tape_y <= bounds.3 {
+                    *self.tape.get(&pack(tape_x, tape_y)).unwrap_or(&0)
+                } else {
+                    0
+                }; 
+                data[(y * width + x) as usize] = char;
             }
-
-            data[(py * width + px) as usize] = char;
         }
     }
 
@@ -204,17 +209,14 @@ impl TuringMachine2D {
     /// `data` é um array plano `[x0, y0, char, x1, y1, char, ...]`.
     pub fn preload_tape(&mut self, data: &[i32]) {
         for chunk in data.chunks_exact(3) {
-            self.write((chunk[0], chunk[1]), chunk[2]);
+            let pos = (chunk[0], chunk[1]);
+            self.tape.insert(pack(pos.0, pos.1), chunk[2]);
+            self.expand_bounds(pos);
         }
     }
 
-    /// Conta quantas células contêm valores diferente de 0.
-    pub fn count_ones(&self) -> u32 {
-        self.tape.values().filter(|&&b| b != 0).count() as u32
-    }
-
-    pub fn get_step_count(&self) -> u32 {
-        self.step_count
+    pub fn get_step_count(&self) -> f64 {
+        self.step_count as f64
     }
 
     /// Retorna o estado atual.
@@ -224,11 +226,11 @@ impl TuringMachine2D {
 
     /// Retorna a posição X do cabeçote.
     pub fn head_x(&self) -> i32 {
-        self.head.0 - self.tape_bounds.0
+        self.head.0
     }
 
     /// Retorna a posição Y do cabeçote.
     pub fn head_y(&self) -> i32 {
-        self.head.1 - self.tape_bounds.2
+        self.head.1
     }
 }

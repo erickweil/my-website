@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "prebuild": "cd rust-wasm && wasm-pack build --target web --out-dir ../src/pkg",
+    "prebuild": "cd rust-wasm && wasm-pack build --release --target web --out-dir ../src/pkg",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"

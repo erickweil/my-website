@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 [dependencies]
 console_error_panic_hook = "0.1.7"
 wasm-bindgen = "0.2"
+rustc-hash = "2"
 
 # [workspace]
 # members = [
@@ -16,3 +17,28 @@ wasm-bindgen = "0.2"
 # ]
 # resolver = "2"
 
+[profile.release]
+# Tell LLVM to optimize for size instead of speed. 
+# opt-level = 's' 
+# Optimize for speed with opt-level 3
+opt-level = 3
+
+# Link Time Optimization (LTO) enables cross-crate dead code elimination
+lto = true 
+
+# Reduce the number of parallel code generation units to 1 
+# to enable maximum optimization at the cost of compile time.
+codegen-units = 1
+
+# Remove panic unwinding code (reduces size and binary complexity)
+panic = 'abort'
+
+# Strip debug symbols and line tables from the final binary.
+strip = true
+
+[package.metadata.wasm-pack.profile.release]
+# Pass the '-Os' flag to wasm-opt for size-focused optimizations
+# wasm-opt = ['-Os', '--enable-bulk-memory']
+
+# Optmize for speed with '-O3' flag to wasm-opt
+wasm-opt = ['-O3', '--enable-bulk-memory']

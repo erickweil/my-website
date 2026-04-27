@@ -19,13 +19,13 @@ export function toUnicode(char: string): number {
     return char.codePointAt(0) || 0;
 }
 
-function parseSymbol(currentSymbol: string, wildcard: number): number {
+function parseSymbol(currentSymbol: string): number {
     if(currentSymbol.toUpperCase() === "ERASE" || currentSymbol.toUpperCase() === "BLANK" || currentSymbol === "_") {
         // Limpar, apagar
         return 0;
     } else if (currentSymbol.toUpperCase() === "ELSE" || currentSymbol.toUpperCase() === "SAME" || currentSymbol === "*") {
         // código especial que significa qualquer um (wildcard)
-        return wildcard;
+        return -1;
     } else if(/^"[^"]+"$/.test(currentSymbol)) {
         // string literal, parseando o conteúdo entre aspas (permitindo escapes)
         currentSymbol = ""+JSON.parse(currentSymbol);
@@ -66,16 +66,18 @@ function parseDirection(dir: string): Direction {
     }
 }
 
-function parseState(state: string, stateMap: Map<string, number>, wildcard: number): number {
-    if(state.toUpperCase().startsWith("HALT")) {
-        return -1; // estados de halt são representados por -1
-    }
-    if(state.toUpperCase() === "ELSE" || state.toUpperCase() === "SAME" || state === "*") {
-        return wildcard;
+function parseState(state: string, stateMap: Map<string, number>): number {
+    state = state.toUpperCase();
+    if(state === "ELSE" || state === "SAME" || state === "*") {
+        // 0 é código reservado para wildcard de estado, estados normais começam em 1
+        return 0;
     }
     let stateCode = stateMap.get(state);
     if(stateCode === undefined) {
-        stateCode = stateMap.size;
+        stateCode = stateMap.size + 1; // começa em 1, 0 é reservado para wildcard
+        if(state.startsWith("HALT") || state === "ACCEPT" || state === "REJECT") {
+            stateCode = -stateCode; // estados de halt são negativos
+        }
         stateMap.set(state, stateCode);
     }
     return stateCode;
@@ -98,7 +100,8 @@ export function compileTuringCode(code: string): {
     compiledProgram: Int32Array,
     stateMap: Map<string, number>,
     input: Int32Array | null,
-    defaultValue: number
+    defaultValue: number,
+    startState: number
  } {
     let defaultValue = 0;
     const stateMap = new Map<string, number>();
@@ -119,7 +122,7 @@ export function compileTuringCode(code: string): {
         const defaultMatch = line.match(/^default\s+([^\s]+)\s*$/i);
         if(defaultMatch) {
             let [_, defaultSymbol] = defaultMatch;
-            defaultValue = parseSymbol(defaultSymbol, 0);
+            defaultValue = parseSymbol(defaultSymbol);
             continue;
         }
 
@@ -153,12 +156,12 @@ export function compileTuringCode(code: string): {
 
         let [_, currentState, currentSymbol, newSymbol, direction, newState] = match;
 
-        let currentSymbolCode = parseSymbol(currentSymbol, -1);
-        let newSymbolCode = parseSymbol(newSymbol, -1);
+        let currentSymbolCode = parseSymbol(currentSymbol);
+        let newSymbolCode = parseSymbol(newSymbol);
         let dirCode = parseDirection(direction);
 
-        let currentStateCode = parseState(currentState, stateMap, -1);
-        let newStateCode = parseState(newState, stateMap, currentStateCode);
+        let currentStateCode = parseState(currentState, stateMap);
+        let newStateCode = parseState(newState, stateMap);
 
         transitions.push(
             currentStateCode,
@@ -182,6 +185,10 @@ export function compileTuringCode(code: string): {
         compiledProgram: new Int32Array(transitions),
         stateMap: stateMap,
         input: inputArray.length > 0 ? inputArray : null,
-        defaultValue: defaultValue
+        defaultValue: defaultValue,
+        // estado inicial é "start" se existir, senão o primeiro estado definido
+        // e começa em 1 porque 0 é reservado para wildcard
+        // Nota: parseState armazena as chaves em maiúsculas
+        startState: stateMap.get("START") || 1
     };
 }
