@@ -27,11 +27,7 @@ impl Color {
 impl<'a> Framebuffer<'a> {
     /// Cria um framebuffer com todas as células transparentes.
     pub fn new(data: &'a mut [u8], width: usize, height: usize) -> Self {
-        Self {
-            data: data,
-            width,
-            height,
-        }
+        Self { data, width, height }
     }
 
     /// Preenche todo o buffer com a cor fornecida.
@@ -76,5 +72,11 @@ impl<'a> Framebuffer<'a> {
     #[inline]
     pub fn len(&self) -> usize {
         self.data.len()
+    }
+
+    /// Retorna `true` se o buffer está vazio.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 }

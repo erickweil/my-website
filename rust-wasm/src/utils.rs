@@ -1,5 +1,4 @@
 use wasm_bindgen::prelude::*;
-use console_error_panic_hook;
 
 // You can also log to the browser console directly
 #[wasm_bindgen]
@@ -16,7 +15,7 @@ extern "C" {
 // A helper macro for console logging from Rust
 #[macro_export]
 macro_rules! console_log {
-    ($($t:tt)*) => (crate::utils::log(&format_args!($($t)*).to_string()))
+    ($($t:tt)*) => ($crate::utils::log(&format_args!($($t)*).to_string()))
 }
 
 pub fn set_panic_hook() {
