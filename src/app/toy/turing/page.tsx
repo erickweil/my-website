@@ -2,11 +2,32 @@
 import React, { useState } from 'react';
 import { useWasm } from '@/lib/useWasm';
 import NonSSRWrapper from '@/components/nonSSRWrapper';
-import ZoomableCanvas, { pageToZoomCanvas, zoomCanvasToPage, ZoomEstadoType } from '@/components/Canvas/ZoomableCanvas';
+import ZoomableCanvas, { pageToZoomCanvas, ZoomEstadoType } from '@/components/Canvas/ZoomableCanvas';
 import { mesclarEstado } from '@/components/Canvas/CanvasController';
 import { TuringMachine2D, TuringMachineResult } from '@/pkg/turing';
 import { compileTuringCode } from './turing';
 import { getExampleCodes } from './turingexamples';
+
+const CHAR_SCALE = 40;
+const MAX_ZOOM_SCALE = 5.0;
+const MIN_ZOOM_SCALE = 0.025;
+type TuringState = ZoomEstadoType & {
+    program: string | null;
+    /** Identifcador único da execução. Para permitir resetar tudo e executar novamente */
+    programKey: number;
+    stateMap: Map<string, number> | null;
+    machine: InstanceType<typeof TuringMachine2D> | null;
+    machineResult: TuringMachineResult | null;
+    tapeData: Int32Array | null;
+    tapeColorData: ImageData | null;
+    tapeColorCanvas: HTMLCanvasElement | null;
+    tapeBoundsBuffer: Int32Array;
+
+    // Controle de execução e step-by-step
+    stepTime: number;
+    lastHandledStepRequest: number;
+    lastCenterTapeRequest: number;
+};
 
 function reCenterTape(machine: TuringMachine2D, estado: TuringState): {
         span: { x: number, y: number },
@@ -23,7 +44,8 @@ function reCenterTape(machine: TuringMachine2D, estado: TuringState): {
     // Zoom para caber, mas limitando para no máximo 200%
     const scaleX = (estado.width - CHAR_SCALE * 4) / (tapeWidth + 1);
     const scaleY = (estado.height - CHAR_SCALE * 4) / (tapeHeight + 1);
-    const scale = Math.min(scaleX, scaleY, 2.0);
+    let scale = Math.min(scaleX, scaleY, 2.0);
+    scale = Math.max(MIN_ZOOM_SCALE, Math.min(MAX_ZOOM_SCALE, scale))
 
     const canvasCenter = pageToZoomCanvas({ x: estado.width/2, y: estado.height/2 }, 0, 0, {x: 0, y: 0}, scale);
 
@@ -32,40 +54,25 @@ function reCenterTape(machine: TuringMachine2D, estado: TuringState): {
             x: -canvasCenter.x + tapeCenterX,
             y: -canvasCenter.y + tapeCenterY,
         },
-        scale: scale
+        scale: scale,
     };
 }
 
-const CHAR_SCALE = 40;
-type TuringState = ZoomEstadoType & {
-    program: string | null;
-    /** Identifcador único da execução. Para permitir resetar tudo e executar novamente */
-    programKey: number;
-    stateMap: Map<string, number> | null;
-    machine: InstanceType<typeof TuringMachine2D> | null;
-    machineResult: TuringMachineResult | null;
-    tapeData: Int32Array | null;
-    tapeBoundsBuffer: Int32Array;
-
-    // Controle de execução e step-by-step
-    stepTime: number;
-    lastHandledStepRequest: number;
-};
-
-function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest }: {
+function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest, centerTapeRequest }: {
     program?: string | null,
     programKey?: number,
     speedSteps?: number,
     paused?: boolean,
     stepRequest?: number,
+    centerTapeRequest?: number,
 }) {
     return <NonSSRWrapper>
         <ZoomableCanvas<TuringState>
             options={{
                 useTouchManager: true,
                 spanButton: "any",
-                minZoomScale: 0.05,
-                maxZoomScale: 5,
+                minZoomScale: MIN_ZOOM_SCALE,
+                maxZoomScale: MAX_ZOOM_SCALE,
                 initialState: {
                     program: program || null,
                     programKey: programKey ?? 0,
@@ -73,9 +80,12 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest }: 
                     machine: null,
                     machineResult: null,
                     tapeData: null,
+                    tapeColorData: null,
+                    tapeColorCanvas: null,
                     tapeBoundsBuffer: new Int32Array(4),
                     stepTime: 0,
                     lastHandledStepRequest: stepRequest ?? 0,
+                    lastCenterTapeRequest: centerTapeRequest ?? 0,
                 }
             }}
 			draw={(ctx, estado) => {
@@ -110,17 +120,71 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest }: 
                         estado.tapeData = tapeData;
                     }
 
-                    machine.update_framebuffer(
-                        tapeData,
+                    let colorCanvas = estado.tapeColorCanvas;
+                    if(!colorCanvas) {
+                        colorCanvas = document.createElement('canvas');
+                        estado.tapeColorCanvas = colorCanvas;
+                    }
+
+                    let colorData = estado.tapeColorData;
+                    if(!colorData || colorData.width < frameBufferWidth || colorData.height < frameBufferHeight) {
+                        colorData = new ImageData(
+                            Math.max(frameBufferWidth, colorData ? colorData.width * 2 : frameBufferWidth * 2), 
+                            Math.max(frameBufferHeight, colorData ? colorData.height * 2 : frameBufferHeight * 2)
+                        );
+                        estado.tapeColorData = colorData;
+                    }
+                    colorCanvas.width = frameBufferWidth;
+                    colorCanvas.height = frameBufferHeight;
+
+                    const drawOnlyRects = estado.scale <= 0.15;
+                    if(!drawOnlyRects) {
+                        machine.update_framebuffer(
+                            tapeData,
+                            offsetLeft,
+                            offsetTop,
+                            frameBufferWidth, 
+                            frameBufferHeight
+                        );                        
+                    }
+
+                    
+                    machine.update_colorbuffer(
+                        estado.tapeColorData!.data as unknown as Uint8Array,
                         offsetLeft,
                         offsetTop,
                         frameBufferWidth, 
-                        frameBufferHeight
+                        frameBufferHeight,
+                        colorData.width,
+                        colorData.height
+                    );
+
+                    const tapeBounds = estado.tapeBoundsBuffer;
+                    machine.get_tape_bounds(tapeBounds);
+                    let startY = Math.max(offsetTop, tapeBounds[2]);
+                    let endY = Math.min(offsetTop + frameBufferHeight, tapeBounds[3] + 1);
+                    let startX = Math.max(offsetLeft, tapeBounds[0]);
+                    let endX = Math.min(offsetLeft + frameBufferWidth, tapeBounds[1] + 1);
+                    
+
+                    // Desenhar o fundo usando o color buffer
+                    // Tem que escalonar para cada pixel atingir CHAR_SCALE
+                    const colorCtx = colorCanvas.getContext('2d')!;
+                    colorCtx.putImageData(estado.tapeColorData!, 0, 0);
+                    ctx.imageSmoothingEnabled = false;
+                    // Assim desenha tudo
+                    // ctx.drawImage(colorCanvas,
+                    //     0, 0, colorCanvas.width, colorCanvas.height,
+                    //     offsetLeft * CHAR_SCALE, offsetTop * CHAR_SCALE, frameBufferWidth * CHAR_SCALE, frameBufferHeight * CHAR_SCALE
+                    // );
+
+                    // Assim desenhando só a parte dentros dos bounds
+                    ctx.drawImage(colorCanvas,
+                        startX - offsetLeft, startY - offsetTop, endX - startX, endY - startY,
+                        startX * CHAR_SCALE, startY * CHAR_SCALE, (endX - startX) * CHAR_SCALE, (endY - startY) * CHAR_SCALE
                     );
 
                     // Borda ao redor da fita ativa
-                    const tapeBounds = estado.tapeBoundsBuffer;
-                    machine.get_tape_bounds(tapeBounds);
                     ctx.strokeStyle = 'black';
                     ctx.lineWidth = 4;
                     ctx.strokeRect(
@@ -137,45 +201,26 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest }: 
                     ctx.textRendering = 'optimizeSpeed';
                     const headX = machine.head_x();
                     const headY = machine.head_y();
-                    const drawOnlyRects = estado.scale <= 0.15;
-                    for(let y = 0; y < frameBufferHeight; y++) {
-                        for(let x = 0; x < frameBufferWidth; x++) {
-                            const charX = offsetLeft + x;
-                            const charY = offsetTop + y;
-                            const charData = tapeData[y * frameBufferWidth + x];
-                            if(charData === 0) {
-                                continue;
-                            }
+                    
+                    if(!drawOnlyRects) {
+                        // Atravessa só dentro dos bounds
+                        for(let y = startY; y < endY; y++) {
+                            for(let x = startX; x < endX; x++) {
+                                const charX = x;
+                                const charY = y;
+                                const charData = tapeData[(y - offsetTop) * frameBufferWidth + (x - offsetLeft)];
+                                if(charData === 0) {
+                                    continue;
+                                }
 
-                            const char = String.fromCodePoint(charData);                            
-                            if(drawOnlyRects) {
-                                // Pequeno demais para desenhar caracteres legíveis, desenha retângulos para indicar presença de dados
-                                ctx.fillRect(
-                                    charX * CHAR_SCALE, 
-                                    charY * CHAR_SCALE, 
-                                    CHAR_SCALE, 
-                                    CHAR_SCALE
-                                );
-                            } else {
+                                const char = String.fromCodePoint(charData);
                                 ctx.fillText(char, 
                                     charX * CHAR_SCALE + CHAR_SCALE / 2, 
                                     (charY + 1) * CHAR_SCALE - CHAR_SCALE / 8
-                                );
+                                );                                
                             }
                         }
                     }
-
-                    // Destaque o cabeçote se estiver nessa posição
-                    ctx.strokeStyle = 'red';
-                    ctx.lineWidth = drawOnlyRects ? CHAR_SCALE : 4;
-                    ctx.strokeRect(
-                        headX * CHAR_SCALE, 
-                        headY * CHAR_SCALE, 
-                        CHAR_SCALE, 
-                        CHAR_SCALE
-                    );
-                    ctx.strokeStyle = 'black';
-                    
 
                     // HUD: etapas, estado, posição, status
                     let currentStateName = "?";
@@ -185,20 +230,71 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest }: 
                             currentStateName = name;
                         }
                     });
+
+                    // Destaque o cabeçote se estiver nessa posição
+                    ctx.fillStyle = 'red';
+                    if(drawOnlyRects) {
+                        ctx.fillRect(
+                            (headX-1) * CHAR_SCALE, 
+                            (headY-1) * CHAR_SCALE, 
+                            CHAR_SCALE * 3 , 
+                            CHAR_SCALE * 3
+                        );
+                    } else {
+                        ctx.strokeStyle = 'red';
+                        const halfLine = 2;
+                        ctx.lineWidth = halfLine * 2;
+                        ctx.strokeRect(
+                            headX * CHAR_SCALE - halfLine, 
+                            headY * CHAR_SCALE - halfLine, 
+                            CHAR_SCALE + halfLine * 2,
+                            CHAR_SCALE + halfLine * 2
+                        );
+
+                        // Estado atual e posição do cabeçote
+                        ctx.fillRect(
+                            (headX) * CHAR_SCALE - halfLine * 2,
+                            (headY+1) * CHAR_SCALE + halfLine, 
+                            CHAR_SCALE + halfLine * 4, 
+                            CHAR_SCALE * 0.75
+                        );
+
+                        ctx.fillStyle = 'black';
+                        ctx.font = `${CHAR_SCALE * 0.75}px monospace`;
+                        ctx.textAlign = 'center';
+                        ctx.fillText(
+                            currentStateName,
+                            headX * CHAR_SCALE + CHAR_SCALE / 2,
+                            (headY + 1.5) * CHAR_SCALE + halfLine + (CHAR_SCALE * 0.75) / 8
+                        );
+                    }
+                }
+            }}
+            uidraw={(ctx, estado) => {
+                if(!ctx) {
+                    console.warn("Canvas context is null, cannot draw.");
+                    return;
+                }
+
+                const machine = estado.machine;
+                if(machine) {
+                    const headX = machine.head_x();
+                    const headY = machine.head_y();
+
                     let machineStatus: string;
                     switch(estado.machineResult) {
                         case TuringMachineResult.Continue: machineStatus = 'Executando'; break;
                         case TuringMachineResult.Halt:     machineStatus = 'Halt'; break;
                         case TuringMachineResult.TransitionNotFound: machineStatus = 'ERRO: Transição não encontrada'; break;
-                        default: machineStatus = paused ? 'Pausado' : '...'; break;
+                        default: machineStatus = '...'; break;
                     }
                     ctx.fillStyle = 'black';
                     ctx.textAlign = 'left';
-                    ctx.font = '16px monospace';
+                    ctx.font = '24px monospace';
                     ctx.fillText(
-                        `Etapas: ${machine.get_step_count()}  Estado: ${currentStateName}  Pos: (${headX}, ${headY})  ${machineStatus}`,
-                        offsetLeft * CHAR_SCALE,
-                        offsetTop * CHAR_SCALE + 20
+                        `Etapas: ${machine.get_step_count()} Pos: (${headX}, ${headY})  ${paused ? 'Pausado' : machineStatus}`,
+                        20,
+                        30
                     );
                 }
             }}
@@ -224,6 +320,17 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest }: 
                         spanning: false,
                         scale: 1.0,
                     });
+                }
+
+                if(centerTapeRequest && estado.lastCenterTapeRequest !== centerTapeRequest) {
+                    if(estado.machine) {
+                        const { span, scale } = reCenterTape(estado.machine, estado);
+                        mesclarEstado(estado, {
+                            span: span,
+                            scale: scale,
+                            lastCenterTapeRequest: centerTapeRequest,
+                        });
+                    }
                 }
             }}
             everyFrame={(estado) => {
@@ -326,6 +433,7 @@ export default function TuringPage() {
     const [programKey, setProgramKey] = useState(1);
     const [paused, setPaused] = useState(false);
     const [speed, setSpeed] = useState(0);
+    const [centerTapeRequest, setCenterTapeRequest] = useState(0);
 
     //const SPEED_LABELS = ['.', '×1', '×10', '×100', '×1k', '×∞'];
     //const SPEED_STEPS  = [0, 1, 10, 100, 1_000, -1]; // -1 = time-limited burst
@@ -451,6 +559,18 @@ export default function TuringPage() {
                         />
                         <span className='text-sm font-mono min-w-10 text-right'>{SPEED_CONFIG[speed].label} </span>
                     </div>
+
+                    {/* Recentralizar fita */}
+                    <div className='flex items-center gap-3'>
+                        <button
+                            className='px-3 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 font-medium'
+                            onClick={() => {
+                                setCenterTapeRequest(r => r + 1);
+                            }}
+                        >
+                            ⤾ Recentralizar fita
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -462,6 +582,7 @@ export default function TuringPage() {
                     paused={paused}
                     speedSteps={SPEED_CONFIG[speed].steps}
                     stepRequest={stepRequest}
+                    centerTapeRequest={centerTapeRequest}
                 />
             </div>
         </>)}

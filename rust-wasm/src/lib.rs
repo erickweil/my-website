@@ -203,6 +203,30 @@ fn pack(a: i32, b: i32) -> i64 {
     ((a as i64) << 32) | (b as u32 as i64)
 }
 
+#[inline(always)]
+fn gen_symbol_color(symbol_code: i32) -> Color {
+    match symbol_code {
+        0 => return Color::rgba(255, 255, 255, 0), // transparente para símbolo vazio
+        48 => return Color::rgba(240, 240, 240, 255), // '0'
+        49 => return Color::rgba(50, 255, 50, 255), // '1'
+        50 => return Color::rgba(50, 50, 255, 255), // '2'
+        51 => return Color::rgba(255, 50, 50, 255), // '3'
+        52 => return Color::rgba(255, 255, 50, 255), // '4'
+        53 => return Color::rgba(255, 50, 255, 255), // '5'
+        54 => return Color::rgba(50, 255, 255, 255), // '6'
+        55 => return Color::rgba(255, 128, 0, 255), // '7'
+        56 => return Color::rgba(128, 0, 255, 255), // '8'
+        57 => return Color::rgba(0, 255, 128, 255), // '9'
+        _ => {
+            // para outros símbolos, gera uma cor baseada no código unicode
+            let hue = (symbol_code.wrapping_mul(71)) % 360; // usando um número primo para distribuir as cores
+            let sat = (symbol_code.wrapping_mul(149)) % 50 + 50; // saturação entre 50% e 100%
+            let light = (symbol_code.wrapping_mul(163)) % 30 + 40; // luminosidade entre 40% e 70%
+            return Color::from_hsl(hue as f32, sat as f32 / 100.0, light as f32 / 100.0)
+        }
+    }
+}
+
 /// Limites conhecidos da fita — mantidos em sync com as escritas para permitir
 /// renderização eficiente sem varrer todo o HashMap.
 #[derive(Clone, Copy)]
@@ -245,6 +269,7 @@ pub struct TuringMachine2D {
     current_state: i32, // valor negativo = halt, 0 = wildcard, 1..N = estados normais
     step_count: u64,
     transitions: TransitionTable,
+    symbol_colors: FxHashMap<i32, Color>, // cache de cores para símbolos
 }
 
 #[wasm_bindgen]
@@ -258,6 +283,11 @@ impl TuringMachine2D {
 
         let transitions = TransitionTable::new(&program);
 
+        let mut symbol_colors = FxHashMap::default();
+        for &sym in &transitions.alphabet {
+            symbol_colors.insert(sym, gen_symbol_color(sym));
+        }
+
         Self {
             tape: FxHashMap::default(),
             tape_bounds: TapeBounds::new(start_x, start_y),
@@ -266,6 +296,7 @@ impl TuringMachine2D {
             current_state: start_state,
             step_count: 0,
             transitions,
+            symbol_colors,
         }
     }
 
@@ -344,18 +375,58 @@ impl TuringMachine2D {
         if data.len() < expected {
             return; // buffer insuficiente – caller deve realocar antes de chamar novamente
         }
-        // Percorre cada posição da janela e consulta a fita esparsa.
+        /*// Percorre cada posição da janela e consulta a fita esparsa.
         let bounds = self.tape_bounds;
         for y in 0..height {
             for x in 0..width {
                 let tape_x = x + offset_left;
                 let tape_y = y + offset_top;
+                // Padrão 0, para que o frontend só exiba células que já foram escritas
                 let cell = if bounds.contains(tape_x, tape_y) {
                     *self.tape.get(&pack(tape_x, tape_y)).unwrap_or(&0)
                 } else {
                     0
                 };
                 data[(y * width + x) as usize] = cell;
+            }
+        }*/
+
+        // Ler apenas a região dentro dos bounds
+        let bounds = self.tape_bounds;
+        let min_x = bounds.min_x.max(offset_left);
+        let max_x = bounds.max_x.min(offset_left + width - 1);
+        let min_y = bounds.min_y.max(offset_top);
+        let max_y = bounds.max_y.min(offset_top + height - 1);
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let cell = *self.tape.get(&pack(x, y)).unwrap_or(&0);
+                data[((y - offset_top) * width + (x - offset_left)) as usize] = cell;
+            }
+        }
+    }
+
+    /// Aqui irá preencher cada célula com uma cor
+    pub fn update_colorbuffer(&self, data: &mut [u8], offset_left: i32, offset_top: i32, width: i32, height: i32, canvas_width: i32, canvas_height: i32) {
+        let expected = (width * height * 4) as usize; // RGBA
+        if data.len() < expected {
+            return; // buffer insuficiente – caller deve realocar antes de chamar novamente
+        }
+
+        let bounds = self.tape_bounds;
+        let min_x = bounds.min_x.max(offset_left);
+        let max_x = bounds.max_x.min(offset_left + width - 1);
+        let min_y = bounds.min_y.max(offset_top);
+        let max_y = bounds.max_y.min(offset_top + height - 1);
+        let default_color = Color::rgba(255, 255, 255, 0);
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let cell = *self.tape.get(&pack(x, y)).unwrap_or(&0);
+                let color = self.symbol_colors.get(&cell).cloned().unwrap_or(default_color);
+                let idx = (((y - offset_top) * canvas_width + (x - offset_left)) * 4) as usize;
+                data[idx] = color.r;
+                data[idx + 1] = color.g;
+                data[idx + 2] = color.b;
+                data[idx + 3] = color.a;
             }
         }
     }
@@ -368,6 +439,8 @@ impl TuringMachine2D {
             let pos = (chunk[0], chunk[1]);
             self.tape.insert(pack(pos.0, pos.1), chunk[2]);
             self.tape_bounds.expand(pos.0, pos.1);
+
+            self.symbol_colors.entry(chunk[2]).or_insert_with(|| gen_symbol_color(chunk[2]));
         }
     }
 

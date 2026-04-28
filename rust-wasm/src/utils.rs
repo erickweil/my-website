@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+use console_error_panic_hook;
 
 // You can also log to the browser console directly
 #[wasm_bindgen]
