@@ -1,8 +1,9 @@
 use rustc_hash::FxHashMap;
+use std::collections::VecDeque;
 use wasm_bindgen::prelude::*;
 mod utils;
 mod framebuffer;
-pub use framebuffer::{Color, Framebuffer};
+pub use framebuffer::{Color};
 
 /// Direção de movimento do cabeçote.
 #[wasm_bindgen]
@@ -86,13 +87,15 @@ struct TransitionTable {
     num_states: usize,
     /// Alfabeto ordenado de codepoints usados no programa (inclui wildcards se presentes).
     alphabet: Vec<i32>,
+    /// Cores pré-geradas para cada símbolo do alfabeto, na mesma ordem. Índice corresponde ao `symbol_idx`.
+    alphabet_colors: Vec<Color>,
     /// Índice pré-computado de `CHAR_WILDCARD` no alfabeto, ou `None` se o programa
     /// não define nenhuma transição com símbolo wildcard.
     wildcard_sym_idx: Option<usize>,
 }
 
 impl TransitionTable {
-    fn new(program: &[i32]) -> Self {
+    fn new(program: &[i32], input_data: Option<&[i32]>) -> Self {
         // Primeira passagem: descobre o estado máximo e os símbolos usados como condição.
         let mut max_state: usize = 0;
         // BTreeSet mantém os símbolos ordenados — alfabeto contíguo na memória.
@@ -100,10 +103,16 @@ impl TransitionTable {
 
         for chunk in program.chunks_exact(5) {
             let state = chunk[0];
-            let symbol = chunk[1]; // condição de leitura
+            let symbol_read = chunk[1]; // condição de leitura
+            let symbol_write = chunk[2]; // valor a ser escrito na fita
             if state >= 0 {
                 max_state = max_state.max(state as usize);
             }
+            alphabet_set.insert(symbol_read);
+            alphabet_set.insert(symbol_write);
+        }
+        for chunk in input_data.unwrap_or(&[]).chunks_exact(3) {
+            let symbol = chunk[2]; // valor a ser lido na fita
             alphabet_set.insert(symbol);
         }
 
@@ -111,6 +120,8 @@ impl TransitionTable {
         let stride = alphabet.len().max(1);
         let num_states = max_state + 1;
         let wildcard_sym_idx = alphabet.binary_search(&CHAR_WILDCARD).ok();
+
+        let alphabet_colors: Vec<Color> = alphabet.iter().map(|&sym| gen_symbol_color(sym)).collect();
 
         let mut data = vec![ProgramInstruction::EMPTY; num_states * stride];
 
@@ -139,6 +150,7 @@ impl TransitionTable {
             stride,
             num_states,
             alphabet,
+            alphabet_colors,
             wildcard_sym_idx,
         }
     }
@@ -147,6 +159,11 @@ impl TransitionTable {
     #[inline(always)]
     fn symbol_to_idx(&self, sym: i32) -> Option<usize> {
         self.alphabet.binary_search(&sym).ok()
+    }
+
+    #[inline(always)]
+    fn symbol_to_color(&self, sym: i32) -> Option<Color> {
+        self.symbol_to_idx(sym).map(|idx| self.alphabet_colors[idx])
     }
 
     /// Lookup com fallback para wildcards, na ordem de prioridade:
@@ -203,6 +220,117 @@ fn pack(a: i32, b: i32) -> i64 {
     ((a as i64) << 32) | (b as u32 as i64)
 }
 
+/// Retorna `true` se o programa contiver apenas movimentos horizontais (Left/Right/None),
+/// portanto pode ser executado sobre uma fita 1D linear.
+fn program_is_1d(program: &[i32]) -> bool {
+    program
+        .chunks_exact(5)
+        .all(|chunk| !matches!(Direction::from(chunk[3]), Direction::Up | Direction::Down))
+}
+
+/// Fita da máquina de Turing.
+///
+/// A variante é escolhida **uma única vez** na construção com base no programa e nunca muda:
+/// - [`Tape::Linear`] para programas 1D (apenas Left/Right): `VecDeque` contíguo com
+///   extensão lazy nos dois extremos — acesso O(1) e excelente cache locality.
+/// - [`Tape::Sparse`] para programas 2D: `FxHashMap` esparso, igual à implementação anterior.
+enum Tape {
+    /// Fita 1D. `origin` é a coordenada x da célula armazenada em `cells[0]`.
+    Linear {
+        cells: VecDeque<i32>,
+        /// Coordenada x correspondente a `cells[0]`.
+        origin: i32,
+        default_value: i32,
+    },
+    /// Fita 2D esparsa: chave = (x, y) compactados em i64, valor = codepoint Unicode.
+    Sparse {
+        cells: FxHashMap<i64, i32>,
+        default_value: i32,
+    },
+}
+
+impl Tape {
+    fn new_linear(default_value: i32) -> Self {
+        Tape::Linear { cells: VecDeque::new(), origin: 0, default_value }
+    }
+
+    fn new_sparse(default_value: i32) -> Self {
+        Tape::Sparse { cells: FxHashMap::default(), default_value }
+    }
+
+    #[inline(always)]
+    fn default_value(&self) -> i32 {
+        match self {
+            Tape::Linear { default_value, .. } | Tape::Sparse { default_value, .. } => *default_value,
+        }
+    }
+
+    /// Lê a célula em (x, y). Retorna `default_value` para células nunca escritas.
+    #[inline(always)]
+    fn get(&self, x: i32, y: i32) -> i32 {
+        match self {
+            Tape::Linear { cells, origin, default_value } => {
+                let idx = x.wrapping_sub(*origin);
+                if idx >= 0 && (idx as usize) < cells.len() {
+                    cells[idx as usize]
+                } else {
+                    *default_value
+                }
+            }
+            Tape::Sparse { cells, default_value } => {
+                *cells.get(&pack(x, y)).unwrap_or(default_value)
+            }
+        }
+    }
+
+    /// Escreve `value` na célula (x, y), estendendo o deque se necessário.
+    #[inline(always)]
+    fn set(&mut self, x: i32, y: i32, value: i32) {
+        match self {
+            Tape::Linear { cells, origin, default_value } => {
+                let idx = x.wrapping_sub(*origin);
+                if idx < 0 {
+                    // Estende à esquerda: insere (-idx) elementos no início.
+                    let extend = (-idx) as usize;
+                    cells.reserve(extend);
+                    for _ in 0..extend {
+                        cells.push_front(*default_value);
+                    }
+                    *origin = x;
+                    cells[0] = value;
+                } else {
+                    let idx = idx as usize;
+                    if idx >= cells.len() {
+                        // Estende à direita preenchendo com default_value.
+                        cells.resize(idx + 1, *default_value);
+                    }
+                    cells[idx] = value;
+                }
+            }
+            Tape::Sparse { cells, .. } => {
+                cells.insert(pack(x, y), value);
+            }
+        }
+    }
+
+    fn initialize_tape(input_data: &[i32], head: (i32, i32), default_value: i32, is_1d: bool) -> (Tape, TapeBounds) {
+        let mut tape = if is_1d {
+            Tape::new_linear(default_value)
+        } else {
+            Tape::new_sparse(default_value)
+        };
+        let mut bounds = TapeBounds::new(head.0, head.1);
+        for chunk in input_data.chunks_exact(3) {
+            let x = chunk[0];
+            let y = chunk[1];
+            let value = chunk[2];
+            tape.set(x, y, value);
+            bounds.expand(x, y);
+        }
+        (tape, bounds)
+    }
+}
+
 #[inline(always)]
 fn gen_symbol_color(symbol_code: i32) -> Color {
     match symbol_code {
@@ -251,61 +379,85 @@ impl TapeBounds {
         if y > self.max_y { self.max_y = y; }
     }
 
+    /// Retorna a intersecção entre os bounds da fita e a viewport `[offset, offset+size)`,
+    /// ou `None` se a intersecção for vazia (nada a renderizar).
     #[inline]
-    fn contains(self, x: i32, y: i32) -> bool {
-        x >= self.min_x && x <= self.max_x && y >= self.min_y && y <= self.max_y
+    fn clip_to_viewport(self, offset_left: i32, offset_top: i32, width: i32, height: i32)
+        -> Option<(i32, i32, i32, i32)>
+    {
+        let min_x = self.min_x.max(offset_left);
+        let max_x = self.max_x.min(offset_left + width - 1);
+        let min_y = self.min_y.max(offset_top);
+        let max_y = self.max_y.min(offset_top + height - 1);
+        if min_x > max_x || min_y > max_y { 
+            None 
+        } else { 
+            Some((min_x, max_x, min_y, max_y)) 
+        }
     }
 }
 
-/// Máquina de Turing 2D com fita esparsa.
+/// Máquina de Turing 2D com fita esparsa (2D) ou linear (1D).
 #[wasm_bindgen]
 pub struct TuringMachine2D {
-    /// Fita esparsa: chave = (x, y) compactados em i64, valor = unicode char
-    tape: FxHashMap<i64, i32>,
+    /// Fita da máquina: Linear para programas 1D, Sparse para 2D.
+    /// A variante é fixada na construção e não muda durante a execução.
+    tape: Tape,
     tape_bounds: TapeBounds,
-    /// Valor que será lido em células nunca escritas (pode ser usado para simular uma fita infinita pré-carregada)
-    default_value: i32,
     head: (i32, i32),
     current_state: i32, // valor negativo = halt, 0 = wildcard, 1..N = estados normais
     step_count: u64,
+
+    input_data: Option<Vec<i32>>,
     transitions: TransitionTable,
-    symbol_colors: FxHashMap<i32, Color>, // cache de cores para símbolos
 }
 
 #[wasm_bindgen]
 impl TuringMachine2D {
     /// Cria uma nova máquina.
     #[wasm_bindgen(constructor)]
-    pub fn new(program: Vec<i32>, start_x: i32, start_y: i32, start_state: i32, default_value: i32) -> Self {
+    pub fn new(program: Vec<i32>, input_data: Option<Vec<i32>>, start_x: i32, start_y: i32, start_state: i32, default_value: i32) -> Self {
         if !program.len().is_multiple_of(5) {
             panic!("Programa deve ser múltiplo de 5 (state, read, write, dir, next)");
         }
 
-        let transitions = TransitionTable::new(&program);
+        let is_1d = program_is_1d(&program);
 
-        let mut symbol_colors = FxHashMap::default();
-        for &sym in &transitions.alphabet {
-            symbol_colors.insert(sym, gen_symbol_color(sym));
-        }
+        // Preenche a fita com os dados de input
+        let (tape, tape_bounds) = Tape::initialize_tape(
+            input_data.as_deref().unwrap_or(&[]),
+            (start_x, start_y),
+            default_value,
+            is_1d,
+        );
+        let transitions = TransitionTable::new(&program, input_data.as_deref());
 
         Self {
-            tape: FxHashMap::default(),
-            tape_bounds: TapeBounds::new(start_x, start_y),
-            default_value,
+            tape,
+            tape_bounds,
             head: (start_x, start_y),
             current_state: start_state,
             step_count: 0,
+            input_data,
             transitions,
-            symbol_colors,
         }
     }
 
     pub fn reset(&mut self, start_x: i32, start_y: i32, start_state: i32) {
-        self.tape.clear();
-        self.tape_bounds = TapeBounds::new(start_x, start_y);
         self.head = (start_x, start_y);
         self.current_state = start_state;
         self.step_count = 0;
+
+        let is_1d = matches!(self.tape, Tape::Linear { .. });
+        let default_value = self.tape.default_value();
+        let (tape, tape_bounds) = Tape::initialize_tape(
+            self.input_data.as_deref().unwrap_or(&[]),
+            (start_x, start_y),
+            default_value,
+            is_1d,
+        );
+        self.tape = tape;
+        self.tape_bounds = tape_bounds;
     }
 
     /// Executa um único ciclo. Retorna `true` se continua ou `false` em Halt.
@@ -314,9 +466,8 @@ impl TuringMachine2D {
             return TuringMachineResult::Halt;
         }
 
-        // Lê o char sob o cabeçote (fita esparsa; células nunca escritas retornam default_value).
-        let head_key = pack(self.head.0, self.head.1);
-        let read_char = *self.tape.get(&head_key).unwrap_or(&self.default_value);
+        // Lê o char sob o cabeçote (células nunca escritas retornam default_value).
+        let read_char = self.tape.get(self.head.0, self.head.1);
 
         // Lookup O(1) na tabela plana: índice direto com fallback para wildcards.
         let Some(instr) = self.transitions.get(self.current_state, read_char) else {
@@ -325,7 +476,7 @@ impl TuringMachine2D {
 
         // 1. Escreve na fita
         if instr.write != CHAR_WILDCARD {
-            self.tape.insert(head_key, instr.write);
+            self.tape.set(self.head.0, self.head.1, instr.write);
         }
 
         // 2. Move o cabeçote
@@ -375,72 +526,41 @@ impl TuringMachine2D {
         if data.len() < expected {
             return; // buffer insuficiente – caller deve realocar antes de chamar novamente
         }
-        /*// Percorre cada posição da janela e consulta a fita esparsa.
-        let bounds = self.tape_bounds;
-        for y in 0..height {
-            for x in 0..width {
-                let tape_x = x + offset_left;
-                let tape_y = y + offset_top;
-                // Padrão 0, para que o frontend só exiba células que já foram escritas
-                let cell = if bounds.contains(tape_x, tape_y) {
-                    *self.tape.get(&pack(tape_x, tape_y)).unwrap_or(&0)
-                } else {
-                    0
-                };
-                data[(y * width + x) as usize] = cell;
-            }
-        }*/
+        
+        let Some((min_x, max_x, min_y, max_y)) =
+            self.tape_bounds.clip_to_viewport(offset_left, offset_top, width, height)
+        else { return };
 
-        // Ler apenas a região dentro dos bounds
-        let bounds = self.tape_bounds;
-        let min_x = bounds.min_x.max(offset_left);
-        let max_x = bounds.max_x.min(offset_left + width - 1);
-        let min_y = bounds.min_y.max(offset_top);
-        let max_y = bounds.max_y.min(offset_top + height - 1);
         for y in min_y..=max_y {
             for x in min_x..=max_x {
-                let cell = *self.tape.get(&pack(x, y)).unwrap_or(&0);
-                data[((y - offset_top) * width + (x - offset_left)) as usize] = cell;
+                let idx = ((y - offset_top) * width + (x - offset_left)) as usize; 
+                data[idx] = self.tape.get(x, y);
             }
         }
     }
 
     /// Aqui irá preencher cada célula com uma cor
     pub fn update_colorbuffer(&self, data: &mut [u8], offset_left: i32, offset_top: i32, width: i32, height: i32, canvas_width: i32, canvas_height: i32) {
-        let expected = (width * height * 4) as usize; // RGBA
+        let expected = (canvas_width * canvas_height * 4) as usize; // RGBA
         if data.len() < expected {
             return; // buffer insuficiente – caller deve realocar antes de chamar novamente
         }
 
-        let bounds = self.tape_bounds;
-        let min_x = bounds.min_x.max(offset_left);
-        let max_x = bounds.max_x.min(offset_left + width - 1);
-        let min_y = bounds.min_y.max(offset_top);
-        let max_y = bounds.max_y.min(offset_top + height - 1);
+        let Some((min_x, max_x, min_y, max_y)) =
+            self.tape_bounds.clip_to_viewport(offset_left, offset_top, width, height)
+        else { return };
+
         let default_color = Color::rgba(255, 255, 255, 0);
         for y in min_y..=max_y {
             for x in min_x..=max_x {
-                let cell = *self.tape.get(&pack(x, y)).unwrap_or(&0);
-                let color = self.symbol_colors.get(&cell).cloned().unwrap_or(default_color);
+                let cell = self.tape.get(x, y);
+                let color = self.transitions.symbol_to_color(cell).unwrap_or(default_color);
                 let idx = (((y - offset_top) * canvas_width + (x - offset_left)) * 4) as usize;
                 data[idx] = color.r;
                 data[idx + 1] = color.g;
                 data[idx + 2] = color.b;
                 data[idx + 3] = color.a;
             }
-        }
-    }
-
-    /// Pré-carrega células na fita.
-    ///
-    /// `data` é um array plano `[x0, y0, char, x1, y1, char, ...]`.
-    pub fn preload_tape(&mut self, data: &[i32]) {
-        for chunk in data.chunks_exact(3) {
-            let pos = (chunk[0], chunk[1]);
-            self.tape.insert(pack(pos.0, pos.1), chunk[2]);
-            self.tape_bounds.expand(pos.0, pos.1);
-
-            self.symbol_colors.entry(chunk[2]).or_insert_with(|| gen_symbol_color(chunk[2]));
         }
     }
 

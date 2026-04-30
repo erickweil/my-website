@@ -296,35 +296,47 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest, ce
                         20,
                         30
                     );
+
+                    // Tamanho da fita
+                    const tapeBounds = estado.tapeBoundsBuffer;
+                    machine.get_tape_bounds(tapeBounds);
+                    const tapeWidth = tapeBounds[1] - tapeBounds[0] + 1;
+                    const tapeHeight = tapeBounds[3] - tapeBounds[2] + 1;
+                    ctx.fillText(
+                        `Tamanho da fita: ${tapeWidth} x ${tapeHeight}`,
+                        20,
+                        60
+                    );
                 }
             }}
             onPropsChange={(estado) => {
                 const keyChanged    = estado.programKey !== (programKey ?? 0);
                 const programChanged = estado.program !== (program || null);
+                const machine = estado.machine;
                 if(programChanged || keyChanged) {
-                    if(estado.machine) {
+                    if(machine) {
                         // Objetos criados via WASM não são GC'ed
                         // É necessário liberar manualmente a memória quando não forem mais necessários
-                        estado.machine.free();
+                        estado.machine = null;
+                        machine.free();
                     }
                     mesclarEstado(estado, {
                         program: program || null,
                         programKey: programKey ?? 0,
                         machine: null,
                         tapeData: null,
+                        tapeColorData: null,
+                        tapeColorCanvas: null,
                         stateMap: null,
-                        reverseStateMap: null,
                         machineResult: null,
                         span: { x: 0, y: 0 },
                         spanningStart: { x: 0, y: 0 },
                         spanning: false,
                         scale: 1.0,
                     });
-                }
-
-                if(centerTapeRequest && estado.lastCenterTapeRequest !== centerTapeRequest) {
-                    if(estado.machine) {
-                        const { span, scale } = reCenterTape(estado.machine, estado);
+                } else if(centerTapeRequest && estado.lastCenterTapeRequest !== centerTapeRequest) {
+                    if(machine) {
+                        const { span, scale } = reCenterTape(machine, estado);
                         mesclarEstado(estado, {
                             span: span,
                             scale: scale,
@@ -338,11 +350,8 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest, ce
                 if(!machine) {
                     if(estado.program) {
                         const { compiledProgram, stateMap, input, startState, defaultValue } = compileTuringCode(estado.program);
-                        machine = new TuringMachine2D(compiledProgram, 0, 0, startState, defaultValue);
-                        if(input) {
-                            machine.preload_tape(input);
-                        }
-
+                        machine = new TuringMachine2D(compiledProgram, input, 0, 0, startState, defaultValue);
+                        
                         // Centralizar a fita no meio da tela
                         const { span, scale } = reCenterTape(machine, estado);
 
@@ -351,6 +360,7 @@ function TuringCanvas({ program, programKey, speedSteps, paused, stepRequest, ce
                             machine: machine,
                             machineResult: null,
                             tapeData: null,
+                            tapeColorData: null,
                             stateMap: stateMap,
                             lastHandledStepRequest: stepRequest ?? 0,
                             span: span,
