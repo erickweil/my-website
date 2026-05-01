@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build:turing-lezer": "cd src/app/toy/turing && lezer-generator turing.grammar -o turingParser.js",
-    "prebuild": "cd rust-wasm && wasm-pack build --release --target web --out-dir ../src/pkg",
+    "build:turing-wasm": "bash buildWasm.sh",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
