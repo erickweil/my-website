@@ -169,12 +169,15 @@ The machine halts when it reaches states named 'accept', 'reject', or any state 
 export function compileTuringCode(code: string): {
     compiledProgram: Int32Array,
     stateMap: Map<string, number>,
+    /** Mapeia stateCode → número de linha 1-based da primeira transição com esse estado. */
+    transitionToLineMap: Map<number, number>,
     input: Int32Array | null,
     defaultValue: number,
     startState: number
  } {
     let defaultValue = 0;
     const stateMap = new Map<string, number>();
+    const transitionToLineMap = new Map<number, number>();
     const inputMap = new Map<string, number>();
     const transitions: number[] = [];
 
@@ -187,6 +190,7 @@ export function compileTuringCode(code: string): {
         return {
             compiledProgram: new Int32Array(0),
             stateMap,
+            transitionToLineMap: transitionToLineMap,
             input: null,
             defaultValue,
             startState: 1,
@@ -233,6 +237,7 @@ export function compileTuringCode(code: string): {
             if (cursor.firstChild()) {
                 // Os 5 filhos chegam em ordem; cada wrapper cobre exatamente
                 // o mesmo intervalo de texto que seu único filho interno.
+                const currentStateFrom = cursor.from; // posição do CurrentState no código
                 const currentStateText = text(cursor.from, cursor.to); // CurrentState
                 cursor.nextSibling();
                 const readSymText     = text(cursor.from, cursor.to); // ReadSymbol
@@ -251,6 +256,10 @@ export function compileTuringCode(code: string): {
                     parseDirection(dirText),
                     parseState(nextStateText, stateMap),
                 );
+
+                // Registra a posição da transição
+                const lineNum = code.slice(0, currentStateFrom).split('\n').length;
+                transitionToLineMap.set(Math.floor((transitions.length-5)/5), lineNum);
             }
         }
     } while (cursor.nextSibling());
@@ -267,6 +276,7 @@ export function compileTuringCode(code: string): {
     return {
         compiledProgram: new Int32Array(transitions),
         stateMap,
+        transitionToLineMap: transitionToLineMap,
         input: inputArray.length > 0 ? inputArray : null,
         defaultValue,
         startState: stateMap.get("START") || 1,

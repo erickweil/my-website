@@ -3,6 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { useWasm } from '@/lib/useWasm';
 import { TuringCanvas } from './turingCanvas';
 import TuringEditor, { exampleCodes } from './turingEditor';
+import { compileTuringCode } from './turingLanguage';
 
 export default function TuringPage() {
     const wasm = useWasm();
@@ -15,6 +16,13 @@ export default function TuringPage() {
     const [paused, setPaused] = useState(false);
     const [speed, setSpeed] = useState(0);
     const [centerTapeRequest, setCenterTapeRequest] = useState(0);
+
+    // Linha destacada no editor (linha em execução)
+    const [highlightLine, setHighlightLine] = useState<number | null>(null);
+
+    const handleStateChange = useCallback((lineHighlight: number | null) => {
+        setHighlightLine(lineHighlight);
+    }, [setHighlightLine]);
 
     const SPEED_CONFIG = [
         { label: '.', steps: 0 },
@@ -29,6 +37,7 @@ export default function TuringPage() {
     const isLoaded = runningCode !== null;
 
     function handleLoad() {
+        setHighlightLine(null);
         setRunningCode(currentCode);
         setProgramKey(k => k + 1);
         setPaused(false);
@@ -36,6 +45,7 @@ export default function TuringPage() {
     }
 
     function handleReset() {
+        setHighlightLine(null);
         setRunningCode(currentCode);
         setProgramKey(k => k + 1);
         setPaused(true);
@@ -70,7 +80,7 @@ export default function TuringPage() {
             {/* Painel lateral */}
             <div className='min-w-84 w-84 flex flex-col gap-3 p-4 h-full border-r'>
 
-                <TuringEditor value={currentCode} onChange={handleCodeChange} />
+                <TuringEditor value={currentCode} onChange={handleCodeChange} highlightLine={highlightLine} />
 
                 <div className='flex flex-col gap-2'>
 
@@ -144,6 +154,7 @@ export default function TuringPage() {
                     speedSteps={SPEED_CONFIG[speed].steps}
                     stepRequest={stepRequest}
                     centerTapeRequest={centerTapeRequest}
+                    onStateChange={handleStateChange}
                 />
             </div>
         </>)}

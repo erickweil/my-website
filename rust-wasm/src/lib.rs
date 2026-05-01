@@ -92,6 +92,9 @@ struct TransitionTable {
     /// Índice pré-computado de `CHAR_WILDCARD` no alfabeto, ou `None` se o programa
     /// não define nenhuma transição com símbolo wildcard.
     wildcard_sym_idx: Option<usize>,
+
+    /// Vetor que relaciona transição (índice * stride) com índice da instrução do programa
+    transition_map: Vec<Option<usize>>,   
 }
 
 impl TransitionTable {
@@ -101,15 +104,16 @@ impl TransitionTable {
         // BTreeSet mantém os símbolos ordenados — alfabeto contíguo na memória.
         let mut alphabet_set: std::collections::BTreeSet<i32> = std::collections::BTreeSet::new();
 
-        for chunk in program.chunks_exact(5) {
-            let state = chunk[0];
-            let symbol_read = chunk[1]; // condição de leitura
-            let symbol_write = chunk[2]; // valor a ser escrito na fita
-            if state >= 0 {
-                max_state = max_state.max(state as usize);
+        let (chunks, remainder) = program.as_chunks::<5>();
+        if !remainder.is_empty() {
+            panic!("Programa deve ser múltiplo de 5 (state, read, write, dir, next)");
+        }
+        for [state, symbol, write, _diri32, _next] in chunks.iter() {
+            if *state >= 0 {
+                max_state = max_state.max(*state as usize);
             }
-            alphabet_set.insert(symbol_read);
-            alphabet_set.insert(symbol_write);
+            alphabet_set.insert(*symbol);
+            alphabet_set.insert(*write);
         }
         for chunk in input_data.unwrap_or(&[]).chunks_exact(3) {
             let symbol = chunk[2]; // valor a ser lido na fita
@@ -124,25 +128,27 @@ impl TransitionTable {
         let alphabet_colors: Vec<Color> = alphabet.iter().map(|&sym| gen_symbol_color(sym)).collect();
 
         let mut data = vec![ProgramInstruction::EMPTY; num_states * stride];
+        let mut transition_map = vec![None; num_states * stride];
 
-        for chunk in program.chunks_exact(5) {
-            let state = chunk[0];
-            let symbol = chunk[1];
+        for (i, [state, symbol, write, diri32, next]) in chunks.iter().enumerate() {
             // Estados negativos são de Halt — nunca são origem de transição.
-            if state < 0 {
+            if *state < 0 {
                 continue;
             }
-            let state_idx = state as usize;
             // Busca binária: O(log k), k = tamanho do alfabeto (tipicamente < 16).
-            let sym_idx = match alphabet.binary_search(&symbol) {
+            let sym_idx = match alphabet.binary_search(symbol) {
                 Ok(i) => i,
                 Err(_) => continue,
             };
-            data[state_idx * stride + sym_idx] = ProgramInstruction {
-                write: chunk[2],
-                dir: Direction::from(chunk[3]),
-                next: chunk[4],
+            let transition_idx = (*state as usize) * stride + sym_idx;
+            data[transition_idx] = ProgramInstruction {
+                write: *write,
+                dir: Direction::from(*diri32),
+                next: *next,
             };
+
+            // Armazena o índice da transição original para possível depuração ou análise posterior.
+            transition_map[transition_idx] = Some(i);
         }
 
         Self {
@@ -152,6 +158,8 @@ impl TransitionTable {
             alphabet,
             alphabet_colors,
             wildcard_sym_idx,
+
+            transition_map,
         }
     }
 
@@ -169,7 +177,7 @@ impl TransitionTable {
     /// Lookup com fallback para wildcards, na ordem de prioridade:
     /// (state, sym) → (state, *) → (*, sym) → (*, *)
     #[inline(always)]
-    fn get(&self, state: i32, sym: i32) -> Option<ProgramInstruction> {
+    fn get(&self, state: i32, sym: i32) -> Option<(usize, ProgramInstruction)> {
         debug_assert!(state >= 0);
         let state_idx = state as usize;
         // Estado desconhecido (bug no programa) — evita panic em release.
@@ -179,33 +187,39 @@ impl TransitionTable {
 
         let base = state_idx * self.stride;
         let sym_idx = self.symbol_to_idx(sym);
+        let mut instr_idx: usize;
+        let mut instr: ProgramInstruction;
 
         // 1. (estado exato, símbolo exato)
         if let Some(si) = sym_idx {
-            let instr = self.data[base + si];
+            instr_idx = base + si;
+            instr = self.data[instr_idx];
             if instr.is_valid() {
-                return Some(instr);
+                return Some((instr_idx, instr));
             }
         }
         // 2. (estado exato, símbolo wildcard)
         if let Some(wi) = self.wildcard_sym_idx {
-            let instr = self.data[base + wi];
+            instr_idx = base + wi;
+            instr = self.data[instr_idx];
             if instr.is_valid() {
-                return Some(instr);
+                return Some((instr_idx, instr));
             }
         }
         // 3. (estado wildcard, símbolo exato)
         if let Some(si) = sym_idx {
-            let instr = self.data[STATE_WILDCARD * self.stride + si];
+            instr_idx = STATE_WILDCARD * self.stride + si; 
+            instr = self.data[instr_idx];
             if instr.is_valid() {
-                return Some(instr);
+                return Some((instr_idx, instr));
             }
         }
         // 4. (estado wildcard, símbolo wildcard)
         if let Some(wi) = self.wildcard_sym_idx {
-            let instr = self.data[STATE_WILDCARD * self.stride + wi];
+            instr_idx = STATE_WILDCARD * self.stride + wi;
+            instr = self.data[instr_idx];
             if instr.is_valid() {
-                return Some(instr);
+                return Some((instr_idx, instr));
             }
         }
 
@@ -417,10 +431,6 @@ impl TuringMachine2D {
     /// Cria uma nova máquina.
     #[wasm_bindgen(constructor)]
     pub fn new(program: Vec<i32>, input_data: Option<Vec<i32>>, start_x: i32, start_y: i32, start_state: i32, default_value: i32) -> Self {
-        if !program.len().is_multiple_of(5) {
-            panic!("Programa deve ser múltiplo de 5 (state, read, write, dir, next)");
-        }
-
         let is_1d = program_is_1d(&program);
 
         // Preenche a fita com os dados de input
@@ -470,7 +480,7 @@ impl TuringMachine2D {
         let read_char = self.tape.get(self.head.0, self.head.1);
 
         // Lookup O(1) na tabela plana: índice direto com fallback para wildcards.
-        let Some(instr) = self.transitions.get(self.current_state, read_char) else {
+        let Some((_instr_idx, instr)) = self.transitions.get(self.current_state, read_char) else {
             return TuringMachineResult::TransitionNotFound;
         };
 
@@ -540,7 +550,7 @@ impl TuringMachine2D {
     }
 
     /// Aqui irá preencher cada célula com uma cor
-    pub fn update_colorbuffer(&self, data: &mut [u8], offset_left: i32, offset_top: i32, width: i32, height: i32, canvas_width: i32, canvas_height: i32) {
+    pub fn update_colorbuffer(&self, data: &mut [u8], offset_left: i32, offset_top: i32, width: i32, height: i32, canvas_width: i32, canvas_height: i32, scale: i32) {
         let expected = (canvas_width * canvas_height * 4) as usize; // RGBA
         if data.len() < expected {
             return; // buffer insuficiente – caller deve realocar antes de chamar novamente
@@ -551,11 +561,15 @@ impl TuringMachine2D {
         else { return };
 
         let default_color = Color::rgba(255, 255, 255, 0);
-        for y in min_y..=max_y {
-            for x in min_x..=max_x {
+        for y in (min_y..=max_y).step_by(scale as usize) {
+            for x in (min_x..=max_x).step_by(scale as usize) {
                 let cell = self.tape.get(x, y);
                 let color = self.transitions.symbol_to_color(cell).unwrap_or(default_color);
-                let idx = (((y - offset_top) * canvas_width + (x - offset_left)) * 4) as usize;
+                let canvas_x = ((x - offset_left) / scale) as i32;
+                let canvas_y = ((y - offset_top) / scale) as i32;
+                debug_assert!(canvas_x >= 0 && canvas_x < canvas_width, "canvas_x out of bounds: {}", canvas_x);
+                debug_assert!(canvas_y >= 0 && canvas_y < canvas_height, "canvas_y out of bounds: {}", canvas_y);
+                let idx = ((canvas_y * canvas_width + canvas_x) * 4) as usize;
                 data[idx] = color.r;
                 data[idx + 1] = color.g;
                 data[idx + 2] = color.b;
@@ -571,6 +585,23 @@ impl TuringMachine2D {
     /// Retorna o estado atual.
     pub fn get_state(&self) -> i32 {
         self.current_state
+    }
+
+    /// Índice da última transição executada
+    pub fn get_next_transition(&self) -> Option<i32> {
+        if self.current_state < 0 {
+            return None; // Halt - não há transição a seguir
+        }
+
+        // Lê o char sob o cabeçote (células nunca escritas retornam default_value).
+        let read_char = self.tape.get(self.head.0, self.head.1);
+
+        // Lookup O(1) na tabela plana: índice direto com fallback para wildcards.
+        let Some((instr_idx, _instr)) = self.transitions.get(self.current_state, read_char) else {
+            return None; // Transição não encontrada - programa malformado
+        };
+
+        self.transitions.transition_map[instr_idx].map(|idx| idx as i32)
     }
 
     /// Retorna a posição X do cabeçote.
