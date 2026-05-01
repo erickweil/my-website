@@ -118,8 +118,8 @@ const CanvasController = <T extends EstadoType,>(
             ...(options.initialState ? options.initialState : {}),
             offsetLeft: 0,
             offsetTop: 0,
-            width: window.innerWidth,
-            height: window.innerHeight,
+            width: 0,
+            height: 0,
             _changes: 1
         } as T
     });
@@ -167,11 +167,12 @@ const CanvasController = <T extends EstadoType,>(
         // Timer
         let animationFrameId = 0;
 
-        // Listener de Resize
+        // Listener de Resize — usa o contêiner pai para respeitar width/height: 100%
         const doResize = () => {
+            const parent = canvas.parentElement ?? canvas;
             const { top, left } = canvas.getBoundingClientRect();
-            const width = window.innerWidth;
-            const height = window.innerHeight - top;
+            const width = parent.clientWidth;
+            const height = parent.clientHeight;
 
             if (canvas.width !== width || canvas.height !== height) {
                 const estado = canvasRef.current.estado;
@@ -189,7 +190,8 @@ const CanvasController = <T extends EstadoType,>(
         };
 
         const debounceHandleResize = debounce(doResize, 100);
-        window.addEventListener("resize", debounceHandleResize);
+        const resizeObserver = new ResizeObserver(debounceHandleResize);
+        resizeObserver.observe(canvas.parentElement ?? canvas);
 
         // Timer que se auto-registra recursivamente
         const render = () => {
@@ -222,7 +224,7 @@ const CanvasController = <T extends EstadoType,>(
         // Retorna a função que cancela o timer
         return () => {
             window.cancelAnimationFrame(animationFrameId);
-            window.removeEventListener("resize", debounceHandleResize);
+            resizeObserver.disconnect();
 
             if (onDismountRef.current) {
                 const estado = canvasRef.current.estado;
