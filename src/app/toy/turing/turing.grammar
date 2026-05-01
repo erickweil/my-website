@@ -1,0 +1,74 @@
+// Grammar for the Turing Machine language
+// Each non-comment, non-directive line is a transition tuple of 5 tokens:
+//   CurrentState  ReadSymbol  WriteSymbol  MoveDir  NextState
+// Symbols can be quoted strings or bare tokens.
+// Directives: "default VALUE", "input VALUE" and "input[x,y] VALUE"
+// Comments: // to end of line
+
+@top Program { statement* }
+
+@skip { space }
+
+statement {
+  LineComment
+  | DefaultDirective
+  | InputDirective
+  | Transition
+}
+
+// ── Directives ───────────────────────────────────────────────────────────────
+
+DefaultDirective { defaultKw Symbol }
+
+InputDirective   { InputKw Symbol }
+
+// ── Transition tuple ─────────────────────────────────────────────────────────
+
+Transition { CurrentState ReadSymbol WriteSymbol MoveDir NextState }
+
+CurrentState { Name }
+ReadSymbol   { Symbol }
+WriteSymbol  { Symbol }
+MoveDir      { Name }
+NextState    { HaltKw | Name }
+
+// A symbol is either a bare name, a special-symbol keyword, or a quoted string
+Symbol { SpecialSymbolKw | Name | QuotedString }
+
+// ── Specialised tokens ───────────────────────────────────────────────────────
+
+// "default" and "HALT" are specialised from the generic Name token so the
+// parser can distinguish them without ambiguity.
+defaultKw      { @specialize[@name=DirectiveKeyword]<Name, "default"> }
+SpecialSymbolKw { @specialize[@name=SpecialSymbol]<Name, "_" | "ERASE" | "BLANK" | "*" | "ELSE" | "SAME"> }
+HaltKw         { @specialize[@name=Halt]<Name, "HALT">
+           | @specialize[@name=Halt]<Name, "halt"> }
+
+InputKw[@name=InputKeyword] { inputId ("[" Number "," Number "]")? }
+
+// ── Tokens ───────────────────────────────────────────────────────────────────
+
+@tokens {
+  // Skip horizontal whitespace and newlines between statements
+  space { $[ \t\n\r]+ }
+
+  // Line comment – must have higher precedence than Name
+  LineComment { "//" ![\n]* }
+
+  // Generic bare token: letters, digits, and common Turing symbols
+  Name { $[a-zA-Z0-9_*\-+<>=!@#^&.] $[a-zA-Z0-9_*\-+<>=!@#^&.]* }
+
+  // The literal word "input" used in InputKw
+  inputId[@name=DirectiveKeyword] { "input" }
+
+  // Digits optionally preceded by a minus sign, used inside InputKw brackets
+  Number { $[-]? $[0-9]+ }
+
+  // Double-quoted string, supports backslash escapes
+  QuotedString { '"' (!["\\] | "\\" _)* '"' }
+
+  // Explicit single-character tokens used inside InputKw
+  "[" "]" ","
+
+  @precedence { LineComment, inputId, Name }
+}
