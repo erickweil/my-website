@@ -4,7 +4,7 @@ import SudokuGrid from "./sudoku-grid";
 
 export default function SudokuMinado() {
     return (
-        <main className="flex min-h-screen flex-col items-center p-24">
+        <main className="flex min-h-screen flex-col items-center p-4">
             <article className="my-8 max-w-3xl">
             <h1 className="text-4xl font-bold mb-8">Sudoku Minado (Minesweeper: The Sudoku)</h1>
             <p className="text-lg mb-4">
@@ -13,7 +13,15 @@ export default function SudokuMinado() {
             </p>
             <div className="mb-8 flex flex-col gap-2 items-center">
             Vídeo com explicação das regras:
-            <iframe width="560" height="315" src="https://www.youtube.com/embed/OlcsRopfY-o?si=kD_wMebwVJTPaJOh" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen></iframe>
+            <iframe 
+                className="w-full aspect-video"
+                src="https://www.youtube.com/embed/OlcsRopfY-o?si=kD_wMebwVJTPaJOh" 
+                title="YouTube video player" 
+                frameBorder="0" 
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                referrerPolicy="strict-origin-when-cross-origin" 
+                allowFullScreen
+            ></iframe>
             </div>
             <p className="text-lg mb-4">
                 Regras do Jogo:

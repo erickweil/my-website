@@ -127,6 +127,9 @@
 .sudokuCell {
     border: 1px solid var(--foreground);
     /*box-sizing: border-box;*/
+
+    /* https://stackoverflow.com/questions/16056591/font-scaling-based-on-size-of-container */
+    container-type: size;
 }
 
 @font-face {
@@ -139,18 +142,25 @@
 .sudokuInput {
     width: 100%;
     aspect-ratio: 1;
-    border: none;
     text-align: center;
-    font-size: 3rem;
+    font-size: 3rem; /* padrão quando cqw não é suportado */
+    font-size: clamp(0.5rem, 6cqw, 3rem); 
     font-family: 'SudokuMinadoFont', sans-serif;
     box-sizing: border-box;
-    border: 10px solid transparent;
+
+    /*border: 8px solid transparent;*/
+    border-width: 10px;
+    border-width: clamp(1px, 2cqw, 16px);
+    border-style: solid;
+    border-color: transparent;
 }
 
 .minesweeperfog {
     background-color: #C0C0C0;
-    border: #E0E0E0 10px solid;
+    border-width: 10px;
+    border-width: clamp(1px, 2cqw, 16px);
     border-style: outset;
+    border-color: #E0E0E0;
 }
 
 .minesweeperclear {

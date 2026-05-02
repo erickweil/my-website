@@ -1,44 +1,60 @@
-Olá seja bem vindo!
+# my-website
 
-A proposta deste projeto é agregar em uma única página web diversos utilitários, experimentos, simulações, etc...
+Portfólio pessoal com utilitários, experimentos e simulações de computação — feitos para explorar conceitos de CS de forma interativa.
 
-✅ Online em: https://liewkcire.vercel.app/
+🌐 **Online em:** [liewkcire.vercel.app](https://liewkcire.vercel.app/)
 
--- -
+---
 
-```
-Em construção:
-┌──────────────────────────────────────────────────┐
-│█▍2%                                              │ 
-└──────────────────────────────────────────────────┘
-```
+## Projetos
 
-## Instruções para executar localmente:
+| Projeto | Status |
+|---|---|
+| 💣 Sudoku Minado | ✅ Finalizado |
+| 📅 Gerador de Horário Escolar | 🚧 MVP, Experimento. |
+| ⚙️ Simulador de Máquina de Turing | ✅ Finalizado |
+| 🧬 Algoritmos Genéticos | 🚧 Em construção |
 
-1. Clone o repositório e entre na pasta do projeto
+---
+
+## Stack
+
+- **Framework:** [Next.js](https://nextjs.org/)
+- **UI:** [shadcn/ui](https://ui.shadcn.com/) + [Tailwind CSS](https://tailwindcss.com/)
+- **WASM:** Rust + [wasm-pack](https://rustwasm.github.io/wasm-pack/)
+- **Deploy:** [Vercel](https://vercel.com/)
+
+---
+
+## Executando localmente
+
+### Pré-requisitos
+
+- [Node.js](https://github.com/nvm-sh/nvm#installing-and-updating) (recomendado via `nvm`)
+- [Rust](https://rustup.rs/)
+- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
+
+### Passos
+
 ```bash
+# 1. Clone o repositório
 git clone https://github.com/erickweil/my-website.git
 cd my-website
-```
 
-2. Instale as dependências necessárias
-- Node.js  https://www.freecodecamp.org/news/node-version-manager-nvm-install-guide/
-- Rust  https://rust-lang.org/tools/install/
-- wasm-pack  https://www.npmjs.com/package/wasm-pack
-
-3. Faça a instalação das dependências do projeto
-- Dependências do Node.js
-```bash
+# 2. Instale as dependências Node
 npm install
-```
-- Dependências do Rust
-```bash
-cd rust-wasm
-cargo build
-```
 
-4. Compile o código rust e então inicie o servidor de desenvolvimento
-```bash
-npm run prebuild
+# 3. Compile o módulo WebAssembly (Rust → WASM)
+npm run build:turing-wasm
+
+# 4. Inicie o servidor de desenvolvimento
 npm run dev
 ```
+
+Acesse [http://localhost:3000](http://localhost:3000).
+
+---
+
+## Licença
+
+Distribuído sob a licença MIT. Veja [LICENSE](LICENSE) para mais detalhes.

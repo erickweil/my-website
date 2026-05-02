@@ -95,7 +95,9 @@ function drawTSP(ctx: CanvasRenderingContext2D, ga: GeneticAlgorithm<number[]> |
 }
 
 export default function Genetic() {
-    return <NonSSRWrapper>
+    return <div className="h-screen max-h-screen w-full flex flex-row overflow-hidden">
+        <div className='w-full h-full overflow-hidden'>
+        <NonSSRWrapper>
         <ZoomableCanvas<GeneticEstado>
             options={{
                 useTouchManager: true,
@@ -126,24 +128,33 @@ export default function Genetic() {
                 
                 ctx.fillStyle = "black";
                 ctx.font = "20px Arial";
-                ctx.fillText(`Cliques: ${estado.cliques || 0}`, w-120, 30);
+                ctx.textAlign = "left";
 
                 if(estado.progress) {
                     const { generation, fitness, stagnatedFor } = estado.progress;
-                    ctx.fillText(`Gen: ${generation}`, 10, 30);
-                    ctx.fillText(`Fitness: ${fitness}`, 10, 60);
-                    ctx.fillText(`Stagnated for: ${stagnatedFor} gens`, 10, 90);
-                    //ctx.fillText(`Pop size: ${gaConfig?.populationSize ?? 0}`, 10, 120);
+                    if(generation && generation > 0) {
+                        ctx.fillText(`Gen: ${generation}`, 10, 30);
+                        ctx.fillText(`Fitness: ${fitness}`, 10, 60);
+                        ctx.fillText(`Stagnated for: ${stagnatedFor} gens`, 10, 90);
+                    }
 
                     const ga = estado.ga;
-                    ctx.fillText(`Pop size: ${ga?.population.length ?? 0}`, 10, 120);
 
-                    if(ga?.problem && ga.problem instanceof TSPProblem) {
+                    if(ga?.problem && ga.problem instanceof TSPProblem && ga.population.length > 0) {
+                        
+                        ctx.fillText(`Pop size: ${ga?.population.length ?? 0}`, 10, 120);
                         drawTSP(
                             ctx,
                             ga as GeneticAlgorithm<number[]>, 
                             estado.progress! as GAProgressEvent<number[]>
                         );
+                    } else {
+                        // texto "Clique para adicionar cidades" centralizado
+                        ctx.textAlign = "center";
+                        ctx.font = "24px Arial";
+                        ctx.fillText("Traveling Salesman Problem", w / 2, h / 2);
+                        ctx.font = "18px Arial";
+                        ctx.fillText("Clique para adicionar cidades", w / 2, h / 2 + 30);
                     }
                 }
             }}
@@ -201,5 +212,7 @@ export default function Genetic() {
                 console.log("Canvas is being dismounted, final state:", estado);
             }}
         />
-    </NonSSRWrapper>;
+    </NonSSRWrapper>
+    </div>
+    </div>;
 }

@@ -4,9 +4,11 @@ import styles from "./sudoku.module.css";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { cn } from "@/lib/classMerge";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { raceWorkers, WorkerResponseMsg } from "@/lib/workerRace";
 import { WorkerTaskValue } from "./sudoku-minado-solver";
+
+const LOCAL_STORAGE_KEY = "sudoku-minado-estado";
 
 function mapTextoParaValor(v: string): number {
     v = v.trim();
@@ -86,38 +88,97 @@ async function executarSolverWorkers(
     return { solucaoCompleta: quadro, desmarcado };
 }
 
-export default function SudokuGrid() {
-    const [desafioState, setDesafioState] = useState<DesafioStateType>({
-        carregando: false,
-        resolvido: defaultQuadro.map(mapTextoParaValor),
-        desmarcado: [
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 1, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 5,
-            0, 0, 0, 0, 0, 0,
-        ],
-        progresso: 100,
-    });
+const defaultDesafioState: DesafioStateType = {
+    carregando: false,
+    resolvido: defaultQuadro.map(mapTextoParaValor),
+    desmarcado: [
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0, 1, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 5,
+        0, 0, 0, 0, 0, 0,
+    ],
+    progresso: 100,
+};
 
-    const { handleSubmit, control, formState: { errors }, setValue } = useForm({
+const defaultCellValues = [
+    "", "", "", "", "", "",
+    "", "", "", "", "", "",
+    "", "", "", "", "", "",
+    "", "1", "", "", "", "",
+    "", "", "", "", "", " ",
+    "", "", "", "", "", "",
+];
+
+function carregarEstadoLocalStorage(): { desafio: DesafioStateType; cells: string[] } | null {
+    try {
+        const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.desafio && parsed.cells) return parsed;
+    } catch {}
+    return null;
+}
+
+export default function SudokuGrid() {
+    const [desafioState, setDesafioState] = useState<DesafioStateType>(
+        defaultDesafioState
+    );
+
+    const { handleSubmit, control, formState: { errors }, setValue, getValues } = useForm({
         resolver: zodResolver(sudokuSchema),
         defaultValues: {
-            cell: [
-                "", "", "", "", "", "",
-                "", "", "", "", "", "",
-                "", "", "", "", "", "",
-                "", "1", "", "", "", "",
-                "", "", "", "", "", " ",
-                "", "", "", "", "", "",
-            ],
+            cell: defaultCellValues,
         },
     });
 
-    const calcularProgressoGeracao = (iter: number, depth: number) => {
+    // Carrega estado do localStorage ao montar o componente
+    useEffect(() => {
+        const estadoSalvo = typeof window !== "undefined" ? carregarEstadoLocalStorage() : null;
+        if (estadoSalvo) {
+            setDesafioState(estadoSalvo.desafio);
+            const cells = estadoSalvo.cells;
+            for(let i = 0; i < cells.length; i++) {
+                setValue(`cell.${i}`, cells[i]);
+            }
+        }
+    }, []);
+
+    // Salva no localStorage sempre que o desafioState mudar
+    useEffect(() => {
+        if (desafioState.carregando) return;
+        const cells = getValues("cell");
+        const estadoParaSalvar = { desafio: desafioState, cells };
+        try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(estadoParaSalvar));
+        } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [desafioState]);
+
+    const calcularProgressoGeracao = (iter: number) => {
         const progressoPorIteracao = Math.log((iter * iter) + 1);
         return Math.max(12, Math.min(82, Math.round(12 + progressoPorIteracao)));
+    };
+
+    const salvarCells = () => {
+        if (desafioState.carregando) return;
+        const cells = getValues("cell");
+        const estadoParaSalvar = { desafio: desafioState, cells };
+        try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(estadoParaSalvar));
+        } catch {}
+    };
+
+    const usuarioFezMarcacoes = (): boolean => {
+        if (!desafioState.desmarcado) return false;
+        const cells = getValues("cell");
+        for (let i = 0; i < cells.length; i++) {
+            const atual = cells[i].trim();
+            const inicial = mapValorParaTexto(desafioState.desmarcado[i]).trim();
+            if (atual !== inicial) return true;
+        }
+        return false;
     };
 
     const preencherQuadro = (valores: number[]) => {
@@ -210,6 +271,9 @@ export default function SudokuGrid() {
         }
         <div className={styles.actionsRow}>
             <input className={cn(styles.gameButton, styles.primaryButton)} type="button" value="Gerar Novo Sudoku Minado" disabled={desafioState.carregando} onClick={() => {
+                if (usuarioFezMarcacoes() && !confirm("Você tem marcações no tabuleiro. Tem certeza que deseja gerar um novo Sudoku Minado? O progresso atual será perdido.")) {
+                    return;
+                }
                 setDesafioState({
                     carregando: true,
                     progresso: 5,
@@ -219,7 +283,7 @@ export default function SudokuGrid() {
 
                 const nWorkers = navigator.hardwareConcurrency || 8;
                 executarSolverWorkers(nWorkers, (workerID, iter, depth) => {
-                    const progresso = workerID === -1 ? 95 : calcularProgressoGeracao(iter, depth);
+                    const progresso = workerID === -1 ? 95 : calcularProgressoGeracao(iter);
                     setDesafioState((prevState) => ({
                         ...prevState,
                         progresso: prevState.progresso! < progresso ? progresso : prevState.progresso,
@@ -237,6 +301,7 @@ export default function SudokuGrid() {
                         carregando: false,
                     });
                     preencherQuadro(desmarcado);
+                    setTimeout(salvarCells, 0);
                 }).catch((e) => {
                     alert(e instanceof Error ? e.message : "Erro desconhecido ao gerar Sudoku Minado!");
                     setDesafioState({ carregando: false });
@@ -259,7 +324,8 @@ export default function SudokuGrid() {
             }}/>
         }
         </div>
-        <form className="flex flex-row gap-2" onSubmit={handleSubmit(onSubmit)}>
+        <form onSubmit={handleSubmit(onSubmit)}>
+            <div className="flex flex-row gap-2 max-w-screen">
             {gerarTabela(3,2, styles.sudokuTable, styles.sudokuGroup, (rowGroup, colGroup) => {
                 return gerarTabela(2,3, styles.sudokuTable, styles.sudokuCell, (row, col) => {
                     const cellId = (rowGroup * 2 + row) * 6 + (colGroup * 3 + col);
@@ -297,12 +363,18 @@ export default function SudokuGrid() {
                                     field.value === "6" ? styles.minesweeper6 : "italic"
                                 )} 
                                 {...field}
+                                onChange={(e) => {
+                                    field.onChange(e);
+                                    // Salva no localStorage após a atualização do estado do formulário
+                                    setTimeout(salvarCells, 0);
+                                }}
                             />
                         )}
                     />;
                 });
             })}
-            <div>
+            </div>
+            <div className="flex flex-row gap-4 mt-4">
                 <input className={cn(styles.gameButton, styles.submitButton)} type="submit" value="Verificar"/>
             </div>
         </form>
