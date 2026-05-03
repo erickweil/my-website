@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import * as wasm from '@/pkg/turing.js';
+import * as wasm from '@/pkg/rust_wasm.js';
 
 export const useWasm = () => {
     const [wasmReady, setWasmReady] = useState(false);

@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "start": "next start",
     "dev": "next dev --webpack",
     "build:turing-lezer": "cd src/app/toy/turing && lezer-generator turing.grammar -o turingParser.js",
-    "build:turing-wasm": "bash buildWasm.sh",
     "build": "next build --webpack",
-    "start": "next start",
+    "build:wasm": "bash buildWasm.sh",
+    "test:wasm": "cd rust-wasm && wasm-pack test --node",
     "lint": "eslint"
   },
   "dependencies": {

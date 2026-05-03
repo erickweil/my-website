@@ -14,6 +14,15 @@ extern "C" {
 }
 
 // A helper macro for console logging from Rust
+
+// Fallback to normal println! when not targeting wasm
+#[cfg(not(target_arch = "wasm32"))]
+#[macro_export]
+macro_rules! console_log {
+    ($($t:tt)*) => (println!($($t)*))
+}
+
+#[cfg(target_arch = "wasm32")]
 #[macro_export]
 macro_rules! console_log {
     ($($t:tt)*) => ($crate::utils::log(&format_args!($($t)*).to_string()))
@@ -27,12 +36,4 @@ pub fn set_panic_hook() {
     // For more details see
     // https://github.com/rustwasm/console_error_panic_hook#readme
     console_error_panic_hook::set_once();
-}
-
-// https://oneuptime.com/blog/post/2026-02-01-rust-webassembly-wasm/view
-// Call this once when your module loads
-#[wasm_bindgen(start)]
-pub fn main() {
-    set_panic_hook();
-    console_log!("WASM: Inicializado!");
 }

@@ -1,5 +1,5 @@
 [package]
-name = "turing"
+name = "rust-wasm"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,6 +10,11 @@ crate-type = ["cdylib"]
 console_error_panic_hook = "0.1.7"
 wasm-bindgen = "0.2"
 rustc-hash = "2"
+# docs.rs/getrandom/latest/getrandom/#webassembly-support
+# getrandom = { version = "0.3", features = ["wasm_js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
 
 # [workspace]
 # members = [
