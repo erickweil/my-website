@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 mod utils;
 mod framebuffer;
+mod random;
 
 pub mod turing;
 pub mod genetic;

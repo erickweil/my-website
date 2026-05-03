@@ -43,7 +43,7 @@ async function runTest() {
         diversityCheck: true,
         progressCallback: (event): void => {
             const { generation, stagnatedFor, genes, fitness, current } = event;
-            const bar = progressBar(fitness, nearestPowerOfTwo(fitness));
+            const bar = progressBar(fitness || 0, nearestPowerOfTwo(fitness || 0));
             const maxgenlen = ("" + MAX_GENS).length;
             const stag = stagnatedFor > 0 ? ` (+${(""+stagnatedFor).padStart(maxgenlen)} gens` : " (início)";
             process.stdout.write(
@@ -59,7 +59,7 @@ async function runTest() {
     console.log(`\n${"─".repeat(60)}`);
     console.log(`Resultado, size: ${PROBLEM_SIZE}`);
     console.log(`${"─".repeat(60)}`);
-    console.log(`  Status     : ${result.fitness >= problem.maxFitness! ? "✓ Resolvido" : "✗ Limite atingido"}`);
+    console.log(`  Status     : ${result.fitness! >= problem.maxFitness! ? "✓ Resolvido" : "✗ Limite atingido"}`);
     console.log(`  Fitness    : ${result.fitness}/${problem.maxFitness}`);
     console.log(`  Gerações   : ${result.generation}`);
     console.log(`  Tempo total: ${((fim - inicio) / 1000).toFixed(2)}s (${(result.generation / ((fim - inicio) / 1000)).toFixed(1)} gen/s)`);
