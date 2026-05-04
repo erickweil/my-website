@@ -41,6 +41,17 @@ impl GAProblem for OneMaxGAProblem {
     ) {
         crossover_1_point(child_a, child_b, parent_a, parent_b);
     }
+
+    fn hash(&self, _genes: &Self::Gene) -> Option<u64> {
+        // Para um vetor de bools, podemos usar um hash simples baseado em bits e xor
+        let mut hash: u64 = 0;
+        for (i, &bit) in _genes.iter().enumerate() {
+            if bit {
+                hash ^= 1 << (i % 64); // Usa o índice para definir o bit no hash
+            }
+        }
+        Some(hash)
+    }
 }
 
 #[cfg(test)]

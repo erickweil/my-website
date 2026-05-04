@@ -261,9 +261,8 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         // Faz a seleção + reprodução, para criar a próxima geração
         // Reprodução usando chunks paralelos mutáveis de forma segura
         // Começa em 1 pois em 0 está o melhor indivíduo (elitismo)
-        for chunk in self.offspring[1..].chunks_mut(2) {
-            let is_pair = chunk.len() == 2;
-
+        let (chunks, remainder) = self.offspring[1..].as_chunks_mut::<2>();
+        for [child_a, child_b] in chunks.iter_mut() {
             for attempt in (0..=3).rev() {
                 // Seleciona pais aleatório da geração anterior
                 let p1_idx = Self::tournament_selection(&self.population, tournament_size, None);
@@ -272,69 +271,73 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
                 let parent_a = &self.population[p1_idx].genes;
                 let parent_b = &self.population[p2_idx].genes;
 
-                if is_pair {
-                    let (ca, cb) = chunk.split_at_mut(1);
-                    let child_a = &mut ca[0];
-                    let child_b = &mut cb[0];
+                child_a.fitness = None;
+                child_b.fitness = None;
 
-                    child_a.fitness = None;
-                    child_b.fitness = None;
-
-                    // Crossover entre os pais para criar os filhos
-                    if crossover_rate >= 1.0 || random_f64() < crossover_rate {
-                        self.problem.crossover(&mut child_a.genes, &mut child_b.genes, parent_a, parent_b);
-                    } else {
-                        child_a.genes.clone_from(parent_a);
-                        child_b.genes.clone_from(parent_b);
-                    }
-
-                    // Aplica mutação
-                    if mutation_rate >= 1.0 || random_f64() < mutation_rate {
-                        self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
-                    }
-                    if mutation_rate >= 1.0 || random_f64() < mutation_rate {
-                        self.problem.mutate(&mut child_b.genes, mutation_gene_rate);
-                    }
-
-                    // Verificação de diversidade: remuta filhos duplicados da geração atual
-                    if self.config.diversity_check {
-                        let ha = self.problem.hash(&child_a.genes);
-                        let hb = self.problem.hash(&child_b.genes);
-                        if let (Some(ha), Some(hb)) = (ha, hb) {
-                            if self.population_hashes.contains(&ha) || self.population_hashes.contains(&hb) {
-                                if attempt > 0 { 
-                                    // Tenta reproduzir novamente com outros pais
-                                    continue; 
-                                } else {
-                                    // Após 3 tentativas sem sucesso, aplica mutação mais uma vez nos filhos para tentar criar variação
-                                    self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
-                                    child_a.hash = self.problem.hash(&child_a.genes);
-
-                                    self.problem.mutate(&mut child_b.genes, mutation_gene_rate);
-                                    child_b.hash = self.problem.hash(&child_b.genes);
-                                }
-                            } else {
-                                child_a.hash = Some(ha);
-                                child_b.hash = Some(hb);
-                            }
-                            if let Some(h) = child_a.hash { self.population_hashes.insert(h); }
-                            if let Some(h) = child_b.hash { self.population_hashes.insert(h); }
-                        }
-                    }
+                // Crossover entre os pais para criar os filhos
+                if crossover_rate >= 1.0 || random_f64() < crossover_rate {
+                    self.problem.crossover(&mut child_a.genes, &mut child_b.genes, parent_a, parent_b);
                 } else {
-                    // Estrutura de fallback para tamanho ímpar da população (último elemento)
-                    let child_a = &mut chunk[0];
-                    child_a.fitness = None;
-                    child_a.hash = None; // hash stale após troca de genes
                     child_a.genes.clone_from(parent_a);
-
-                    if mutation_rate >= 1.0 || random_f64() < mutation_rate {
-                        self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
-                    }
+                    child_b.genes.clone_from(parent_b);
                 }
 
+                // Aplica mutação
+                if mutation_rate >= 1.0 || random_f64() < mutation_rate {
+                    self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
+                }
+                if mutation_rate >= 1.0 || random_f64() < mutation_rate {
+                    self.problem.mutate(&mut child_b.genes, mutation_gene_rate);
+                }
+
+                // Verificação de diversidade: remuta filhos duplicados da geração atual
+                if self.config.diversity_check {
+                    let ha = self.problem.hash(&child_a.genes);
+                    let hb = self.problem.hash(&child_b.genes);
+                    if let (Some(ha), Some(hb)) = (ha, hb) {
+                        if self.population_hashes.contains(&ha) || self.population_hashes.contains(&hb) {
+                            if attempt > 0 { 
+                                // Tenta reproduzir novamente com outros pais
+                                continue; 
+                            } else {
+                                // Após 3 tentativas sem sucesso, aplica mutação mais uma vez nos filhos para tentar criar variação
+                                self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
+                                child_a.hash = self.problem.hash(&child_a.genes);
+
+                                self.problem.mutate(&mut child_b.genes, mutation_gene_rate);
+                                child_b.hash = self.problem.hash(&child_b.genes);
+                            }
+                        } else {
+                            child_a.hash = Some(ha);
+                            child_b.hash = Some(hb);
+                        }
+                        if let Some(h) = child_a.hash { self.population_hashes.insert(h); }
+                        if let Some(h) = child_b.hash { self.population_hashes.insert(h); }
+                    }
+                }
                 // Se os filhos forem válidos, passamos para o próximo par
                 break;
+            }
+        }
+
+        // Estrutura de fallback para tamanho par da população 
+        // [0,1,2,3,4,5] -> best: [0]  chunks: [(1, 2), (3, 4)], remainder: [5]
+        if let Some(last_child) = remainder.first_mut() {
+            let p1_idx = Self::tournament_selection(&self.population, tournament_size, None);
+            let parent_a = &self.population[p1_idx].genes;
+
+            // Sem crossover
+            last_child.fitness = None;
+            last_child.genes.clone_from(parent_a);
+        
+            // Aplica mutação
+            if mutation_rate >= 1.0 || random_f64() < mutation_rate {
+                self.problem.mutate(&mut last_child.genes, mutation_gene_rate);
+            }
+
+            if self.config.diversity_check {
+                last_child.hash = self.problem.hash(&last_child.genes);
+                if let Some(h) = last_child.hash { self.population_hashes.insert(h); }
             }
         }
 
@@ -349,40 +352,60 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
     fn tournament_selection(
         population: &[Individual<P::Gene>],
         tournament_size: usize,
-        exclude_idx: Option<usize>
+        exclude: Option<usize>,
     ) -> usize {
         let pop_len = population.len();
-        let mut best_idx = None;
+        let exclude_hash = exclude.and_then(|idx| population[idx].hash);
+        let mut best: Option<(usize, f64)> = None; // (índice, fitness)
 
         for _ in 0..tournament_size {
-            let idx = random_range(0, pop_len);
-            if Some(idx) == exclude_idx { continue; }
+            let ind_i = random_range(0, pop_len);
+            let ind = &population[ind_i];
 
-            let ind = &population[idx];
+            if let Some(exclude_idx) = exclude {
+                if ind_i == exclude_idx { continue; } // pula se for o índice excluído
 
-            if let (Some(ex_idx), Some(ih)) = (exclude_idx, ind.hash)
-                && population[ex_idx].hash == Some(ih) { continue; }
-
-            match best_idx {
-                None => best_idx = Some(idx),
-                Some(b_idx) => {
-                    if ind.fitness.unwrap_or(f64::MIN) > population[b_idx].fitness.unwrap_or(f64::MIN) {
-                        best_idx = Some(idx);
-                    }
+                if let Some(exclude_hash) = exclude_hash && let Some(hash) = ind.hash {
+                    if hash == exclude_hash { continue; } // pula se for o mesmo hash
                 }
+            }
+
+            let fitness = ind.fitness.unwrap_or(f64::MIN);
+            if best.map_or(true, |(_, best_fit)| fitness > best_fit) {
+                best = Some((ind_i, fitness));
             }
         }
 
-        // Fallback: varredura linear a partir de um ponto aleatório para evitar viés de posição
-        best_idx.unwrap_or_else(|| {
-            let start = random_range(0, pop_len);
-            for i in 0..pop_len {
-                let idx = (start + i) % pop_len;
-                if Some(idx) != exclude_idx { return idx; }
+        best.map(|(i, _)| i)
+            .unwrap_or_else(|| Self::random_selection(population, exclude))
+    }
+
+    fn random_selection(population: &[Individual<P::Gene>], exclude: Option<usize>) -> usize {
+        let exclude_hash = exclude.and_then(|idx| population[idx].hash);
+        let mut fallback_idx: Option<usize> = None;
+
+        let pop_len = population.len();
+        let start = random_range(0, pop_len);
+        for i in 0..pop_len {
+            let idx = (start + i) % pop_len;
+
+            if let Some(exclude_idx) = exclude {
+                if idx == exclude_idx { continue; }                
+                // Se ainda não tem um fallback, salva o primeiro encontrado
+                if fallback_idx.is_none() {
+                    fallback_idx = Some(idx);
+                }
+
+                if let Some(exclude_hash) = exclude_hash && let Some(hash) = population[idx].hash {
+                    if hash == exclude_hash { continue; } // pula se for o mesmo hash
+                }
             }
-            
-            // Se chegar aqui é um problema de uso.
-            panic!("Não foi possível selecionar um indivíduo (todos os sobreviventes foram excluídos)");
+
+            return idx;
+        }
+
+        fallback_idx.unwrap_or_else(|| {
+            panic!("Não foi possível selecionar um indivíduo aleatório diferente de exclude_idx"); 
         })
     }
 }
