@@ -1,6 +1,6 @@
 use rustc_hash::FxHashSet;
 use std::mem;
-use crate::{console_log, genetic::problem::{GAProblem, Individual}, random::{random_f64, random_range}};
+use crate::{console_log, genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range}};
 
 #[derive(Clone, Debug)]
 pub struct GAConfig {

@@ -1,5 +1,5 @@
 use crate::genetic::operators::{crossover_1_point, mutation_replace};
-use crate::genetic::problem::GAProblem;
+use crate::genetic::problems::GAProblem;
 use crate::random::random_f64;
 
 pub struct OneMaxGAProblem {
