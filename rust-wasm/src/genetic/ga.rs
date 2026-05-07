@@ -1,8 +1,11 @@
+use wasm_bindgen::prelude::*;
+use serde::{Serialize};
 use rustc_hash::FxHashSet;
 use std::mem;
 use crate::{console_log, genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range}};
 
 #[derive(Clone, Debug)]
+#[wasm_bindgen]
 pub struct GAConfig {
     /// Tamanho da população por geração. Padrão: 100
     pub population_size: usize,
@@ -24,8 +27,10 @@ pub struct GAConfig {
     pub reset_population: bool,
 }
 
-impl Default for GAConfig {
-    fn default() -> Self {
+#[wasm_bindgen]
+impl GAConfig {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
         Self {
             population_size: 100,
             tournament_size: 10,
@@ -37,6 +42,22 @@ impl Default for GAConfig {
             reset_population: true,
         }
     }
+}
+
+impl Default for GAConfig {
+    fn default() -> Self { Self::new() }
+}
+
+#[derive(Serialize)]
+pub struct GAInfo<P: GAProblem> {
+    /// Geração atual da execução do algoritmo genético
+    pub generation: usize,
+    /// Número de gerações sem melhora. u32::MAX indica "sem informação".
+    pub stagnated_for: u32,
+    /// Fitness do melhor indivíduo encontrado até agora.
+    pub best_fitness: Option<f64>,
+    /// Os melhores genes encontrados até agora.
+    pub best_genes: Option<P::Gene>,
 }
 
 pub struct GeneticAlgorithm<P: GAProblem> {
@@ -76,10 +97,6 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
             tournament_multiplier: 1.0,
             config,
         }
-    }
-
-    pub fn update_config(&mut self, new_config: GAConfig) {
-        self.config = new_config;
     }
 
     pub fn run(&mut self, generations: usize) {
@@ -176,6 +193,17 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
             }
 
             self.generation += 1;
+        }
+    }
+
+    /// Retorna uma struct owned com informações da execução atual do GA (Usado pelo JS)
+    /// Obs: Dados do best_genes são clonados
+    pub fn get_info(&self) -> GAInfo<P> {
+        GAInfo {
+            generation: self.generation,
+            stagnated_for: (self.generation.saturating_sub(self.stag_start)) as u32,
+            best_fitness: self.best_fitness,
+            best_genes: self.best_genes.clone(),
         }
     }
 

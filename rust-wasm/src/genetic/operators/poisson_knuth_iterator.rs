@@ -103,7 +103,7 @@ pub fn poisson_knuth(lambda: f64) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use web_time::{Instant, SystemTime};
+    use web_time::{Instant};
 
 use super::*;
     use crate::console_log;

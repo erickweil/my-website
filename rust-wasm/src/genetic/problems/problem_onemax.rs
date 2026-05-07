@@ -54,6 +54,15 @@ impl GAProblem for OneMaxGAProblem {
     }
 }
 
+// https://julien-decharentenay.medium.com/bridging-rust-traits-and-javascript-in-a-webassembly-renderer-6546fab6f1d4
+crate::ga_runner! {
+    /// Runner concreto do problema OneMax exposto ao JS via WASM.
+    OneMaxGAProblemRunner,
+    problem: OneMaxGAProblem,
+    new(size: usize) => OneMaxGAProblem::new(size),
+}
+
+
 #[cfg(test)]
 mod tests {
     use crate::genetic::ga::GAConfig;
@@ -66,26 +75,23 @@ mod tests {
     fn it_works() {
         // Run a small GA to solve OneMax
         const PROBLEM_SIZE: usize = 100;
-        let problem = OneMaxGAProblem::new(PROBLEM_SIZE);
-        let mut ga = crate::genetic::ga::GeneticAlgorithm::new(
-            problem,
-            GAConfig {
-                population_size: PROBLEM_SIZE * 2,
-                crossover_rate: 0.9,
-                mutation_rate: 0.9,
-                mutation_gene_rate: 1.0 / (PROBLEM_SIZE as f64),
-                tournament_size: 5,
-                reset_population: false,
-                diversity_check: false,
-                max_stagnation: 50000,
-            },
-        );
+        let mut ga_runner = OneMaxGAProblemRunner::new(PROBLEM_SIZE, GAConfig {
+            population_size: PROBLEM_SIZE * 2,
+            crossover_rate: 0.9,
+            mutation_rate: 0.9,
+            mutation_gene_rate: 1.0 / (PROBLEM_SIZE as f64),
+            tournament_size: 5,
+            reset_population: false,
+            diversity_check: false,
+            max_stagnation: 50000,
+        });
 
-        ga.run(50000);
+        ga_runner.run(50000);
 
-        let best = ga.best_genes.unwrap();
-        let fitness = ga.problem.fitness(&best);
-        assert_eq!(Some(fitness), ga.problem.max_fitness());
-        console_log!("Best solution found: {:?} with fitness {}", best, fitness);
+        let info = ga_runner.ga.get_info();
+
+        assert_eq!(info.best_fitness, Some(PROBLEM_SIZE as f64));
+        console_log!("Best fitness found: {:?}", info.best_fitness);
+        console_log!("Best genes (as bytes): {:?}", info.best_genes);
     }
 }

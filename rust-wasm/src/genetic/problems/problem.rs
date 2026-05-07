@@ -1,5 +1,8 @@
+use serde::{Serialize};
+
+// Gene deve ser Serialize + Deserialize para ser enviado ao JS
 pub trait GAProblem {
-    type Gene: Clone;
+    type Gene: Clone + std::fmt::Debug + Serialize;
 
     /// Retorna o fitness máximo possível (se aplicável)
     fn max_fitness(&self) -> Option<f64> { None }
