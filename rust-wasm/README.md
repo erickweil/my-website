@@ -5,6 +5,9 @@ medium.com/@annasaaddev/building-a-next-js-app-that-runs-entirely-on-webassembly
 https://oneuptime.com/blog/post/2026-02-01-rust-webassembly-wasm/view
 
 
+https://news.ycombinator.com/item?id=47295837
+https://notes.brooklynzelenka.com/Blog/Notes-on-Writing-Wasm
+
 - Rodar os testes em modo release
 ```bash
 cd rust-wasm

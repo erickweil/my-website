@@ -15,3 +15,8 @@ pub fn random_shuffle<T>(slice: &mut [T]) {
 pub fn random_range(start: usize, end: usize) -> usize {
     fastrand::usize(start..end)
 }
+
+#[inline(always)]
+pub fn random_bool() -> bool {
+    fastrand::bool()
+}

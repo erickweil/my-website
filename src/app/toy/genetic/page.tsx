@@ -6,7 +6,8 @@ import NonSSRWrapper from "@/components/nonSSRWrapper";
 import { UIEvent, useCallback, useEffect, useRef, useState } from "react";
 import { GAConfig, GAProgressEvent, GeneticAlgorithm } from "@/lib/genetic/ga";
 import { TSPCity, TSPProblem } from "@/lib/genetic/examples/tsp-problem";
-import { GAProblem } from "@/lib/genetic/problem";
+import { useWasm } from "@/lib/useWasm";
+import { TSPGAProblemRunner } from "@/pkg/rust_wasm";
 
 type GeneticEstado = ZoomEstadoType & {
     px: number,
@@ -15,6 +16,7 @@ type GeneticEstado = ZoomEstadoType & {
     cities: TSPCity[],
 
     ga: GeneticAlgorithm<object> | null;
+    wasmRunner: TSPGAProblemRunner | null;
     progress: GAProgressEvent<object> | null;
 };
 
@@ -95,7 +97,24 @@ function drawTSP(ctx: CanvasRenderingContext2D, ga: GeneticAlgorithm<number[]> |
 }
 
 export default function Genetic() {
+    const wasm = useWasm();
+    const [solver, setSolver] = useState<"ts" | "wasm">("ts");
+
     return <div className="h-screen max-h-screen w-full flex flex-row overflow-hidden">
+        {/* Painel de controle fixo no canto superior direito */}
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2 bg-white/80 backdrop-blur rounded-lg px-3 py-2 shadow text-sm font-medium select-none">
+            <span className={solver === "ts" ? "font-bold" : "text-gray-400"}>TS</span>
+            <button
+                onClick={() => setSolver(s => s === "ts" ? "wasm" : "ts")}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${solver === "wasm" ? "bg-violet-600" : "bg-gray-300"} ${!wasm && solver === "ts" ? "" : ""}`}
+                title={!wasm ? "WASM ainda carregando..." : undefined}
+            >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${solver === "wasm" ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+            <span className={solver === "wasm" ? "font-bold text-violet-700" : "text-gray-400"}>
+                WASM {!wasm && "(carregando…)"}
+            </span>
+        </div>
         <div className='w-full h-full overflow-hidden'>
         <NonSSRWrapper>
         <ZoomableCanvas<GeneticEstado>
@@ -109,6 +128,7 @@ export default function Genetic() {
                     cliques: 0,
                     cities: [],
                     ga: null,
+                    wasmRunner: null,
                     progress: null
                 }
             }}
@@ -139,13 +159,25 @@ export default function Genetic() {
                     }
 
                     const ga = estado.ga;
+                    const hasTSP = (ga?.problem instanceof TSPProblem && ga.population.length > 0)
+                        || (estado.wasmRunner != null && estado.cities.length > 0);
 
-                    if(ga?.problem && ga.problem instanceof TSPProblem && ga.population.length > 0) {
-                        
-                        ctx.fillText(`Pop size: ${ga?.population.length ?? 0}`, 10, 120);
+                    if(hasTSP) {
+                        // Cria um problema TSP temporário só para o draw (cidades são suficientes)
+                        const cities = ga?.problem instanceof TSPProblem
+                            ? (ga.problem as TSPProblem).cities
+                            : estado.cities;
+
+                        if (ga?.problem instanceof TSPProblem && ga.population.length > 0) {
+                            ctx.fillText(`Pop size: ${ga.population.length}`, 10, 120);
+                        }
+
+                        // Reutiliza drawTSP passando um objeto compatível
+                        const fakeProblem = { cities } as TSPProblem;
+                        const fakeGa = { problem: fakeProblem, population: ga?.population ?? [] } as unknown as GeneticAlgorithm<number[]>;
                         drawTSP(
                             ctx,
-                            ga as GeneticAlgorithm<number[]>, 
+                            fakeGa,
                             estado.progress! as GAProgressEvent<number[]>
                         );
                     } else {
@@ -159,36 +191,74 @@ export default function Genetic() {
                 }
             }}
             everyFrame={(estado) => {
-                let ga = estado.ga;
-                if(!ga) {
+                if (solver === "wasm") {
+                    if (!wasm) return null; // WASM ainda não carregou
                     const size = estado.cities.length;
-                    
-                    const problem = new TSPProblem([...estado.cities]);
-                    const gaConfig = {
-                        populationSize: size * 2,
-                        crossoverRate: 0.9,
-                        mutationRate: 0.9, 
-                        mutationGeneRate: 1 / size,
-                        tournamentSize: 8,
-                        maxStagnation: 20000,
-                        diversityCheck: true,
-                        resetPopulation: false
-                    };
-                    ga = new GeneticAlgorithm(problem, gaConfig) as GeneticAlgorithm<object>;
+                    if (size < 3) return null;
+
+                    let runner = estado.wasmRunner;
+                    if (!runner) {
+                        const cfg = new wasm.GAConfig();
+                        cfg.population_size = size * 2;
+                        cfg.crossover_rate = 0.9;
+                        cfg.mutation_rate = 0.9;
+                        cfg.mutation_gene_rate = 1 / size;
+                        cfg.tournament_size = 8;
+                        cfg.max_stagnation = 50000;
+                        cfg.diversity_check = true;
+                        cfg.reset_population = false;
+                        runner = new wasm.TSPGAProblemRunner(estado.cities, cfg);
+                    }
+
+                    const timeStart = performance.now();
+                    do {
+                        runner.run(100);
+                    } while (performance.now() - timeStart < 20);
+
+                    const info = runner.get_info() as { generation: number; best_fitness: number; stagnated_for: number, best_genes: number[] };
+
+                    mesclarEstado(estado, {
+                        wasmRunner: runner,
+                        ga: null,
+                        progress: {
+                            genes: info.best_genes,
+                            generation: info.generation,
+                            fitness: info.best_fitness,
+                            current: undefined,
+                            stagnatedFor: info.stagnated_for,
+                        },
+                    });
+                } else {
+                    let ga = estado.ga;
+                    if(!ga) {
+                        const size = estado.cities.length;
+                        
+                        const problem = new TSPProblem([...estado.cities]);
+                        const gaConfig = {
+                            populationSize: size * 2,
+                            crossoverRate: 0.9,
+                            mutationRate: 0.9, 
+                            mutationGeneRate: 1 / size,
+                            tournamentSize: 8,
+                            maxStagnation: 50000,
+                            diversityCheck: true,
+                            resetPopulation: false
+                        };
+                        ga = new GeneticAlgorithm(problem, gaConfig) as GeneticAlgorithm<object>;
+                    }
+
+                    let result;
+                    const timeStart = performance.now();
+                    do {
+                        result = ga.run(100);
+                    } while(performance.now() - timeStart < 20);
+
+                    mesclarEstado(estado, {
+                        ga: ga,
+                        wasmRunner: null,
+                        progress: result
+                    });
                 }
-
-                let result;
-                const timeStart = performance.now();
-                do {
-                    //ga.updateConfig(estado.gaConfig!);
-                    
-                    result = ga.run(50);
-                } while(performance.now() - timeStart < 10); // limita a execução a ~10ms por passo para manter a UI responsiva
-
-                mesclarEstado(estado, {
-                    ga: ga,
-                    progress: result
-                });
 
                 return null;
             }}
@@ -196,10 +266,18 @@ export default function Genetic() {
 				onClick: (e, estado) => {
                     const cities = estado.cities;
                     cities.push(unproject(estado.mouse.x, estado.mouse.y, estado.width, estado.height));
+
+                    // deve recriar o runner com o novo número de cidades
+                    if(estado.wasmRunner) {
+                        estado.wasmRunner.free();
+                        estado.wasmRunner = null;
+                    }
+
                     return {
                         cliques: estado.cliques + 1,
                         cities: cities,
                         ga: null,
+                        wasmRunner: null,
                         progress: null
                     }
                 },

@@ -2,7 +2,9 @@ use wasm_bindgen::prelude::*;
 use serde::{Serialize};
 use rustc_hash::FxHashSet;
 use std::mem;
-use crate::{console_log, genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range}};
+use crate::{genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range}};
+#[cfg(debug_assertions)]
+use crate::console_log;
 
 #[derive(Clone, Debug)]
 #[wasm_bindgen]
@@ -138,16 +140,17 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
                 }
             }
 
-            let mut improved = false;
             let stagnated_for = self.generation - self.stag_start;
-
             // A FAZER: usar i64 para comparação de fitness para evitar problemas de precisão
+            #[cfg(debug_assertions)]
+            let mut improved = false;
             if self.stag_fitness.map_or(true, |sf| current_best_fitness > (sf + f64::EPSILON)) {
                 self.stag_fitness = Some(current_best_fitness);
                 self.stag_start = self.generation;
                 self.mutation_multiplier = 1.0;
                 self.tournament_multiplier = 1.0;
-                improved = true;
+                #[cfg(debug_assertions)]
+                { improved = true; }
             } else if self.config.max_stagnation > 0 {
                 // Experimento: Controle de estagnação adaptativo
                 // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
@@ -173,7 +176,9 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
                 // Se ficou estagnado mais tempo do que o recorde de melhoria sem melhora
                 if stagnated_for > max_stag {
+                    #[cfg(debug_assertions)]
                     console_log!("[GA] Estagnado por {} gens. Reiniciando população", stagnated_for);
+
                     self.initialize_population(true);
                     self.stag_fitness = None;
                     self.stag_start = self.generation;
@@ -183,13 +188,16 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
             }
 
             // A FAZER: implementar progressCallback
-            if improved || self.generation.is_multiple_of(1000) {
-                console_log!(
-                    "Gen {:>8} | fitness {:>4} / {:>4} (best {:>4}) | stag: {}",
-                    self.generation, current_best_fitness, self.problem.max_fitness().unwrap_or(0.0),
-                    self.best_fitness.unwrap_or(0.0),
-                    self.generation - self.stag_start
-                );
+            #[cfg(debug_assertions)]
+            {
+                if improved || self.generation.is_multiple_of(1000) {
+                    console_log!(
+                        "[GA] Gen {:>8} | fitness {:>4} / {:>4} (best {:>4}) | stag: {}",
+                        self.generation, current_best_fitness, self.problem.max_fitness().unwrap_or(0.0),
+                        self.best_fitness.unwrap_or(0.0),
+                        self.generation - self.stag_start
+                    );
+                }
             }
 
             self.generation += 1;

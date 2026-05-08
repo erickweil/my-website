@@ -12,14 +12,14 @@ pub trait GAProblem {
 
     /// Quão "boa" é a solução atual?
     /// Valores mais altos indicam soluções melhores.
-    fn fitness(&self, genes: &Self::Gene) -> f64;
+    fn fitness(&mut self, genes: &Self::Gene) -> f64;
 
     /// Mutação in-place usando a taxa especificada
-    fn mutate(&self, genes: &mut Self::Gene, mutation_rate: f64);
+    fn mutate(&mut self, genes: &mut Self::Gene, mutation_rate: f64);
 
     /// Crossover entre dois pais para criar dois filhos
     fn crossover(
-        &self,
+        &mut self,
         child_a: &mut Self::Gene,
         child_b: &mut Self::Gene,
         parent_a: &Self::Gene,

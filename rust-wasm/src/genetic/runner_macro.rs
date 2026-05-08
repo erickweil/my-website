@@ -57,6 +57,14 @@ macro_rules! ga_runner {
                 serde_wasm_bindgen::to_value(&self.ga.get_info())
             }
 
+            pub fn get_genes(&self, idx: usize) -> Option<wasm_bindgen::JsValue> {
+                self.ga.population.get(idx).map(
+                    |ind| serde_wasm_bindgen::to_value(&ind.genes)
+                ).map_or(None, |res| {
+                    if let Ok(js_val) = res { Some(js_val) } else { None }
+                })
+            }
+
             $($($extra)*)?
         }
     };

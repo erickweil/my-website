@@ -52,4 +52,9 @@ strip = true
 # wasm-opt = ['-Os', '--enable-bulk-memory']
 
 # Optmize for speed with '-O3' flag to wasm-opt
-wasm-opt = ['-O3', '--enable-bulk-memory', '--enable-nontrapping-float-to-int']
+wasm-opt = [
+    '-O3',
+    '--enable-bulk-memory', 
+    '--enable-nontrapping-float-to-int',
+    '--enable-simd',
+]

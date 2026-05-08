@@ -23,17 +23,17 @@ impl GAProblem for OneMaxGAProblem {
         (0..self.size).map(|_| random_f64() < 0.5).collect()
     }
 
-    fn fitness(&self, genes: &Self::Gene) -> f64 {
+    fn fitness(&mut self, genes: &Self::Gene) -> f64 {
         // Conta diretamente os bits em true
         genes.iter().filter(|&&b| b).count() as f64
     }
 
-    fn mutate(&self, genes: &mut Self::Gene, mutation_rate: f64) {
+    fn mutate(&mut self, genes: &mut Self::Gene, mutation_rate: f64) {
         mutation_replace(genes, mutation_rate, |val| !val);
     }
 
     fn crossover(
-        &self,
+        &mut self,
         child_a: &mut Self::Gene,
         child_b: &mut Self::Gene,
         parent_a: &Self::Gene,

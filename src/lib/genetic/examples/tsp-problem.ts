@@ -66,7 +66,7 @@ export class TSPProblem extends GAProblemArray<number[]> {
      * Quanto menor a distância, maior o fitness (o GA maximiza).
      */
     fitness(genes: number[]): number {
-        const dist = TSPProblem.totalRouteDistance(genes, this.cities);
+        const dist = TSPProblem.totalRouteDistanceSquared(genes, this.cities);
         return dist === 0 ? 0 : 1 / dist;
     }
 
@@ -86,7 +86,7 @@ export class TSPProblem extends GAProblemArray<number[]> {
      * Distância total da rota descrita pelos genes (ciclo fechado).
      * O último ponto retorna ao primeiro.
      */
-    static totalRouteDistance(genes: number[], cities: TSPCity[]): number {
+    static totalRouteDistanceSquared(genes: number[], cities: TSPCity[]): number {
         let total = 0;
         const n = genes.length;
         for (let i = 0; i < n; i++) {
@@ -95,7 +95,8 @@ export class TSPProblem extends GAProblemArray<number[]> {
 
             const dx = from.x - to.x;
             const dy = from.y - to.y;
-            total += Math.sqrt(dx * dx + dy * dy);
+            //total += Math.sqrt(dx * dx + dy * dy);
+            total += dx * dx + dy * dy;
         }
         return total;
     }
