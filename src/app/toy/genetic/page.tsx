@@ -17,7 +17,9 @@ type GeneticEstado = ZoomEstadoType & {
 
     ga: GeneticAlgorithm<object> | null;
     wasmRunner: TSPGAProblemRunner | null;
-    progress: GAProgressEvent<object> | null;
+    progress: GAProgressEvent<object> & {
+        msPerGeneration?: number;
+    } | null;
 };
 
 
@@ -156,6 +158,9 @@ export default function Genetic() {
                         ctx.fillText(`Gen: ${generation}`, 10, 30);
                         ctx.fillText(`Fitness: ${fitness}`, 10, 60);
                         ctx.fillText(`Stagnated for: ${stagnatedFor} gens`, 10, 90);
+                        if(estado.progress.msPerGeneration) {
+                            ctx.fillText(`ms/gen: ${estado.progress.msPerGeneration.toFixed(2)}`, 10, 150);
+                        }
                     }
 
                     const ga = estado.ga;
@@ -205,15 +210,18 @@ export default function Genetic() {
                         cfg.mutation_gene_rate = 1 / size;
                         cfg.tournament_size = 8;
                         cfg.max_stagnation = 50000;
-                        cfg.diversity_check = true;
+                        cfg.diversity_check = false;
                         cfg.reset_population = false;
                         runner = new wasm.TSPGAProblemRunner(estado.cities, cfg);
                     }
 
+                    let generationCount = 0;
                     const timeStart = performance.now();
                     do {
                         runner.run(100);
+                        generationCount += 100;
                     } while (performance.now() - timeStart < 20);
+                    const elapsed = performance.now() - timeStart;
 
                     const info = runner.get_info() as { generation: number; best_fitness: number; stagnated_for: number, best_genes: number[] };
 
@@ -226,6 +234,7 @@ export default function Genetic() {
                             fitness: info.best_fitness,
                             current: undefined,
                             stagnatedFor: info.stagnated_for,
+                            msPerGeneration: elapsed / generationCount
                         },
                     });
                 } else {
@@ -241,22 +250,28 @@ export default function Genetic() {
                             mutationGeneRate: 1 / size,
                             tournamentSize: 8,
                             maxStagnation: 50000,
-                            diversityCheck: true,
+                            diversityCheck: false,
                             resetPopulation: false
                         };
                         ga = new GeneticAlgorithm(problem, gaConfig) as GeneticAlgorithm<object>;
                     }
 
                     let result;
+                    let generationCount = 0;
                     const timeStart = performance.now();
                     do {
                         result = ga.run(100);
+                        generationCount += 100;
                     } while(performance.now() - timeStart < 20);
+                    const elapsed = performance.now() - timeStart;
 
                     mesclarEstado(estado, {
                         ga: ga,
                         wasmRunner: null,
-                        progress: result
+                        progress: {
+                            ...result,
+                            msPerGeneration: elapsed / generationCount
+                        }
                     });
                 }
 
@@ -280,6 +295,26 @@ export default function Genetic() {
                         wasmRunner: null,
                         progress: null
                     }
+                },
+                onKeyDown: (e, estado) => {
+                    if (e.key === "g") {
+                        // Criar 100 cidades
+                        const newCities: TSPCity[] = [];
+                        for (let i = 0; i < 100; i++) {
+                            newCities.push({
+                                x: Math.random(),
+                                y: Math.random()
+                            });
+                        }
+                        return {
+                            cliques: estado.cliques + 1,
+                            cities: newCities,
+                            ga: null,
+                            wasmRunner: null,
+                            progress: null
+                        };
+                    }
+                    return null;
                 },
 				//onKeyPress:onKeyPress,
 				//onKeyDown:onKeyDown,

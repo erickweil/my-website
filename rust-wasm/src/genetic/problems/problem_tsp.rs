@@ -6,8 +6,17 @@ use crate::{genetic::{operators::{CrossoverOX1, mutation_combine, mutation_neigh
 // Serializável para facilitar a passagem entre JS e Rust via WASM
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TSPCity {
-    pub x: f64,
-    pub y: f64,
+    pub x: f32,
+    pub y: f32,
+}
+
+impl TSPCity {
+    #[inline(always)]
+    pub fn distance(&self, other: &TSPCity) -> f32 {
+        let dx = self.x - other.x;
+        let dy = self.y - other.y;
+        (dx * dx + dy * dy).sqrt()
+    }
 }
 
 /**
@@ -20,7 +29,7 @@ pub struct TSPCity {
  */
 pub struct TSPGAProblem {
     cities: Vec<TSPCity>,
-    crossover_ox1: CrossoverOX1<usize>,
+    crossover_ox1: CrossoverOX1,
 }
 
 impl TSPGAProblem {
@@ -34,28 +43,26 @@ impl TSPGAProblem {
     pub fn generate_random_cities(count: usize) -> Vec<TSPCity> {
         (0..count)
             .map(|_| TSPCity {
-                x: random_f64(),
-                y: random_f64(),
+                x: random_f64() as f32,
+                y: random_f64() as f32,
             })
             .collect()
     }
 
     /**
-     * Soma dos quadrados da distância entre cada rota descrita pelos genes (ciclo fechado).
-     * 
-     * Usamos a distância ao quadrado para evitar a sobrecarga de calcular raízes quadradas, já que a comparação de fitness é relativa. O resultado é proporcional à distância real, mas mais eficiente de calcular.
+     * Soma das distâncias entre cada rota descrita pelos genes (ciclo fechado).
      */
-    pub fn total_route_distance_squared(genes: &[usize], cities: &[TSPCity]) -> f64 {
-        let n = genes.len();
-        (0..n)
-            .map(|i| {
-                let from = &cities[genes[i]];
-                let to = &cities[genes[(i + 1) % n]];
-                let dx = from.x - to.x;
-                let dy = from.y - to.y;
-                dx * dx + dy * dy
-            })
-            .sum()
+    pub fn total_route_distance(genes: &[usize], cities: &[TSPCity]) -> f32 {
+        let len = genes.len();
+        let mut total_distance = 0.0;
+        let mut from = &cities[genes[len - 1]];
+        for i in 0..len {
+            let to = &cities[genes[i]];
+            total_distance += from.distance(to);
+
+            from = to;
+        }
+        total_distance
     }
 }
 
@@ -73,9 +80,7 @@ impl GAProblem for TSPGAProblem {
     }
 
     fn fitness(&mut self, genes: &Self::Gene) -> f64 {
-        let dist = Self::total_route_distance_squared(genes, &self.cities);
-        // Evita divisão por zero, mas deve retornar inverso da distância para que rotas mais curtas tenham fitness maior
-        if dist == 0.0 { 0.0 } else { 1.0 / dist }
+        return -Self::total_route_distance(genes, &self.cities) as f64;
     }
 
     fn mutate(&mut self, genes: &mut Self::Gene, mutation_rate: f64) {

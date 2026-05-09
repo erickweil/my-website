@@ -1,5 +1,11 @@
 use crate::random::{random_bool, random_range};
 
+#[inline(always)]
+fn wrap_increment(idx: usize, max: usize) -> usize {
+    let next = idx + 1;
+    if next >= max { 0 } else { next }
+}
+
 pub fn crossover_uniform<T: Clone>(
     child_a: &mut [T],
     child_b: &mut [T],
@@ -71,32 +77,29 @@ pub fn crossover_2_point<T: Clone>(
  3. starting from the right side of the slice, copy genes from parent 2 as they appear to child 1 if they are not yet marked out.
 */
 
-pub struct CrossoverOX1<T: Clone> {
+pub struct CrossoverOX1 {
     // Controla quais genes já foram copiados para os filhos,
     // usando um sistema de marcação por epoch para evitar buscas O(n)
     marked_a: Vec<u64>,
     marked_b: Vec<u64>,
     epoch: u64,
-
-    // precisa usar T
-    _marker: std::marker::PhantomData<T>,
 }
 
-impl<T: Clone> CrossoverOX1<T>
+impl CrossoverOX1
 {
     pub fn new(size: usize) -> Self {
         Self {
             marked_a: vec![0; size],
             marked_b: vec![0; size],
             epoch: 0,
-            _marker: std::marker::PhantomData,
         }
     }
 
-    pub fn crossover<F>(&mut self, child_a: &mut [T], child_b: &mut [T], parent_a: &[T], parent_b: &[T],
+    pub fn crossover<T: Clone, F>(&mut self, child_a: &mut [T], child_b: &mut [T], parent_a: &[T], parent_b: &[T],
         get_index: F
     ) where F: Fn(&T) -> usize {
         let size = parent_a.len();
+        debug_assert!(size > 1, "Operador OX1 requer genes maior que 1");
         debug_assert!(
                child_a.len() == size 
             && child_b.len() == size 
@@ -109,6 +112,8 @@ impl<T: Clone> CrossoverOX1<T>
         let stamp = self.epoch;
 
         // Sorteia dois pontos de corte distintos
+        // [A, B, C, D, E, F, G]
+        //        p1    p2
         let (p1, p2) = {
             let mut s = random_range(0, size);
             let mut e = random_range(0, size);
@@ -117,7 +122,13 @@ impl<T: Clone> CrossoverOX1<T>
             (s, e)
         };
 
-        // Copia o segmento selecionado e já marca os genes usados
+        // Copia o segmento selecionado e já marca os genes que foram copiados
+        // parentA [A, B, C, D, E, F, G]
+        // childA  [_, _, C, D, E, _, _]
+
+        // parentB [F, G, A, B, C, D, E]
+        // childB  [_, _, A, B, C, _, _]
+        //                p1    p2
         for i in p1..=p2 {
             let gene_a = parent_a[i].clone();
             self.marked_a[get_index(&gene_a)] = stamp;
@@ -128,29 +139,83 @@ impl<T: Clone> CrossoverOX1<T>
             child_b[i] = gene_b;
         }
 
-        // Preenche os filhos com os genes restantes do outro pai,
-        // na ordem em que aparecem, pulando os já copiados
-        let mut idx_parent_b = (p2 + 1) % size;
-        let mut idx_child_a  = idx_parent_b;
-        let mut idx_parent_a = (p2 + 1) % size;
-        let mut idx_child_b  = idx_parent_a;
+        // Preenche os filhos com os genes restantes do outro pai, na ordem em que aparecem, pulando os já copiados
+        // parentB [F, G, A, B, C, D, E]
+        // childA  [A, B,_C,_D,_E, F, G]
+        //
+        // parentA [A, B, C, D, E, F, G]
+        // childB  [D, E,_A,_B,_C, F, G]
+        //                p1    p2
+        let start = wrap_increment(p2, size);
 
+        let mut idx_parent_b = start;
+        let mut idx_child_a  = start;
+        let mut idx_parent_a = start;
+        let mut idx_child_b  = start;
         for _ in 0..size {
-            // Preenche o filho A com os genes de B, na ordem em que aparecem, ignorando os já copiados
-            let gene_a = parent_b[idx_parent_b].clone();
-            if self.marked_a[get_index(&gene_a)] != stamp {
-                child_a[idx_child_a] = gene_a;
-                idx_child_a = (idx_child_a + 1) % size;
+            // Preenche o filho A com os genes de B, na ordem em que aparecem, ignorando os já copiados do pai A
+            let gene_a = &parent_b[idx_parent_b];
+            if self.marked_a[get_index(gene_a)] != stamp {
+                child_a[idx_child_a] = gene_a.clone();
+                idx_child_a = wrap_increment(idx_child_a, size);
+                if idx_child_a == p1 { break; }
             }
-            idx_parent_b = (idx_parent_b + 1) % size;
+            idx_parent_b = wrap_increment(idx_parent_b, size);
+        }
+        for _ in 0..size {
+            // Preenche o filho B com os genes de A, na ordem em que aparecem, ignorando os já copiados do pai B
+            let gene_b = &parent_a[idx_parent_a];
+            if self.marked_b[get_index(gene_b)] != stamp {
+                child_b[idx_child_b] = gene_b.clone();
+                idx_child_b = wrap_increment(idx_child_b, size);
+                if idx_child_b == p1 { break; }
+            }
+            idx_parent_a = wrap_increment(idx_parent_a, size);
+        }
+    }
+}
 
-            // Preenche o filho B com os genes de A, na ordem em que aparecem, ignorando os já copiados
-            let gene_b = parent_a[idx_parent_a].clone();
-            if self.marked_b[get_index(&gene_b)] != stamp {
-                child_b[idx_child_b] = gene_b;
-                idx_child_b = (idx_child_b + 1) % size;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::random::random_shuffle;
+    use wasm_bindgen_test::*;
+
+    const ABC: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn test_crossover_ox1() {
+        fn get_index(gene: &char) -> usize {
+            ABC.find(*gene).expect("Gene fora do alfabeto")
+        }
+        
+        let size = ABC.len();
+        let mut crossover = CrossoverOX1::new(size);
+
+        // Testa 50 cruzamentos para verificar que os filhos são permutações válidas dos pais, sem valores duplicados
+        for _ in 0..50 {
+            let mut parent_a = ABC.chars().take(size).collect::<Vec<_>>();
+            random_shuffle(&mut parent_a);
+            let mut parent_b = ABC.chars().take(size).collect::<Vec<_>>();
+            random_shuffle(&mut parent_b);
+
+            let mut child_a = vec!['_'; size];
+            let mut child_b = vec!['_'; size];
+
+            crossover.crossover(&mut child_a, &mut child_b, &parent_a, &parent_b, get_index);
+
+            // Verifica que os filhos são permutações válidas dos pais, sem valores duplicados
+            let mut check_a = vec![false; size];
+            let mut check_b = vec![false; size];
+            for i in 0..size {
+                let idx_a = get_index(&child_a[i]);
+                let idx_b = get_index(&child_b[i]);
+                assert!(idx_a < size && idx_b < size, "Índice não está no tamanho correto");
+                assert!(!check_a[idx_a], "Gene duplicado em child_a");
+                assert!(!check_b[idx_b], "Gene duplicado em child_b");
+                check_a[idx_a] = true;
+                check_b[idx_b] = true;
             }
-            idx_parent_a = (idx_parent_a + 1) % size;
         }
     }
 }

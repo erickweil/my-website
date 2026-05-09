@@ -105,7 +105,7 @@ pub fn poisson_knuth(lambda: f64) -> usize {
 mod tests {
     use web_time::{Instant};
 
-use super::*;
+    use super::*;
     use crate::console_log;
     use wasm_bindgen_test::*;
 
