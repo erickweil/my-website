@@ -126,9 +126,16 @@ impl Horario {
         &self.slots[start..(start + self.n_tempos)]
     }*/
 
-    pub fn possui(&self, dia: DiaSemana, tempo: usize) -> bool {
+    #[inline(always)]
+    pub fn get(&self, dia: DiaSemana, tempo: usize) -> i32 {
         let idx = tempo * QUANTOS_DIAS + dia.to_index();
-        self.slots[idx] == 1
+        self.slots[idx]
+    }
+
+    #[inline(always)]
+    pub fn desmarcar(&mut self, dia: DiaSemana, tempo: usize) {
+        let idx = tempo * QUANTOS_DIAS + dia.to_index();
+        self.slots[idx] -= 1;
     }
 }
 
@@ -147,7 +154,7 @@ pub struct Professor {
     //  -1 = não dá aula
     //   0 = não está definido
     // > 0 = Índice da disciplina
-    //_matriz:   Horario,
+    pub _matriz:   Horario,
 }
 
 pub struct Disciplina {
@@ -229,7 +236,8 @@ impl RegrasHorario {
             professores.push(Professor { 
                 id: i, 
                 nome: prof_form.nome, 
-                horarios: Horario::from_formulario(prof_form.horarios, n_tempos)
+                horarios: Horario::from_formulario(prof_form.horarios, n_tempos),
+                _matriz: Horario::new(n_tempos),
             });
         }
 
@@ -280,7 +288,7 @@ impl RegrasHorario {
             for dia_idx in 0..QUANTOS_DIAS {
                 let dia = DiaSemana::from_index(dia_idx);
                 for tempo in 0..self.n_tempos {
-                    if turma.horarios.possui(dia, tempo) {
+                    if turma.horarios.get(dia, tempo) == 1 {
                         // Disponível para alocação
                         quadro[self.to_quadro_index(turma.id, dia, tempo)] = 0;
                     }

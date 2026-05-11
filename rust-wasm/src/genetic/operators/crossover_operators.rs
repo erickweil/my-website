@@ -1,4 +1,4 @@
-use crate::random::{random_bool, random_range};
+use crate::random::{random_bool, random_range, random_range_except};
 
 #[inline(always)]
 fn wrap_increment(idx: usize, max: usize) -> usize {
@@ -47,8 +47,7 @@ pub fn crossover_2_point<T: Clone>(
 ) {
     let (start, end) = {
         let mut s = random_range(0, parent_a.len());
-        let mut e = random_range(0, parent_a.len());
-        if s == e { e = (e + 1) % parent_a.len(); }
+        let mut e = random_range_except(0, parent_a.len(), s);
         if s > e { std::mem::swap(&mut s, &mut e); }
         (s, e)
     };
@@ -87,25 +86,22 @@ pub struct CrossoverOX1 {
 
 impl CrossoverOX1
 {
-    pub fn new(size: usize) -> Self {
+    /// Cria um novo operador OX1 para um conjunto de genes com `possible_gene_values` valores distintos.
+    pub fn new(possible_gene_values: usize) -> Self {
         Self {
-            marked_a: vec![0; size],
-            marked_b: vec![0; size],
+            marked_a: vec![0; possible_gene_values],
+            marked_b: vec![0; possible_gene_values],
             epoch: 0,
         }
     }
 
+    /// Realiza o crossover OX1 entre os pais, gerando os filhos. 
+    /// A função `get_index` deve retornar um índice único para cada gene, dentro do intervalo de `possible_gene_values`
     pub fn crossover<T: Clone, F>(&mut self, child_a: &mut [T], child_b: &mut [T], parent_a: &[T], parent_b: &[T],
         get_index: F
     ) where F: Fn(&T) -> usize {
         let size = parent_a.len();
         debug_assert!(size > 1, "Operador OX1 requer genes maior que 1");
-        debug_assert!(
-               child_a.len() == size 
-            && child_b.len() == size 
-            && parent_a.len() == size
-            && parent_b.len() == size
-        , "Todos devem ser do tamanho size");
 
         // Incrementa o epoch para marcar os genes usados nesta execução
         self.epoch += 1;
@@ -116,8 +112,7 @@ impl CrossoverOX1
         //        p1    p2
         let (p1, p2) = {
             let mut s = random_range(0, size);
-            let mut e = random_range(0, size);
-            if s == e { e = (e + 1) % size; }
+            let mut e = random_range_except(0, size, s);
             if s > e { std::mem::swap(&mut s, &mut e); }
             (s, e)
         };
@@ -186,7 +181,7 @@ mod tests {
     #[wasm_bindgen_test(unsupported = test)]
     fn test_crossover_ox1() {
         fn get_index(gene: &char) -> usize {
-            ABC.find(*gene).expect("Gene fora do alfabeto")
+            ABC.find(*gene).expect("Gene não encontrado no alfabeto")
         }
         
         let size = ABC.len();

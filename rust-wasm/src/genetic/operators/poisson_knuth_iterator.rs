@@ -87,8 +87,9 @@ impl Iterator for PoissonIterator {
     }
 }
 
-/*/// Gera um número de Poisson usando o algoritmo de Knuth
-pub fn poisson_knuth(lambda: f64) -> usize {
+/// Gera um número de Poisson usando o algoritmo de Knuth
+/// Lambda deve ser o valor esperado (média) da distribuição, ou seja, o número médio de mutações esperadas
+pub fn poisson_knuth_sample(lambda: f64) -> usize {
     let l = (-lambda).exp();
     let mut k = 0usize;
     let mut p = 1.0_f64;
@@ -99,7 +100,7 @@ pub fn poisson_knuth(lambda: f64) -> usize {
             return k - 1;
         }
     }
-}*/
+}
 
 #[cfg(test)]
 mod tests {
@@ -168,15 +169,17 @@ mod tests {
         assert!((average_iterator - expected_mutations).abs() < 1.0, "Average iterator should be close to {}, got {}", expected_mutations, average_iterator);
         assert!((average_for_each - expected_mutations).abs() < 1.0, "Average for_each should be close to {}, got {}", expected_mutations, average_for_each);
 
-        /*
+        
         // Testando a função de Poisson diretamente
+        let start_poisson_direct = Instant::now();
         let mut count_poisson = 0;
         for _ in 0..samples {
-            count_poisson += poisson_knuth(expected_mutations);
+            count_poisson += poisson_knuth_sample(expected_mutations);
         }
+        console_log!("Duration: {:?}", start_poisson_direct.elapsed());
         let average_poisson = count_poisson as f64 / samples as f64;
         console_log!("Average Poisson: {}", average_poisson);
         assert!((average_poisson - expected_mutations).abs() < 1.0, "Average Poisson should be close to {}, got {}", expected_mutations, average_poisson);
-        */
+        
     }
 }

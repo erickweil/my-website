@@ -1,4 +1,4 @@
-use crate::{genetic::operators::for_each_poisson, random::{random_bool, random_range}};
+use crate::{genetic::operators::for_each_poisson, random::{random_bool, random_range_except}};
 
 pub fn mutation_replace<G, F>(
     genes: &mut [G],
@@ -19,10 +19,7 @@ pub fn mutation_random_swap<G>(
     if genes.len() < 2 { return; }
     for_each_poisson(genes.len(), mutation_rate, |idx| {
         // Gera um índice aleatório diferente de idx
-        let swap_idx = {
-            let i = random_range(0, genes.len());
-            if i != idx { i } else { (i + 1) % genes.len() }
-        };
+        let swap_idx = random_range_except(0, genes.len(), idx);
         genes.swap(idx, swap_idx);
     });
 }

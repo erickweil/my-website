@@ -1,7 +1,8 @@
-use crate::{console_log, genetic::{operators::for_each_poisson, problems::GAProblem}, horario::{DiaSemana, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range}};
+use crate::{console_log, genetic::{operators::{poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
 
 impl GAProblem for RegrasHorario {
-    // Representação linearizada do quadro de horários
+    /// Representação linearizada do multiconjunto que é o quadro de horários
+    /// > Wikipedia: Em matemática, um multiconjunto (ou ainda multiset ou mset) é uma modificação do conceito de um conjunto que, diferentemente de um conjunto, permite várias instâncias para cada um de seus elementos.
     type Gene = QuadroHorario;
 
     fn max_fitness(&self) -> Option<f64> {
@@ -62,10 +63,9 @@ impl GAProblem for RegrasHorario {
         let mut fitness: f64 = 0.0;
 
         // Reseta as matrizes de disponibilidade dos professores para contagem de fitness
-        // prof_matriz[prof_id] = cópia dos slots de horarios do professor
-        let mut prof_matriz: Vec<Vec<i32>> = self.professores.iter()
-            .map(|prof| prof.horarios.slots.clone())
-            .collect();
+        for prof in &mut self.professores {
+            prof._matriz.slots.copy_from_slice(&prof.horarios.slots);
+        }
 
         // Pass 1: conta quantas turmas precisam de cada (prof, dia, tempo).
         // Isso evita o viés em que a turma com id menor sempre "ganha" o professor.
@@ -74,7 +74,7 @@ impl GAProblem for RegrasHorario {
                 let dia = DiaSemana::from_index(dia_idx);
                 for tempo in 0..self.n_tempos {
                     // Slots inativos: nada a verificar
-                    if !turma.horarios.possui(dia, tempo) { continue; }
+                    if turma.horarios.get(dia, tempo) != 1 { continue; }
 
                     let id_disciplina = quadro[self.to_quadro_index(turma.id, dia, tempo)] - 1;
                     if id_disciplina < 0 { continue; } // slot vazio
@@ -84,8 +84,7 @@ impl GAProblem for RegrasHorario {
                     // prof_matriz começa como cópia de prof.horarios (0, 1)
                     // Para cada disciplina alocada, decrementa a disponibilidade dos professores daquela disciplina
                     for &prof_id in &disciplina.professores {
-                        let slot_idx = tempo * QUANTOS_DIAS + dia_idx;
-                        prof_matriz[prof_id][slot_idx] -= 1;
+                        self.professores[prof_id]._matriz.desmarcar(dia, tempo);
                     }
                 }
             }
@@ -98,7 +97,7 @@ impl GAProblem for RegrasHorario {
                 for tempo in 0..self.n_tempos {
                     let index = self.to_quadro_index(turma.id, dia, tempo);
 
-                    if !turma.horarios.possui(dia, tempo) {
+                    if turma.horarios.get(dia, tempo) != 1 {
                         // Deveria ser vazio
                         if quadro[index] != -1 {
                             fitness -= 1000.0;
@@ -114,11 +113,10 @@ impl GAProblem for RegrasHorario {
                     }
 
                     let disciplina = &self.disciplinas[id_disciplina as usize];
-                    let slot_idx = tempo * QUANTOS_DIAS + dia_idx;
 
                     // Regra: Disponibilidade do professor e sem conflito entre turmas
                     for &prof_id in &disciplina.professores {
-                        let disponibilidade = prof_matriz[prof_id][slot_idx];
+                        let disponibilidade = self.professores[prof_id]._matriz.get(dia, tempo);
                         // Penaliza proporcional ao Nº de conflitos
                         if disponibilidade <= 0 {
                             fitness += disponibilidade as f64 * 50.0;
@@ -181,22 +179,39 @@ impl GAProblem for RegrasHorario {
 
     fn mutate(&mut self, quadro: &mut Self::Gene, mutation_rate: f64) {
         // Mutação de trocas dentro das turmas
-        // A FAZER: sortear só valores válidos, desse jeito a taxa de mutação efetiva pode ser menor que a definida
-        for_each_poisson(quadro.len(), mutation_rate, |idx| {
-            let (turma_id, _dia, _tempo) = self.from_quadro_index(idx);
+        let n_mutations = poisson_knuth_sample((quadro.len() as f64) * mutation_rate);
+        for _ in 0..n_mutations {            
+            // 1. Escolhe aleatoriamente o primeiro índice
+            let idx = {
+                let mut ret_idx = 0;
+                for _ in 0..10 {
+                    let idx = random_range(0, quadro.len());
+                    if quadro[idx] != -1 {
+                        ret_idx = idx;
+                        break
+                    }
+                }
+                ret_idx
+            };
+            
+            // 2. Escolhe aleatoriamente outro tempo dentro da mesma turma para trocar
+            let turma_id = (idx / self.n_tempos) / QUANTOS_DIAS;
+            let start_turma = turma_id * self.n_tempos * QUANTOS_DIAS;
+            let end_turma =  (turma_id + 1) * self.n_tempos * QUANTOS_DIAS;
+            let outro_idx = {
+                let mut ret_idx = idx;
+                for _ in 0..10 {
+                    let outro_idx = random_range_except(start_turma, end_turma, idx);
+                    if quadro[outro_idx] != -1 {
+                        ret_idx = outro_idx;
+                        break
+                    }
+                }
+                ret_idx
+            };
 
-            // Escolhe aleatoriamente outro tempo dentro da mesma turma e dia para trocar
-            let outro_idx = self.to_quadro_index(
-                turma_id, 
-                DiaSemana::from_index(random_range(0, QUANTOS_DIAS)),
-                random_range(0, self.n_tempos)
-            );
-
-            // Só troca se ambos os tempos forem alocáveis (não -1)
-            if quadro[idx] != -1 && quadro[outro_idx] != -1 {
-                quadro.swap(idx, outro_idx);
-            }
-        });
+            quadro.swap(idx, outro_idx);
+        }
     }
 
     fn crossover(
@@ -209,22 +224,22 @@ impl GAProblem for RegrasHorario {
     {
         // Crossover por blocos de turmas: para cada turma, escolhe aleatoriamente um dos pais
         // Os filhos recebem blocos complementares (se childA ← parentA, childB ← parentB)
+        // A FAZER: crossover de um jeito que não cause genes inválidos
         for turma in &self.turmas {
-            let escolha_a = random_bool();
-            for dia_idx in 0..QUANTOS_DIAS {
-                let dia = DiaSemana::from_index(dia_idx);
-                for tempo in 0..self.n_tempos {
-                    let idx = self.to_quadro_index(turma.id, dia, tempo);
-                    if escolha_a {
-                        child_a[idx] = parent_a[idx];
-                        child_b[idx] = parent_b[idx];
-                    } else {
-                        child_a[idx] = parent_b[idx];
-                        child_b[idx] = parent_a[idx];
-                    }
-                }
+            let start = turma.id * self.n_tempos * QUANTOS_DIAS;
+            let end = (turma.id + 1) * self.n_tempos * QUANTOS_DIAS;
+            let parent_a_slice = &parent_a[start..end];
+            let parent_b_slice = &parent_b[start..end];
+            
+            // Apenas copia blocos inteiros de turmas
+            if random_bool() {
+                child_a[start..end].clone_from_slice(parent_a_slice);
+                child_b[start..end].clone_from_slice(parent_b_slice);
+            } else {
+                child_a[start..end].clone_from_slice(parent_b_slice);
+                child_b[start..end].clone_from_slice(parent_a_slice);
             }
-        }            
+        }        
     }
 }
 

@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 use serde::{Serialize};
 use rustc_hash::FxHashSet;
 use std::mem;
-use crate::{genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range}};
+use crate::{genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range, random_range_except}};
 #[cfg(debug_assertions)]
 use crate::console_log;
 
@@ -395,15 +395,17 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         let mut best: Option<(usize, f64)> = None; // (índice, fitness)
 
         for _ in 0..tournament_size {
-            let ind_i = random_range(0, pop_len);
+            // Sorteia um índice aleatório, garantindo que seja diferente do índice excluído (se houver)
+            let ind_i = if let Some(except) = exclude {
+                random_range_except(0, pop_len, except)
+            } else {
+                random_range(0, pop_len)
+            };
             let ind = &population[ind_i];
 
-            if let Some(exclude_idx) = exclude {
-                if ind_i == exclude_idx { continue; } // pula se for o índice excluído
-
-                if let Some(exclude_hash) = exclude_hash && let Some(hash) = ind.hash {
-                    if hash == exclude_hash { continue; } // pula se for o mesmo hash
-                }
+            // Se tem hash, e é igual ao hash do indivíduo excluído, pula essa iteração
+            if let Some(exclude_hash) = exclude_hash && let Some(hash) = ind.hash {
+                if hash == exclude_hash { continue; }
             }
 
             let fitness = ind.fitness.unwrap_or(f64::MIN);
