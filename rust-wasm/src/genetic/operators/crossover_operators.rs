@@ -177,13 +177,12 @@ mod tests {
     use wasm_bindgen_test::*;
 
     const ABC: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    fn get_index(gene: &char) -> usize {
+        ABC.find(*gene).expect("Gene não encontrado no alfabeto")
+    }
 
     #[wasm_bindgen_test(unsupported = test)]
-    fn test_crossover_ox1() {
-        fn get_index(gene: &char) -> usize {
-            ABC.find(*gene).expect("Gene não encontrado no alfabeto")
-        }
-        
+    fn test_crossover_ox1() {        
         let size = ABC.len();
         let mut crossover = CrossoverOX1::new(size);
 

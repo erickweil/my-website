@@ -791,8 +791,8 @@ export default function GeradorHorario() {
                                 <div className="flex items-center gap-2">
                                     {([
                                         { id: "pencilmark", label: "Pencilmark" },
-                                        { id: "genetic", label: "Genético (TS)" },
-                                        { id: "genetic-wasm", label: "Genético (WASM)" },
+                                        { id: "genetic", label: "Genético v1 (TS)" },
+                                        { id: "genetic-wasm", label: "Genético v2 (WASM)" },
                                     ] as const).map(({ id, label }) => (
                                         <button
                                             key={id}

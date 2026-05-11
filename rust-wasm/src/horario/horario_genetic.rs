@@ -228,16 +228,28 @@ impl GAProblem for RegrasHorario {
         for turma in &self.turmas {
             let start = turma.id * self.n_tempos * QUANTOS_DIAS;
             let end = (turma.id + 1) * self.n_tempos * QUANTOS_DIAS;
+            let child_a_slice = &mut child_a[start..end];
+            let child_b_slice = &mut child_b[start..end];
             let parent_a_slice = &parent_a[start..end];
             let parent_b_slice = &parent_b[start..end];
             
-            // Apenas copia blocos inteiros de turmas
             if random_bool() {
-                child_a[start..end].clone_from_slice(parent_a_slice);
-                child_b[start..end].clone_from_slice(parent_b_slice);
+                // Apenas copia blocos inteiros de turmas
+                if random_bool() {
+                    child_a_slice.clone_from_slice(parent_a_slice);
+                    child_b_slice.clone_from_slice(parent_b_slice);
+                } else {
+                    child_a_slice.clone_from_slice(parent_b_slice);
+                    child_b_slice.clone_from_slice(parent_a_slice);
+                }
             } else {
-                child_a[start..end].clone_from_slice(parent_b_slice);
-                child_b[start..end].clone_from_slice(parent_a_slice);
+                // Crossover IPX
+                self.crossover_ipx.crossover(
+                    child_a_slice, 
+                    child_b_slice, 
+                    parent_a_slice, 
+                    parent_b_slice
+                );
             }
         }        
     }

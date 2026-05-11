@@ -3,6 +3,8 @@ use std::{collections::HashMap};
 // Tipo a ser serializado-deserializado para comunicação com o frontend
 use serde::{Deserialize};
 
+use crate::genetic::operators::CrossoverIPX;
+
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -180,6 +182,8 @@ pub struct RegrasHorario {
     pub disciplinas: Vec<Disciplina>,    
     pub professores: Vec<Professor>,
     pub n_tempos: usize,
+
+    pub crossover_ipx: CrossoverIPX<i32>,
 }
 
 impl RegrasHorario {
@@ -260,6 +264,9 @@ impl RegrasHorario {
         }
 
         Self {
+            // Capacidade = tamanho do slice de uma turma (pior caso do IPX)
+            crossover_ipx: CrossoverIPX::new(QUANTOS_DIAS * n_tempos),
+
             turmas,
             disciplinas,
             professores,
