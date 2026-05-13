@@ -44,6 +44,10 @@ macro_rules! ga_runner {
                 }
             }
 
+            pub fn reset_population(&mut self) {
+                self.ga.reset_population();
+            }
+
             pub fn run(&mut self, generations: usize) {
                 self.ga.run(generations);
             }
@@ -58,8 +62,8 @@ macro_rules! ga_runner {
             }
 
             pub fn get_genes(&self, idx: usize) -> Option<wasm_bindgen::JsValue> {
-                self.ga.population.get(idx).map(
-                    |ind| serde_wasm_bindgen::to_value(&ind.genes)
+                self.ga.get_genes(idx).map(
+                    |genes| serde_wasm_bindgen::to_value(genes)
                 ).map_or(None, |res| {
                     if let Ok(js_val) = res { Some(js_val) } else { None }
                 })

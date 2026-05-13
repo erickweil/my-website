@@ -50,7 +50,6 @@ self.onmessage = async (message) => {
         cfg.tournament_size = 10;
         cfg.max_stagnation = 5000;
         cfg.diversity_check = false;
-        cfg.reset_population = false;
 
         console.log("Configurações do GA:", formData, cfg);
         const runner = new HorarioGAProblemRunner(formData, cfg);

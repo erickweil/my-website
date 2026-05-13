@@ -1,10 +1,16 @@
-use wasm_bindgen::prelude::*;
-use serde::{Serialize};
-use rustc_hash::FxHashSet;
-use std::mem;
-use crate::{genetic::problems::{GAProblem, Individual}, random::{random_f64, random_range, random_range_except}};
 #[cfg(debug_assertions)]
 use crate::console_log;
+use crate::{
+    genetic::{
+        operators::tournament_selection,
+        problems::{GAProblem, Individual},
+    },
+    random::{random_f64, random_range},
+};
+use rustc_hash::FxHashSet;
+use serde::Serialize;
+use std::mem;
+use wasm_bindgen::prelude::*;
 
 #[derive(Clone, Debug)]
 #[wasm_bindgen]
@@ -14,7 +20,7 @@ pub struct GAConfig {
     /// Tamanho do torneio para seleção. Padrão: 10
     pub tournament_size: usize,
     /// Limite de gerações sem melhora antes de desistir. Padrão: indefinido (sem limite)
-    pub max_stagnation: isize,
+    pub max_stagnation: Option<usize>,
     /// Taxa de crossover entre indivíduos (probabilidade de cruzar dois indivíduos). Padrão: 0.5 
     pub crossover_rate: f64,
     /// Taxa de mutação por indivíduo (probabilidade de mutar um indivíduo). Padrão: 0.5
@@ -25,8 +31,6 @@ pub struct GAConfig {
     /// Se true previne indivíduos idênticos (problema deve implementar `hash()`)
     /// Padrão false
     pub diversity_check: bool,
-    /// padrão true, resetar população a cada chamada de run
-    pub reset_population: bool,
 }
 
 #[wasm_bindgen]
@@ -36,12 +40,11 @@ impl GAConfig {
         Self {
             population_size: 100,
             tournament_size: 10,
-            max_stagnation: -1,
+            max_stagnation: None,
             crossover_rate: 0.5,
             mutation_rate: 0.5,
             mutation_gene_rate: 0.01,
             diversity_check: false,
-            reset_population: true,
         }
     }
 }
@@ -54,8 +57,8 @@ impl Default for GAConfig {
 pub struct GAInfo<P: GAProblem> {
     /// Geração atual da execução do algoritmo genético
     pub generation: usize,
-    /// Número de gerações sem melhora. u32::MAX indica "sem informação".
-    pub stagnated_for: u32,
+    /// Número de gerações sem melhora.
+    pub stagnated_for: usize,
     /// Fitness do melhor indivíduo encontrado até agora.
     pub best_fitness: Option<f64>,
     /// Os melhores genes encontrados até agora.
@@ -64,13 +67,13 @@ pub struct GAInfo<P: GAProblem> {
 
 pub struct GeneticAlgorithm<P: GAProblem> {
     pub problem: P,
-    pub population: Vec<Individual<P::Gene>>,
-    pub offspring: Vec<Individual<P::Gene>>,
+    population: Vec<Individual<P::Gene>>,
+    offspring: Vec<Individual<P::Gene>>,
     population_hashes: FxHashSet<u64>,
 
-    pub generation: usize,
-    pub best_genes: Option<P::Gene>,
-    pub best_fitness: Option<f64>,
+    generation: usize,
+    best_genes: Option<P::Gene>,
+    best_fitness: Option<f64>,
 
     // Controle de estagnação
     /// Geração em que a última melhora foi observada
@@ -101,16 +104,17 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         }
     }
 
+    pub fn reset_population(&mut self) {
+        self.stag_fitness = None;
+        self.stag_start = self.generation;
+        self.mutation_multiplier = 1.0;
+        self.tournament_multiplier = 1.0;
+        self.initialize_population(true);
+    }
+
     pub fn run(&mut self, generations: usize) {
         // 0. Inicializa a população (gera indivíduos aleatórios para preencher a população até o tamanho definido)
-        if self.config.reset_population {
-            self.stag_fitness = None;
-            self.stag_start = self.generation;
-            self.mutation_multiplier = 1.0;
-            self.tournament_multiplier = 1.0;
-        }
-
-        self.initialize_population(self.config.reset_population);
+        self.initialize_population(false);
         if self.population.is_empty() { 
             return; 
         }
@@ -126,7 +130,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
             // 2. Verifica melhora global
             let current_best_fitness = self.population[0].fitness.unwrap_or(f64::MIN);
-            if self.best_fitness.map_or(true, |bf| current_best_fitness > bf) {
+            if self.best_fitness.is_none_or(|bf| current_best_fitness > bf) {
                 if let Some(bg) = &mut self.best_genes {
                     // clone_from previne realocação
                     bg.clone_from(&self.population[0].genes); 
@@ -144,19 +148,18 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
             // A FAZER: usar i64 para comparação de fitness para evitar problemas de precisão
             #[cfg(debug_assertions)]
             let mut improved = false;
-            if self.stag_fitness.map_or(true, |sf| current_best_fitness > (sf + f64::EPSILON)) {
+            if self.stag_fitness.is_none_or(|sf| current_best_fitness > (sf + f64::EPSILON)) {
                 self.stag_fitness = Some(current_best_fitness);
                 self.stag_start = self.generation;
                 self.mutation_multiplier = 1.0;
                 self.tournament_multiplier = 1.0;
                 #[cfg(debug_assertions)]
                 { improved = true; }
-            } else if self.config.max_stagnation > 0 {
+            } else if let Some(max_stag) = self.config.max_stagnation {
                 // Experimento: Controle de estagnação adaptativo
                 // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
 
                 // Aumenta a taxa de mutação em até 2x após STAG/2 gerações sem melhora
-                let max_stag = self.config.max_stagnation as usize;
                 let half_stag = (max_stag / 2).max(1); // evita divisão por zero quando max_stagnation <= 1
 
                 let excess = stagnated_for.saturating_sub(half_stag);
@@ -209,10 +212,17 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
     pub fn get_info(&self) -> GAInfo<P> {
         GAInfo {
             generation: self.generation,
-            stagnated_for: (self.generation.saturating_sub(self.stag_start)) as u32,
+            stagnated_for: (self.generation.saturating_sub(self.stag_start)),
             best_fitness: self.best_fitness,
             best_genes: self.best_genes.clone(),
         }
+    }
+
+    /// Retorna os genes do indivíduo no índice `idx` da população atual
+    pub fn get_genes(&self, idx: usize) -> Option<&P::Gene> {
+        self.population.get(idx).map(
+            |ind| &ind.genes
+        )
     }
 
     /// Inicializa a população com indivíduos aleatórios
@@ -301,8 +311,8 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         for [child_a, child_b] in chunks.iter_mut() {
             for attempt in (0..=3).rev() {
                 // Seleciona pais aleatório da geração anterior
-                let p1_idx = Self::tournament_selection(&self.population, tournament_size, None);
-                let p2_idx = Self::tournament_selection(&self.population, tournament_size, Some(p1_idx));
+                let p1_idx = tournament_selection::<P>(&self.population, tournament_size, None);
+                let p2_idx = tournament_selection::<P>(&self.population, tournament_size, Some(p1_idx));
 
                 let parent_a = &self.population[p1_idx].genes;
                 let parent_b = &self.population[p2_idx].genes;
@@ -359,7 +369,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         // Estrutura de fallback para tamanho par da população 
         // [0,1,2,3,4,5] -> best: [0]  chunks: [(1, 2), (3, 4)], remainder: [5]
         if let Some(last_child) = remainder.first_mut() {
-            let p1_idx = Self::tournament_selection(&self.population, tournament_size, None);
+            let p1_idx = tournament_selection::<P>(&self.population, tournament_size, None);
             let parent_a = &self.population[p1_idx].genes;
 
             // Sem crossover
@@ -380,70 +390,5 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         // Em vez de criar um novo array, podemos simplesmente trocar os papéis dos arrays population e offspring para evitar cópias desnecessárias
         // Swap de ponteiros ultra performático O(1)
         mem::swap(&mut self.population, &mut self.offspring);
-    }
-
-    /// Realiza a seleção por torneio, retornando o índice do indivíduo selecionado.
-    /// 1. Seleciona `tournament_size` indivíduos aleatórios da população (ignorando `exclude_idx`).
-    /// 2. Retorna o índice do indivíduo com maior fitness entre os selecionados.
-    fn tournament_selection(
-        population: &[Individual<P::Gene>],
-        tournament_size: usize,
-        exclude: Option<usize>,
-    ) -> usize {
-        let pop_len = population.len();
-        let exclude_hash = exclude.and_then(|idx| population[idx].hash);
-        let mut best: Option<(usize, f64)> = None; // (índice, fitness)
-
-        for _ in 0..tournament_size {
-            // Sorteia um índice aleatório, garantindo que seja diferente do índice excluído (se houver)
-            let ind_i = if let Some(except) = exclude {
-                random_range_except(0, pop_len, except)
-            } else {
-                random_range(0, pop_len)
-            };
-            let ind = &population[ind_i];
-
-            // Se tem hash, e é igual ao hash do indivíduo excluído, pula essa iteração
-            if let Some(exclude_hash) = exclude_hash && let Some(hash) = ind.hash {
-                if hash == exclude_hash { continue; }
-            }
-
-            let fitness = ind.fitness.unwrap_or(f64::MIN);
-            if best.map_or(true, |(_, best_fit)| fitness > best_fit) {
-                best = Some((ind_i, fitness));
-            }
-        }
-
-        best.map(|(i, _)| i)
-            .unwrap_or_else(|| Self::random_selection(population, exclude))
-    }
-
-    fn random_selection(population: &[Individual<P::Gene>], exclude: Option<usize>) -> usize {
-        let exclude_hash = exclude.and_then(|idx| population[idx].hash);
-        let mut fallback_idx: Option<usize> = None;
-
-        let pop_len = population.len();
-        let start = random_range(0, pop_len);
-        for i in 0..pop_len {
-            let idx = (start + i) % pop_len;
-
-            if let Some(exclude_idx) = exclude {
-                if idx == exclude_idx { continue; }                
-                // Se ainda não tem um fallback, salva o primeiro encontrado
-                if fallback_idx.is_none() {
-                    fallback_idx = Some(idx);
-                }
-
-                if let Some(exclude_hash) = exclude_hash && let Some(hash) = population[idx].hash {
-                    if hash == exclude_hash { continue; } // pula se for o mesmo hash
-                }
-            }
-
-            return idx;
-        }
-
-        fallback_idx.unwrap_or_else(|| {
-            panic!("Não foi possível selecionar um indivíduo aleatório diferente de exclude_idx"); 
-        })
     }
 }

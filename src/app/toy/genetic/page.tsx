@@ -211,7 +211,6 @@ export default function Genetic() {
                         cfg.tournament_size = 8;
                         cfg.max_stagnation = 50000;
                         cfg.diversity_check = false;
-                        cfg.reset_population = false;
                         runner = new wasm.TSPGAProblemRunner(estado.cities, cfg);
                     }
 

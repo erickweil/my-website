@@ -81,9 +81,8 @@ mod tests {
             mutation_rate: 0.9,
             mutation_gene_rate: 1.0 / (PROBLEM_SIZE as f64),
             tournament_size: 5,
-            reset_population: false,
             diversity_check: false,
-            max_stagnation: 50000,
+            max_stagnation: Some(50000),
         });
 
         ga_runner.run(50000);
