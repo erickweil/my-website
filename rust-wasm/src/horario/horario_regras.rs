@@ -3,8 +3,6 @@ use std::{collections::HashMap};
 // Tipo a ser serializado-deserializado para comunicação com o frontend
 use serde::{Deserialize};
 
-use crate::genetic::operators::CrossoverIPX;
-
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -91,6 +89,7 @@ pub struct FomularioHorario {
     pub professores: Vec<FomularioHorarioProfessor>,
 }
 
+#[derive(Clone)]
 pub struct Horario {
     // 2D: 7 dias x n tempos, armazenado como array linearizado
     pub slots: Vec<i32>
@@ -152,11 +151,6 @@ pub struct Professor {
     pub nome: String,
     // 1 = disponível, 0 = ocupado
     pub horarios: Horario,
-
-    //  -1 = não dá aula
-    //   0 = não está definido
-    // > 0 = Índice da disciplina
-    pub _matriz:   Horario,
 }
 
 pub struct Disciplina {
@@ -182,8 +176,6 @@ pub struct RegrasHorario {
     pub disciplinas: Vec<Disciplina>,    
     pub professores: Vec<Professor>,
     pub n_tempos: usize,
-
-    pub crossover_ipx: CrossoverIPX<i32>,
 }
 
 impl RegrasHorario {
@@ -241,7 +233,6 @@ impl RegrasHorario {
                 id: i, 
                 nome: prof_form.nome, 
                 horarios: Horario::from_formulario(prof_form.horarios, n_tempos),
-                _matriz: Horario::new(n_tempos),
             });
         }
 
@@ -264,9 +255,6 @@ impl RegrasHorario {
         }
 
         Self {
-            // Capacidade = tamanho do slice de uma turma (pior caso do IPX)
-            crossover_ipx: CrossoverIPX::new(QUANTOS_DIAS * n_tempos),
-
             turmas,
             disciplinas,
             professores,

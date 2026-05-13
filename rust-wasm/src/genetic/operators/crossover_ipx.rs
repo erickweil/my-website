@@ -7,6 +7,7 @@ use crate::random::random_range;
 /// `crossover` não aloca nenhum byte.
 ///
 /// Requer `T: Clone + PartialEq`.
+#[derive(Clone)]
 pub struct CrossoverIPX<T: Clone> {
     diff_positions: Vec<usize>,
     bank_a: Vec<T>,

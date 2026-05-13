@@ -14,6 +14,9 @@ impl OneMaxGAProblem {
 
 impl GAProblem for OneMaxGAProblem {
     type Gene = Vec<bool>;
+    type State = ();
+
+    fn initial_state(&self) -> Self::State { () }
 
     fn max_fitness(&self) -> Option<f64> {
         Some(self.size as f64)
@@ -23,17 +26,18 @@ impl GAProblem for OneMaxGAProblem {
         (0..self.size).map(|_| random_f64() < 0.5).collect()
     }
 
-    fn fitness(&mut self, genes: &Self::Gene) -> f64 {
+    fn fitness(&self, _: &mut Self::State, genes: &Self::Gene) -> f64 {
         // Conta diretamente os bits em true
         genes.iter().filter(|&&b| b).count() as f64
     }
 
-    fn mutate(&mut self, genes: &mut Self::Gene, mutation_rate: f64) {
+    fn mutate(&self, _: &mut Self::State, genes: &mut Self::Gene, mutation_rate: f64) {
         mutation_replace(genes, mutation_rate, |val| !val);
     }
 
     fn crossover(
-        &mut self,
+        &self, 
+        _: &mut Self::State,
         child_a: &mut Self::Gene,
         child_b: &mut Self::Gene,
         parent_a: &Self::Gene,

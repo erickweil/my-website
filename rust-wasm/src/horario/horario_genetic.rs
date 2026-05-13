@@ -1,9 +1,29 @@
-use crate::{console_log, genetic::{operators::{poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
+use crate::{console_log, genetic::{operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
+
+#[derive(Clone)]
+pub struct HorarioGAState {
+    crossover_ipx: CrossoverIPX<i32>,
+
+    //  -1 = não dá aula
+    //   0 = não está definido
+    // > 0 = Índice da disciplina
+    prof_matriz: Vec<Horario>,
+}
 
 impl GAProblem for RegrasHorario {
     /// Representação linearizada do multiconjunto que é o quadro de horários
     /// > Wikipedia: Em matemática, um multiconjunto (ou ainda multiset ou mset) é uma modificação do conceito de um conjunto que, diferentemente de um conjunto, permite várias instâncias para cada um de seus elementos.
     type Gene = QuadroHorario;
+    type State = HorarioGAState;
+
+    fn initial_state(&self) -> Self::State { 
+        HorarioGAState {
+            // Capacidade = tamanho do slice de uma turma (pior caso do IPX)
+            crossover_ipx: CrossoverIPX::new(QUANTOS_DIAS * self.n_tempos),
+            // Pré-aloca e pré-popula para evitar alocações no hot path do fitness
+            prof_matriz: self.professores.iter().map(|p| p.horarios.clone()).collect(),
+        }
+    }
 
     fn max_fitness(&self) -> Option<f64> {
         Some(0.0)
@@ -58,13 +78,14 @@ impl GAProblem for RegrasHorario {
         genes
     }
 
-    fn fitness(&mut self, quadro: &Self::Gene) -> f64 {
+    fn fitness(&self, state: &mut Self::State, quadro: &Self::Gene) -> f64 {
         // Começa 0, para cada coisa errada subtrai
         let mut fitness: f64 = 0.0;
 
         // Reseta as matrizes de disponibilidade dos professores para contagem de fitness
-        for prof in &mut self.professores {
-            prof._matriz.slots.copy_from_slice(&prof.horarios.slots);
+        // Reset in-place: sem alocação (copy_from_slice sobre Vec já existente)
+        for (state_prof, prof) in state.prof_matriz.iter_mut().zip(self.professores.iter()) {
+            state_prof.slots.copy_from_slice(&prof.horarios.slots);
         }
 
         // Pass 1: conta quantas turmas precisam de cada (prof, dia, tempo).
@@ -84,7 +105,7 @@ impl GAProblem for RegrasHorario {
                     // prof_matriz começa como cópia de prof.horarios (0, 1)
                     // Para cada disciplina alocada, decrementa a disponibilidade dos professores daquela disciplina
                     for &prof_id in &disciplina.professores {
-                        self.professores[prof_id]._matriz.desmarcar(dia, tempo);
+                        state.prof_matriz[prof_id].desmarcar(dia, tempo);
                     }
                 }
             }
@@ -116,7 +137,7 @@ impl GAProblem for RegrasHorario {
 
                     // Regra: Disponibilidade do professor e sem conflito entre turmas
                     for &prof_id in &disciplina.professores {
-                        let disponibilidade = self.professores[prof_id]._matriz.get(dia, tempo);
+                        let disponibilidade = state.prof_matriz[prof_id].get(dia, tempo);
                         // Penaliza proporcional ao Nº de conflitos
                         if disponibilidade <= 0 {
                             fitness += disponibilidade as f64 * 50.0;
@@ -177,7 +198,7 @@ impl GAProblem for RegrasHorario {
         fitness
     }
 
-    fn mutate(&mut self, quadro: &mut Self::Gene, mutation_rate: f64) {
+    fn mutate(&self, _: &mut Self::State, quadro: &mut Self::Gene, mutation_rate: f64) {
         // Mutação de trocas dentro das turmas
         let n_mutations = poisson_knuth_sample((quadro.len() as f64) * mutation_rate);
         for _ in 0..n_mutations {            
@@ -215,7 +236,8 @@ impl GAProblem for RegrasHorario {
     }
 
     fn crossover(
-        &mut self,
+        &self,
+        state: &mut Self::State,
         child_a: &mut Self::Gene,
         child_b: &mut Self::Gene,
         parent_a: &Self::Gene,
@@ -244,7 +266,7 @@ impl GAProblem for RegrasHorario {
                 }
             } else {
                 // Crossover IPX
-                self.crossover_ipx.crossover(
+                state.crossover_ipx.crossover(
                     child_a_slice, 
                     child_b_slice, 
                     parent_a_slice, 

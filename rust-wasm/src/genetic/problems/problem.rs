@@ -3,6 +3,10 @@ use serde::{Serialize};
 // Gene deve ser Serialize + Deserialize para ser enviado ao JS
 pub trait GAProblem {
     type Gene: Clone + std::fmt::Debug + Serialize;
+    type State: Clone;
+
+    /// Retorna o estado inicial do problema, se aplicável
+    fn initial_state(&self) -> Self::State;
 
     /// Retorna o fitness máximo possível (se aplicável)
     fn max_fitness(&self) -> Option<f64> { None }
@@ -12,14 +16,15 @@ pub trait GAProblem {
 
     /// Quão "boa" é a solução atual?
     /// Valores mais altos indicam soluções melhores.
-    fn fitness(&mut self, genes: &Self::Gene) -> f64;
+    fn fitness(&self, state: &mut Self::State, genes: &Self::Gene,) -> f64;
 
     /// Mutação in-place usando a taxa especificada
-    fn mutate(&mut self, genes: &mut Self::Gene, mutation_rate: f64);
+    fn mutate(&self, state: &mut Self::State, genes: &mut Self::Gene, mutation_rate: f64);
 
     /// Crossover entre dois pais para criar dois filhos
     fn crossover(
-        &mut self,
+        &self,
+        state: &mut Self::State,
         child_a: &mut Self::Gene,
         child_b: &mut Self::Gene,
         parent_a: &Self::Gene,

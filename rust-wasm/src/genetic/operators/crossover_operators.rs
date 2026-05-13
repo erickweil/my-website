@@ -76,6 +76,7 @@ pub fn crossover_2_point<T: Clone>(
  3. starting from the right side of the slice, copy genes from parent 2 as they appear to child 1 if they are not yet marked out.
 */
 
+#[derive(Clone)]
 pub struct CrossoverOX1 {
     // Controla quais genes já foram copiados para os filhos,
     // usando um sistema de marcação por epoch para evitar buscas O(n)

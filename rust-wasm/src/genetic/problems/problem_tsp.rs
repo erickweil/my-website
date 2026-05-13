@@ -28,14 +28,12 @@ impl TSPCity {
  * - **Crossover**: Order Crossover OX1, que preserva a validade da permutação (sem cidades duplicadas).
  */
 pub struct TSPGAProblem {
-    cities: Vec<TSPCity>,
-    crossover_ox1: CrossoverOX1,
+    cities: Vec<TSPCity>
 }
 
 impl TSPGAProblem {
     pub fn new(cities: Vec<TSPCity>) -> Self {
-        Self { 
-            crossover_ox1: CrossoverOX1::new(cities.len()),
+        Self {
             cities,
         }
     }
@@ -66,8 +64,20 @@ impl TSPGAProblem {
     }
 }
 
+#[derive(Clone)]
+pub struct TSPGAState {
+    crossover_ox1: CrossoverOX1,    
+}
+
 impl GAProblem for TSPGAProblem {
     type Gene = Vec<usize>;
+    type State = TSPGAState;
+
+    fn initial_state(&self) -> Self::State {
+        TSPGAState {
+            crossover_ox1: CrossoverOX1::new(self.cities.len()),
+        }
+    }
 
     fn max_fitness(&self) -> Option<f64> {
         None
@@ -79,11 +89,11 @@ impl GAProblem for TSPGAProblem {
         genes
     }
 
-    fn fitness(&mut self, genes: &Self::Gene) -> f64 {
+    fn fitness(&self, _: &mut Self::State, genes: &Self::Gene) -> f64 {
         return -Self::total_route_distance(genes, &self.cities) as f64;
     }
 
-    fn mutate(&mut self, genes: &mut Self::Gene, mutation_rate: f64) {
+    fn mutate(&self, _: &mut Self::State, genes: &mut Self::Gene, mutation_rate: f64) {
         mutation_combine(genes, mutation_rate, 
             (0.5, mutation_random_swap), 
             (0.5, mutation_neighbor_swap)
@@ -91,13 +101,14 @@ impl GAProblem for TSPGAProblem {
     }
 
     fn crossover(
-        &mut self,
+        &self, 
+        state: &mut Self::State,
         child_a: &mut Self::Gene,
         child_b: &mut Self::Gene,
         parent_a: &Self::Gene,
         parent_b: &Self::Gene,
     ) {
-        self.crossover_ox1.crossover(child_a, child_b, parent_a, parent_b, |gene| *gene);
+        state.crossover_ox1.crossover(child_a, child_b, parent_a, parent_b, |gene| *gene);
     }
 
     fn hash(&self, genes: &Self::Gene) -> Option<u64> {

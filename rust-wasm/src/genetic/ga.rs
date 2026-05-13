@@ -67,6 +67,7 @@ pub struct GAInfo<P: GAProblem> {
 
 pub struct GeneticAlgorithm<P: GAProblem> {
     pub problem: P,
+    problem_state: P::State,
     population: Vec<Individual<P::Gene>>,
     offspring: Vec<Individual<P::Gene>>,
     population_hashes: FxHashSet<u64>,
@@ -89,6 +90,7 @@ pub struct GeneticAlgorithm<P: GAProblem> {
 impl<P: GAProblem> GeneticAlgorithm<P> {
     pub fn new(problem: P, config: GAConfig) -> Self {
         Self {
+            problem_state: problem.initial_state(),
             problem,
             population: Vec::new(),
             offspring: Vec::new(),
@@ -281,7 +283,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         // Avaliação
         for (i, ind) in self.population.iter_mut().enumerate() {
             if ind.fitness.is_none() {
-                ind.fitness = Some(self.problem.fitness(&ind.genes));
+                ind.fitness = Some(self.problem.fitness(&mut self.problem_state, &ind.genes));
             }
             let fit = ind.fitness.unwrap();
             if fit > best_fitness {
@@ -322,7 +324,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
                 // Crossover entre os pais para criar os filhos
                 if crossover_rate >= 1.0 || random_f64() < crossover_rate {
-                    self.problem.crossover(&mut child_a.genes, &mut child_b.genes, parent_a, parent_b);
+                    self.problem.crossover(&mut self.problem_state, &mut child_a.genes, &mut child_b.genes, parent_a, parent_b);
                 } else {
                     child_a.genes.clone_from(parent_a);
                     child_b.genes.clone_from(parent_b);
@@ -330,10 +332,10 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
                 // Aplica mutação
                 if mutation_rate >= 1.0 || random_f64() < mutation_rate {
-                    self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
+                    self.problem.mutate(&mut self.problem_state, &mut child_a.genes, mutation_gene_rate);
                 }
                 if mutation_rate >= 1.0 || random_f64() < mutation_rate {
-                    self.problem.mutate(&mut child_b.genes, mutation_gene_rate);
+                    self.problem.mutate(&mut self.problem_state, &mut child_b.genes, mutation_gene_rate);
                 }
 
                 // Verificação de diversidade: remuta filhos duplicados da geração atual
@@ -347,10 +349,10 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
                                 continue; 
                             } else {
                                 // Após 3 tentativas sem sucesso, aplica mutação mais uma vez nos filhos para tentar criar variação
-                                self.problem.mutate(&mut child_a.genes, mutation_gene_rate);
+                                self.problem.mutate(&mut self.problem_state, &mut child_a.genes, mutation_gene_rate);
                                 child_a.hash = self.problem.hash(&child_a.genes);
 
-                                self.problem.mutate(&mut child_b.genes, mutation_gene_rate);
+                                self.problem.mutate(&mut self.problem_state, &mut child_b.genes, mutation_gene_rate);
                                 child_b.hash = self.problem.hash(&child_b.genes);
                             }
                         } else {
@@ -378,7 +380,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         
             // Aplica mutação
             if mutation_rate >= 1.0 || random_f64() < mutation_rate {
-                self.problem.mutate(&mut last_child.genes, mutation_gene_rate);
+                self.problem.mutate(&mut self.problem_state, &mut last_child.genes, mutation_gene_rate);
             }
 
             if self.config.diversity_check {
