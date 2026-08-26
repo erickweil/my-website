@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 export default function GeneticV2() {
     const wasm = useWasm();
     const size = 50;
-    const generationCount = 10000;
+    const generationCount = 1000;
 
     const [cities, setCities] = useState<{ x: number; y: number }[] | undefined>(undefined);
 
@@ -52,16 +52,24 @@ export default function GeneticV2() {
 
         const info = runner.get_info() as { generation: number; best_fitness: number; stagnated_for: number, best_genes: number[] };
         consoleLog(`Genetic Algorithm V1 - Time: ${elapsed.toFixed(2)} ms, Generation: ${info.generation}, Best Fitness: ${info.best_fitness}, Stagnated For: ${info.stagnated_for}`);
+
+        runner.free();
     };
 
     const runGeneticAlgorithmV2 = async () => {
         if (!wasm || !cities) return null; // WASM ainda não carregou
         consoleClear();
 
+        let citiesArray = new Float64Array(cities.length * 2);
+        cities.forEach((city, index) => {
+            citiesArray[index * 2] = city.x;
+            citiesArray[index * 2 + 1] = city.y;
+        });
+
         consoleLog("Running Genetic Algorithm V1...");
         await delay(1);
         const timeStart = performance.now();
-        let result = wasm.run_tsp_v2();
+        let result = wasm.run_tsp_v2(citiesArray, generationCount);
         const elapsed = performance.now() - timeStart;
         consoleLog(`Genetic Algorithm V2 - Time: ${elapsed.toFixed(2)} ms - Best Fitness: ${result}`);
     }
