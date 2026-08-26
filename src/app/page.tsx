@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/classMerge";
-import { FaGithub } from "react-icons/fa";
+import { FaGithub, FaGoogle } from "react-icons/fa";
 
 function MirroredText({ text, className, ...attrs }: { text: string } & React.HTMLAttributes<HTMLDivElement>) {
   const letters = text.split('');
@@ -190,13 +190,22 @@ export default function Home() {
         <div className="text-5xl md:text-6xl font-bold tracking-tight">
           Erick<MirroredText text="Erick" className="inline-block border-r pr-1 ml-1" />
         </div>
-        <p className="text-base md:text-lg text-foreground/55 max-w-md mx-auto leading-relaxed">
-          Explore utilitários, experimentos, simulações entre outras coisas
+        <p className="text-xs font-mono uppercase tracking-[0.22em] text-foreground/40">
+          Erick Weil · liewkcire.vercel.app
         </p>
-        <div className="flex items-center justify-center gap-4 pt-2">
+        <p className="text-base md:text-lg text-foreground/55 max-w-md mx-auto leading-relaxed">
+          Site pessoal de Erick Weil, com utilitários, experimentos e simulações
+          de computação para usar direto no navegador.
+        </p>
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 pt-2">
           <a href="https://github.com/erickweil" target="_blank" rel="noreferrer">
            <span className="text-sm font-medium hover:text-foreground transition-colors flex items-center gap-1">
               <FaGithub className="inline" size={28} /> - Github
+            </span>
+          </a>
+          <a href="#login-google">
+            <span className="text-sm font-medium text-foreground/55 hover:text-foreground transition-colors flex items-center gap-2">
+              <FaGoogle className="inline" size={18} /> Login com o Google
             </span>
           </a>
         </div>
@@ -204,9 +213,53 @@ export default function Home() {
 
       <div className="w-full max-w-3xl mt-8">
 
+        {/* Sobre o site */}
+        <section id="sobre" className="scroll-mt-8">
+          <div className="mb-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
+              Sobre
+            </p>
+            <h2 className="text-2xl font-bold text-foreground">O que é este site</h2>
+          </div>
+
+          <div className="rounded-2xl border border-foreground/10 p-5 sm:p-6 space-y-4">
+            <p className="text-sm leading-relaxed text-foreground/70">
+              <strong className="text-foreground">liewkcire.vercel.app</strong> é o site pessoal de
+              Erick Weil, desenvolvedor de software. Ele reúne ferramentas, simuladores e experimentos
+              de computação que rodam inteiramente no seu navegador, sem instalar nada e sem custo.
+            </p>
+            <ul className="text-sm leading-relaxed text-foreground/60 space-y-2 list-disc pl-5">
+              <li>
+                <strong className="text-foreground/80">Simuladores interativos</strong> — máquina de
+                Turing, algoritmos genéticos e outras simulações que mostram, passo a passo, como o
+                algoritmo chega ao resultado.
+              </li>
+              <li>
+                <strong className="text-foreground/80">Utilitários</strong> — como o Gerador de Horário
+                escolar, que monta grades de aula a partir das restrições de professores, turmas e
+                horários disponíveis.
+              </li>
+              <li>
+                <strong className="text-foreground/80">Jogos e quebra-cabeças</strong> — como o Sudoku
+                Minado, que combina as regras do sudoku com as do campo minado.
+              </li>
+              <li>
+                <strong className="text-foreground/80">Portfólio</strong> — links para outros projetos
+                publicados por Erick Weil fora deste domínio.
+              </li>
+            </ul>
+            <p className="text-sm leading-relaxed text-foreground/60">
+              O processamento acontece no próprio navegador, em JavaScript e WebAssembly. Todo o
+              conteúdo desta página e das ferramentas listadas abaixo pode ser acessado livremente,
+              sem cadastro e sem login. O login com o Google é opcional e existe apenas para
+              salvar o seu trabalho — veja <a href="#login-google" className="underline underline-offset-2 hover:text-foreground transition-colors">Login com o Google</a>.
+            </p>
+          </div>
+        </section>
+
         {/* Projetos externos */}
         <section id="projetos">
-          <div className="mb-6">
+          <div className="mb-6 mt-12">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
               Portfólio
             </p>
@@ -261,7 +314,147 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Login com o Google — transparência sobre dados */}
+        <section id="login-google" className="scroll-mt-8">
+          <div className="mb-5 mt-12">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
+              Conta
+            </p>
+            <h2 className="text-2xl font-bold text-foreground">Login com o Google</h2>
+          </div>
+
+          <div className="rounded-2xl border border-foreground/10 p-5 sm:p-6 space-y-6">
+            <p className="text-sm leading-relaxed text-foreground/70">
+              As ferramentas deste site funcionam sem nenhum cadastro. O login com a Conta Google é
+              <strong className="text-foreground"> opcional</strong> e serve para um único propósito:
+              criar uma conta que guarde o seu trabalho — como as grades montadas no Gerador de Horário
+              ou as máquinas definidas no simulador de Turing — para que você possa retomá-lo depois,
+              inclusive em outro dispositivo. Sem o login, esses dados ficam apenas no navegador atual.
+            </p>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">
+                Quais dados são solicitados, e por quê
+              </h3>
+              <ul className="space-y-3">
+                <li className="rounded-xl bg-foreground/[0.03] px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">Identificador da sua conta</p>
+                  <p className="text-xs font-mono text-foreground/45 mt-0.5 break-all">openid</p>
+                  <p className="text-sm leading-relaxed text-foreground/60 mt-1.5">
+                    Vincula o trabalho que você salvar à sua conta, sem que você precise criar
+                    e memorizar mais uma senha.
+                  </p>
+                </li>
+                <li className="rounded-xl bg-foreground/[0.03] px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">Nome e foto de perfil</p>
+                  <p className="text-xs font-mono text-foreground/45 mt-0.5 break-all">
+                    .../auth/userinfo.profile
+                  </p>
+                  <p className="text-sm leading-relaxed text-foreground/60 mt-1.5">
+                    Mostram, dentro do site, com qual conta você está conectado.
+                  </p>
+                </li>
+                <li className="rounded-xl bg-foreground/[0.03] px-4 py-3">
+                  <p className="text-sm font-medium text-foreground">Endereço de e-mail</p>
+                  <p className="text-xs font-mono text-foreground/45 mt-0.5 break-all">
+                    .../auth/userinfo.email
+                  </p>
+                  <p className="text-sm leading-relaxed text-foreground/60 mt-1.5">
+                    Identifica a sua conta de forma única e permite responder a pedidos de suporte ou
+                    de exclusão de dados feitos por você.
+                  </p>
+                </li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">O que não é feito</h3>
+              <ul className="text-sm leading-relaxed text-foreground/60 space-y-1.5 list-disc pl-5">
+                <li>
+                  Nenhum outro dado da sua Conta Google é acessado — nem Gmail, Drive, Agenda,
+                  Contatos ou Fotos.
+                </li>
+                <li>Seus dados não são vendidos, alugados nem usados para publicidade.</li>
+                <li>Não há rastreamento entre sites nem cookies de anúncios.</li>
+                <li>Seus dados não são usados para treinar modelos de inteligência artificial.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">Como revogar o acesso</h3>
+              <p className="text-sm leading-relaxed text-foreground/60">
+                A qualquer momento, em{" "}
+                <a
+                  href="https://myaccount.google.com/permissions"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline underline-offset-2 hover:text-foreground transition-colors"
+                >
+                  Apps conectados à sua Conta Google
+                </a>
+                . Para apagar também a conta e os dados guardados aqui, basta escrever para{" "}
+                <a
+                  href="mailto:erick.weil@ifro.edu.br"
+                  className="underline underline-offset-2 hover:text-foreground transition-colors"
+                >
+                  erick.weil@ifro.edu.br
+                </a>
+                .
+              </p>
+            </div>
+
+            <p className="text-xs leading-relaxed text-foreground/45 border-t border-foreground/10 pt-4">
+              O uso das informações recebidas das APIs do Google segue a{" "}
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                rel="noreferrer"
+                className="underline underline-offset-2 hover:text-foreground/70 transition-colors"
+              >
+                Política de Dados do Usuário dos Serviços de API do Google
+              </a>
+              , incluindo os requisitos de Uso Limitado. Os detalhes completos estão na{" "}
+              <a
+                href="/politica-de-privacidade.html"
+                className="underline underline-offset-2 hover:text-foreground/70 transition-colors"
+              >
+                Política de Privacidade
+              </a>
+              .
+            </p>
+          </div>
+        </section>
+
       </div>
+
+      {/* Rodapé */}
+      <footer className="w-full max-w-3xl mt-16 pt-6 border-t border-foreground/10">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-foreground/50">
+          <p>© 2026 Erick Weil · liewkcire.vercel.app</p>
+          <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <a
+              href="/politica-de-privacidade.html"
+              className="hover:text-foreground transition-colors"
+            >
+              Política de Privacidade
+            </a>
+            <a
+              href="mailto:erick.weil@ifro.edu.br"
+              className="hover:text-foreground transition-colors"
+            >
+              Contato
+            </a>
+            <a
+              href="https://github.com/erickweil"
+              target="_blank"
+              rel="noreferrer"
+              className="hover:text-foreground transition-colors"
+            >
+              GitHub
+            </a>
+          </nav>
+        </div>
+      </footer>
     </main>
   );
 }

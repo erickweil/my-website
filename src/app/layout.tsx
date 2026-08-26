@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import LiveTitle from "@/components/live-title";
@@ -13,6 +14,14 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+export const metadata: Metadata = {
+  // O <title> é definido dinamicamente por <LiveTitle />
+  description:
+    "Site pessoal de Erick Weil: utilitários, simuladores e experimentos de computação que rodam no navegador. Acesso livre, sem cadastro.",
+  authors: [{ name: "Erick Weil", url: "https://github.com/erickweil" }],
+  applicationName: "Erick Weil",
+};
 
 export default function RootLayout({
   children,

@@ -29,7 +29,8 @@
 <body>
 
 <h1>Política de Privacidade</h1>
-<p class="meta">liewkcire.vercel.app · Última atualização: 26 de agosto de 2026</p>
+<p class="meta">Erick Weil · <a href="https://liewkcire.vercel.app/">liewkcire.vercel.app</a>
+ · Última atualização: 26 de agosto de 2026</p>
 
 <p>Este documento descreve quais dados o serviço coleta, por que os coleta, com quem
 os compartilha, por quanto tempo os mantém e como você pode exercer seus direitos
@@ -55,7 +56,7 @@ sobre eles.</p>
 
 <h2 id="controlador">Controlador dos dados</h2>
 <p>
-  Kcire Inc — Rondônia, Brasil<br>
+  Erick Weil — Rondônia, Brasil<br>
   Contato: <a href="mailto:erick.weil@ifro.edu.br">erick.weil@ifro.edu.br</a>
 </p>
 <p>O responsável acima decide as finalidades e os meios do tratamento e é o ponto de
@@ -92,13 +93,20 @@ tela de consentimento, o provedor nos envia apenas os dados correspondentes aos 
 que você aprovou:</p>
 
 <ul>
-  <li><strong>Identificação básica</strong> — identificador da conta, nome de exibição
-      e foto de perfil, usados para criar e exibir sua conta no serviço.</li>
-  <li><strong>Endereço de e-mail</strong> — usado para identificar sua conta de forma
-      única e enviar comunicações operacionais.</li>
-  <li><strong>Tokens de acesso e de renovação</strong> — armazenados de forma cifrada,
-      usados exclusivamente para executar as ações que você solicitar dentro do serviço.</li>
+  <li><strong>Identificador da conta</strong> (<code>openid</code>) — usado para vincular
+      os dados que você salvar à sua conta, sem exigir a criação de uma senha.</li>
+  <li><strong>Nome de exibição e foto de perfil</strong>
+      (<code>.../auth/userinfo.profile</code>) — usados para mostrar, dentro do serviço,
+      com qual conta você está autenticado.</li>
+  <li><strong>Endereço de e-mail</strong> (<code>.../auth/userinfo.email</code>) — usado
+      para identificar sua conta de forma única e para responder a pedidos de suporte ou
+      de exclusão de dados feitos por você.</li>
 </ul>
+
+<p>Esses são os únicos escopos solicitados. O serviço não pede, não recebe e não acessa
+nenhum outro dado da sua conta no provedor — não há acesso a e-mails, arquivos, agenda,
+contatos ou fotos. O token emitido pelo provedor é usado apenas para concluir o login e
+é armazenado de forma cifrada.</p>
 
 <p>Sobre esses dados:</p>
 <ul>
@@ -132,8 +140,8 @@ Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de
 <p>Conforme a LGPD (Lei 13.709/2018) e, para usuários no Espaço Econômico Europeu,
 o GDPR, o tratamento se apoia em:</p>
 <ul>
-  <li><strong>Consentimento</strong> — para o acesso a dados via OAuth e para
-      rastreadores não essenciais.</li>
+  <li><strong>Consentimento</strong> — para o login por OAuth e o acesso aos dados de
+      perfil e e-mail que você aprova na tela de consentimento.</li>
   <li><strong>Execução de contrato</strong> — para fornecer o serviço que você
       solicitou.</li>
   <li><strong>Obrigação legal</strong> — para guarda de registros e resposta a
@@ -152,7 +160,7 @@ competente ou para defesa em processo.</p>
 
 <h2 id="retencao">Retenção e exclusão</h2>
 <ul>
-  <li><strong>Dados de conta e tokens</strong> — mantidos enquanto a conta existir;
+  <li><strong>Dados de conta, conteúdo salvo e tokens</strong> — mantidos enquanto a conta existir;
       apagados em até 30 dias após o pedido de exclusão ou a revogação da autorização.</li>
   <li><strong>Logs de acesso</strong> — mantidos pelo prazo legal aplicável e depois
       descartados.</li>
@@ -228,12 +236,13 @@ solicitado.</p>
   <li><strong>Controlador</strong> — quem decide as finalidades e os meios do tratamento;
       neste caso, o responsável indicado no início do documento.</li>
   <li><strong>Operador</strong> — quem trata dados pessoais em nome do controlador.</li>
-  <li><strong>Serviço</strong> — a aplicação disponível em liewkcire.vercel.app e suas
+  <li><strong>Serviço</strong> — a aplicação <strong>Erick Weil</strong>, disponível em
+      <a href="https://liewkcire.vercel.app/">liewkcire.vercel.app</a>, e suas
       funcionalidades.</li>
 </ul>
 
 <footer>
-  <p>Kcire Inc — Rondônia, Brasil ·
+  <p>Erick Weil — Rondônia, Brasil ·
   <a href="mailto:erick.weil@ifro.edu.br">erick.weil@ifro.edu.br</a></p>
 </footer>
 
