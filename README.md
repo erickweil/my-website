@@ -45,7 +45,7 @@ cd my-website
 npm install
 
 # 3. Compile o módulo WebAssembly (Rust → WASM)
-npm run build:turing-wasm
+npm run build:wasm
 
 # 4. Inicie o servidor de desenvolvimento
 npm run dev

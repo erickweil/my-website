@@ -1,7 +1,7 @@
 import { LRLanguage, LanguageSupport, HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { styleTags, tags as t } from "@lezer/highlight";
 
-import { Direction } from "@/pkg/turing";
+import { Direction } from "@/pkg/rust_wasm.js";
 import { parser } from "./turingParser.js";
 import * as T from "./turingParser.terms.js"; // IDs dos nós gerados pelo lezer-generator
 

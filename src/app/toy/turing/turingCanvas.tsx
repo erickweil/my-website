@@ -2,7 +2,7 @@ import React from 'react';
 import NonSSRWrapper from '@/components/nonSSRWrapper';
 import ZoomableCanvas, { pageToZoomCanvas, ZoomEstadoType } from '@/components/Canvas/ZoomableCanvas';
 import { mesclarEstado } from '@/components/Canvas/CanvasController';
-import { TuringMachine2D, TuringMachineResult } from '@/pkg/turing';
+import { TuringMachine2D, TuringMachineResult } from '@/pkg/rust_wasm.js';
 import { compileTuringCode } from './turingLanguage';
 
 const CHAR_SCALE = 40;

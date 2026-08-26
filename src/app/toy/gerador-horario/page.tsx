@@ -42,14 +42,19 @@ const getContrastColor = (hex: string) => {
     return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
 };
 
+type SolverType = "pencilmark" | "genetic" | "genetic-wasm";
+
 const execQuadroHorarioWorker = (
     formData: FormularioHorario, 
     diasAtivos: HorarioDia[], 
-    solverType: "pencilmark" | "genetic",
-    progressCallback?: (workerID: number, iter: number, depth: number, solucao?: TurmaHorarioResult[]) => void
+    solverType: SolverType,
+    progressCallback?: (workerID: number, iter: number, depth: number, msPorGeracao?: number, solucao?: TurmaHorarioResult[]) => void
 ) => {
     //const nWorkers = navigator.hardwareConcurrency || 8;
     const nWorkers = 1;
+
+    const isWasm = solverType === "genetic-wasm";
+
     const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
         n: nWorkers,
         initMessage: (workerID) => ({
@@ -58,13 +63,16 @@ const execQuadroHorarioWorker = (
             baseIter: workerID === 0 ? null : 10,
             formData,
             diasAtivos,
-            solverType,
+            // O worker WASM não usa solverType — ele é sempre "genetic-wasm"
+            solverType: isWasm ? "genetic" : solverType,
         }),
-        createWorker: () => new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
+        createWorker: () => isWasm
+            ? new Worker(new URL('./horario-genetic-wasm.worker.ts', import.meta.url))
+            : new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if (!msg.value) return;
             console.log(`Worker ${workerID}: Iteração ${msg.value.iter}, profundidade ${msg.value.depth}`);
-            progressCallback?.(workerID, msg.value.iter, msg.value.depth, msg.value.solucao);
+            progressCallback?.(workerID, msg.value.iter, msg.value.depth, msg.value.msPorGeracao, msg.value.solucao);
         }
     });
 
@@ -163,10 +171,11 @@ export default function GeradorHorario() {
     const [error, setError] = useState<string | null>(null);
     const abortRef = useRef<(() => void) | null>(null);
     const [horarioGerado, setHorarioGerado] = useState<TurmaHorarioResult[] | null>(null);
+    const [progresso, setProgresso] = useState<{ iter: number; depth: number; msPorGeracao?: number } | null>(null);
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
     const [professoresDisciplinas, setProfessoresDisciplinas] = useState<Record<string, string>>({});
-    const [solverType, setSolverType] = useState<"pencilmark" | "genetic">("pencilmark");
+    const [solverType, setSolverType] = useState<SolverType>("pencilmark");
 
     // ─── Configurações de grade ───────────────────────────────────────────────
     const [quantidadeTempos, setQuantidadeTempos] = useState(5);
@@ -310,10 +319,11 @@ export default function GeradorHorario() {
         localStorage.setItem("configGeracaoHorario", JSON.stringify({ quantidadeTempos, diasAtivos }));
 
         try {
-            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, solucao) => {
+            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, msPorGeracao, solucao) => {
                 if (solucao) {
                     console.log(solucao);
                     setHorarioGerado(solucao);
+                    setProgresso({ iter, depth, msPorGeracao });
                 }
             });
             abortRef.current = abort;
@@ -779,19 +789,23 @@ export default function GeradorHorario() {
                         <CardContent className="space-y-6">
                             <div className="flex flex-col items-center gap-4">
                                 <div className="flex items-center gap-2">
-                                    {(["pencilmark", "genetic"] as const).map((tipo) => (
+                                    {([
+                                        { id: "pencilmark", label: "Pencilmark" },
+                                        { id: "genetic", label: "Genético v1 (TS)" },
+                                        { id: "genetic-wasm", label: "Genético v2 (WASM)" },
+                                    ] as const).map(({ id, label }) => (
                                         <button
-                                            key={tipo}
+                                            key={id}
                                             type="button"
-                                            onClick={() => setSolverType(tipo)}
+                                            onClick={() => setSolverType(id)}
                                             className={cn(
                                                 "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                                                solverType === tipo
+                                                solverType === id
                                                     ? "border-primary bg-primary text-primary-foreground"
                                                     : "border-border bg-background text-muted-foreground hover:text-foreground"
                                             )}
                                         >
-                                            {tipo === "pencilmark" ? "Pencilmark" : "Genético"}
+                                            {label}
                                         </button>
                                     ))}
                                 </div>
@@ -823,6 +837,11 @@ export default function GeradorHorario() {
                                         </Button>
                                     )}
                                 </div>
+                                {isLoading && progresso && (
+                                    <span className="ml-2 text-sm text-muted-foreground">
+                                        Iteração {progresso.iter}, profundidade {progresso.depth}, {progresso.msPorGeracao?.toFixed(2)} ms/geração
+                                    </span>
+                                )}
                             </div>
 
                             {error && (

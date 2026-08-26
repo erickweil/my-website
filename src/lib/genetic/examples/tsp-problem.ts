@@ -95,6 +95,7 @@ export class TSPProblem extends GAProblemArray<number[]> {
 
             const dx = from.x - to.x;
             const dy = from.y - to.y;
+            // Tem que ser a distância real para o fitness funcionar corretamente
             total += Math.sqrt(dx * dx + dy * dy);
         }
         return total;

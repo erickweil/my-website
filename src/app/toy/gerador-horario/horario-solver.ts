@@ -10,9 +10,10 @@ export type HorarioWorkerTaskValue = {
     violacoes?: Array<string | undefined>;
     iter: number;
     depth: number;
+    msPorGeracao?: number;
 };
 
-function construirQuadro(quadro: number[], violacoes: Array<string | undefined>, regras: RegrasHorario, diasAtivos: HorarioDia[]): TurmaHorarioResult[] {
+export function construirQuadro(quadro: number[], violacoes: Array<string | undefined>, regras: RegrasHorario, diasAtivos: HorarioDia[]): TurmaHorarioResult[] {
     const resultado: TurmaHorarioResult[] = regras.turmas.map((turma) => ({
         turma: turma.nome,
         horario: diasAtivos.map((dia) => {
@@ -144,13 +145,15 @@ export function solucionarQuadroHorario(
             crossoverRate: 0.9,
             mutationRate: 0.9,
             mutationGeneRate: 1 / regras.size, // em média 1 gene mutado por indivíduo
-            diversityCheck: true,
+            diversityCheck: false,
             resetPopulation: false
         });
 
         let lastFitness: number | undefined = undefined;
         for(let i = 0; i < 1000; i++) {
+            let startTime = performance.now();
             const {current, fitness, generation, genes, stagnatedFor} = ga.run(500);
+            let elapsed = performance.now() - startTime;
             stats = {
                 iter: generation,
                 solucoes: genes ? [genes] : [],
@@ -174,7 +177,8 @@ export function solucionarQuadroHorario(
                     solucao: genes ? construirQuadro(genes, violacoes, regrasPencilmark, diasAtivos) : undefined, 
                     violacoes: violacoes,
                     iter: generation, 
-                    depth: stagnatedFor 
+                    depth: stagnatedFor,
+                    msPorGeracao: elapsed / 500
                 } 
             });
         }

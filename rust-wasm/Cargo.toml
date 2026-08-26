@@ -1,5 +1,5 @@
 [package]
-name = "turing"
+name = "rust-wasm"
 version = "0.1.0"
 edition = "2024"
 
@@ -10,6 +10,17 @@ crate-type = ["cdylib"]
 console_error_panic_hook = "0.1.7"
 wasm-bindgen = "0.2"
 rustc-hash = "2"
+# docs.rs/getrandom/latest/getrandom/#webassembly-support
+getrandom = { version = "0.3", features = ["wasm_js"] }
+fastrand = { version = "2.4.1", features = ["js"] }
+
+# https://rustwasm.github.io/docs/wasm-bindgen/reference/arbitrary-data-with-serde.html
+serde = { version = "1.0", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+web-time = "1.1.0"
 
 # [workspace]
 # members = [
@@ -41,4 +52,9 @@ strip = true
 # wasm-opt = ['-Os', '--enable-bulk-memory']
 
 # Optmize for speed with '-O3' flag to wasm-opt
-wasm-opt = ['-O3', '--enable-bulk-memory', '--enable-nontrapping-float-to-int']
+wasm-opt = [
+    '-O3',
+    '--enable-bulk-memory', 
+    '--enable-nontrapping-float-to-int',
+    '--enable-simd',
+]

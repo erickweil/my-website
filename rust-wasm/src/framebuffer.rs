@@ -11,9 +11,6 @@ impl Color {
     pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
-    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self::rgba(r, g, b, 255)
-    }
 
     pub const fn from_hsl(h: f32, s: f32, l: f32) -> Self {
         let c = (1.0 - (2.0 * l - 1.0).abs()) * s;

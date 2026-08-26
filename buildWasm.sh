@@ -8,3 +8,7 @@ if ! command -v wasm-pack &> /dev/null; then
     curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 fi
 wasm-pack build --release --target web --out-dir ../src/pkg
+
+# List the generated files
+echo "Generated WebAssembly files:"
+ls -lhas ../src/pkg/
