@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# Oauth2 secret
+client_secret*.json
+
 # Rust WASM outputs
 **/pkg/
 

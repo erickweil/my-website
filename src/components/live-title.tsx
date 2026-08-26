@@ -4,16 +4,16 @@ import { useEffect, useState } from "react";
 
 // https://stackoverflow.com/questions/52170634/how-to-set-documents-title-per-page
 export default function LiveTitle() {
-    const [title, setTitle] = useState("🅺🅲🅸🆁🅴 · Erick Weil");
+    const [title, setTitle] = useState("🅺🅲🅸🆁🅴");
 
     useEffect(() => {
         if (typeof document === 'undefined') return;
         
         const onVisibilityChange = () => {
             if (document.visibilityState === "hidden") {
-                setTitle(`😴🅺🅲🅸🆁🅴 · Erick Weil`);
+                setTitle(`😴🅺🅲🅸🆁🅴`);
             } else {
-                setTitle(`👀🅺🅲🅸🆁🅴 · Erick Weil`);
+                setTitle(`👀🅺🅲🅸🆁🅴`);
             }
         };
         
