@@ -5,6 +5,7 @@ mod random;
 
 pub mod turing;
 pub mod genetic;
+pub mod geneticv2;
 pub mod horario;
 
 // https://oneuptime.com/blog/post/2026-02-01-rust-webassembly-wasm/view

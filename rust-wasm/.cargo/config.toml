@@ -1,4 +1,8 @@
 [target.wasm32-unknown-unknown]
+rustflags = [
 # Habilita SIMD128 para que o LLVM possa vetorizar loops automaticamente (ex: total_route_distance_squared)
 # Requer browser com suporte a WebAssembly SIMD (Chrome 91+, Firefox 89+, Safari 16.4+)
-rustflags = ["-C", "target-feature=+simd128"]
+    "-C", "target-feature=+simd128", 
+# https://github.com/leimbernon/genetic-algorithms#webassembly - This is required because getrandom 0.3 (a transitive dependency via rand) needs an explicit backend declaration for wasm32-unknown-unknown in addition to the wasm_js Cargo feature.
+    "--cfg", "getrandom_backend=\"wasm_js\""
+]
