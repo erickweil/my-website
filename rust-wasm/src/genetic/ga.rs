@@ -227,9 +227,28 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         )
     }
 
+    /// Retorna o fitness do indivíduo no índice `idx`
+    pub fn get_fitness(&self, idx: usize) -> Option<f64> {
+        self.population.get(idx).and_then(|ind| ind.fitness)
+    }
+
+    /// Executa uma única geração do GA e atualiza o estado interno (fitness global, geração, etc.)
+    pub fn run_step(&mut self) -> f64 {
+        self.run_generation();
+        let current_best_fitness = self.population[0].fitness.unwrap_or(f64::MIN);
+        if self.best_fitness.is_none_or(|bf| current_best_fitness > bf) {
+            if let Some(bg) = &mut self.best_genes {
+                bg.clone_from(&self.population[0].genes);
+            }
+            self.best_fitness = Some(current_best_fitness);
+        }
+        self.generation += 1;
+        current_best_fitness
+    }
+
     /// Inicializa a população com indivíduos aleatórios
     /// Se a população já tiver indivíduos e `reset_population` for true, eles serão re-inicializados com novos genes aleatórios
-    fn initialize_population(&mut self, reset_population: bool) {
+    pub fn initialize_population(&mut self, reset_population: bool) {
         let pop_size = self.config.population_size;
 
         // Re-inicializa os indivíduos existentes
@@ -268,7 +287,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
      * 3. Torna os filhos a população da próxima geração
      * 4. O melhor indivíduo da geração estará na posição 0 ao final (fitness mais alto).
      */
-    fn run_generation(&mut self) {
+    pub fn run_generation(&mut self) {
         let crossover_rate = self.config.crossover_rate;
         let mutation_rate = self.config.mutation_rate * self.mutation_multiplier;
         let mutation_gene_rate = self.config.mutation_gene_rate * self.mutation_multiplier;
