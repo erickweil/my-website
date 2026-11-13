@@ -1,7 +1,7 @@
 use std::{collections::HashMap};
 
 // Tipo a ser serializado-deserializado para comunicação com o frontend
-use serde::{Deserialize};
+use serde::{Deserialize, Deserializer};
 
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -96,6 +96,17 @@ impl std::fmt::Display for ErroFormulario {
 
 impl std::error::Error for ErroFormulario {}
 
+/// Erro de desserialização com o caminho do campo (ex.: `disciplinas[3].aulas`).
+pub fn erro_de_formato(caminho: &str, msg: &str) -> ErroFormulario {
+    // O erro do serde_wasm_bindgen vira um `Error` do JS, cujo texto já começa com "Error: "
+    let msg = msg.strip_prefix("Error: ").unwrap_or(msg);
+    if caminho.is_empty() || caminho == "." {
+        ErroFormulario::FormatoInvalido(msg.to_string())
+    } else {
+        ErroFormulario::FormatoInvalido(format!("campo {caminho}: {msg}"))
+    }
+}
+
 pub type HorariosPorDia = HashMap<String, Vec<i32>>;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -108,13 +119,44 @@ pub struct FomularioHorarioTurma {
 pub struct FomularioHorarioDisciplina {
     pub nome: String,
     pub turma: String,
+    /// Campo numérico da página: chega `NaN` se o usuário apagar o valor.
+    #[serde(deserialize_with = "inteiro_obrigatorio")]
     pub aulas: i32,
-    // Formulários exportados pela UI podem omitir estes campos (no TS ficam `undefined`,
-    // tratados como 0/false). Sem `default`, a desserialização falharia com "missing field".
-    #[serde(default)]
+    // A página pode omitir estes campos ou mandá-los como `undefined` (o checkbox de "dividir" não
+    // tem valor inicial; "agrupar" vazio vira `NaN`). No TS antigo isso valia como 0/false.
+    #[serde(default, deserialize_with = "inteiro_ou_zero")]
     pub agrupar: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "nulo_vira_padrao")]
     pub dividir: bool,
+}
+
+/// Aceita `null`/`undefined` como o valor padrão do tipo (`false`, lista vazia…).
+fn nulo_vira_padrao<'de, D: Deserializer<'de>, T: Deserialize<'de> + Default>(d: D) -> Result<T, D::Error> {
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
+}
+
+/// Número inteiro >= 0 vindo de um `<input type="number">`, que no JS é sempre um f64.
+fn inteiro_nao_negativo<E: serde::de::Error>(v: f64) -> Result<i32, E> {
+    if v.fract() != 0.0 || !(0.0..=i32::MAX as f64).contains(&v) {
+        return Err(E::custom(format!("{v} não é um número inteiro maior ou igual a zero")));
+    }
+    Ok(v as i32)
+}
+
+/// Inteiro >= 0; vazio (`null`, `undefined` ou `NaN`) vale 0.
+fn inteiro_ou_zero<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
+    match Option::<f64>::deserialize(d)? {
+        Some(v) if !v.is_nan() => inteiro_nao_negativo(v),
+        _ => Ok(0),
+    }
+}
+
+/// Inteiro >= 0 que precisa estar preenchido.
+fn inteiro_obrigatorio<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
+    match Option::<f64>::deserialize(d)? {
+        Some(v) if !v.is_nan() => inteiro_nao_negativo(v),
+        _ => Err(serde::de::Error::custom("campo não preenchido")),
+    }
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -134,7 +176,7 @@ pub struct FomularioHorarioProfessor {
 pub struct FomularioHorario {
     pub turmas: Vec<FomularioHorarioTurma>,
     pub disciplinas: Vec<FomularioHorarioDisciplina>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "nulo_vira_padrao")]
     pub disciplinas_unidas: Vec<FomularioHorarioDisciplinaUnida>,
     pub professores: Vec<FomularioHorarioProfessor>,
 }
@@ -321,12 +363,9 @@ impl RegrasHorario {
 
     /// Lê o formulário vindo do JS (o objeto `FormularioHorario` da página).
     pub fn from_js(formulario: wasm_bindgen::JsValue) -> Result<Self, ErroFormulario> {
-        let formulario: FomularioHorario = serde_wasm_bindgen::from_value(formulario)
-            .map_err(|e| {
-                // O erro do serde_wasm_bindgen vira um `Error` do JS, cujo texto já começa com "Error: "
-                let msg = e.to_string();
-                ErroFormulario::FormatoInvalido(msg.strip_prefix("Error: ").unwrap_or(&msg).to_string())
-            })?;
+        let de = serde_wasm_bindgen::Deserializer::from(formulario);
+        let formulario: FomularioHorario = serde_path_to_error::deserialize(de)
+            .map_err(|e| erro_de_formato(&e.path().to_string(), &e.inner().to_string()))?;
         Self::new(formulario)
     }
 
@@ -440,5 +479,31 @@ mod tests {
         assert_eq!(regras.turmas[0].horarios.get(DiaSemana::Segunda, 1), 1);
         assert_eq!(regras.disciplinas[0].disciplinas_unidas, vec![1]);
         assert_eq!(regras.disciplinas[1].disciplinas_unidas, vec![0]);
+    }
+
+    /// Reproduz o que a página manda: `dividir`/`agrupar`/`disciplinas_unidas` como null (no JS,
+    /// `undefined` também chega como "unit" ao serde, igual ao null do JSON).
+    #[test]
+    fn campos_nulos_valem_o_padrao() {
+        let f = formulario(r#"{
+            "turmas": [{ "nome": "T", "horarios": { "seg": [1, 2] } }],
+            "disciplinas": [{ "nome": "A", "turma": "T", "aulas": 2.0, "agrupar": null, "dividir": null }],
+            "disciplinas_unidas": null,
+            "professores": [{ "nome": "P", "disciplinas": ["A"], "horarios": { "seg": [1, 2] } }]
+        }"#);
+        assert_eq!((f.disciplinas[0].aulas, f.disciplinas[0].agrupar, f.disciplinas[0].dividir), (2, 0, false));
+        assert!(f.disciplinas_unidas.is_empty());
+    }
+
+    #[test]
+    fn numeros_invalidos_dao_erro_com_o_campo() {
+        for (aulas, esperado) in [("null", "campo não preenchido"), ("1.5", "1.5 não é um número inteiro maior ou igual a zero"), ("-1", "-1 não é")] {
+            let json = format!(r#"{{"turmas": [], "professores": [], "disciplinas": [{{ "nome": "A", "turma": "T", "aulas": {aulas} }}]}}"#);
+            let mut de = serde_json::Deserializer::from_str(&json);
+            let e = serde_path_to_error::deserialize::<_, FomularioHorario>(&mut de).unwrap_err();
+            let erro = erro_de_formato(&e.path().to_string(), &e.inner().to_string()).to_string();
+            assert!(erro.starts_with("Formulário inválido: campo disciplinas[0].aulas: "), "{erro}");
+            assert!(erro.contains(esperado), "{erro}");
+        }
     }
 }
