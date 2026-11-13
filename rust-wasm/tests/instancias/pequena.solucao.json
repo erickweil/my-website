@@ -1,0 +1,113 @@
+{
+  "1º A": {
+    "seg": [
+      "Português 1º A",
+      "Ciências 1º A",
+      "Matemática 1º A",
+      "Ciências 1º A",
+      "Português 1º A"
+    ],
+    "ter": [
+      "Ciências 1º A",
+      "Matemática 1º A",
+      "Geografia 1º A",
+      "História 1º A",
+      "História 1º A"
+    ],
+    "qua": [
+      "Matemática 1º A",
+      "Português 1º A",
+      "Ed. Física 1º A",
+      "Ed. Física 1º A",
+      "Inglês 1º A"
+    ],
+    "qui": [
+      "Matemática 1º A",
+      "Matemática 1º A",
+      "Artes 1º A",
+      "Artes 1º A",
+      "Português 1º A"
+    ],
+    "sex": [
+      "Redação 1º A",
+      "Redação 1º A",
+      "Geografia 1º A",
+      "Português 1º A",
+      "Inglês 1º A"
+    ]
+  },
+  "1º B": {
+    "seg": [
+      "Português 1º B",
+      "Geografia 1º B",
+      "Redação 1º B",
+      "Redação 1º B",
+      "Matemática 1º B"
+    ],
+    "ter": [
+      "História 1º B",
+      "Matemática 1º B",
+      "História 1º B",
+      "Matemática 1º B",
+      "Português 1º B"
+    ],
+    "qua": [
+      "Inglês 1º B",
+      "Ciências 1º B",
+      "Ed. Física 1º B",
+      "Ed. Física 1º B",
+      "Ciências 1º B"
+    ],
+    "qui": [
+      "Artes 1º B",
+      "Artes 1º B",
+      "Ciências 1º B",
+      "Matemática 1º B",
+      "Português 1º B"
+    ],
+    "sex": [
+      "Inglês 1º B",
+      "Matemática 1º B",
+      "Português 1º B",
+      "Português 1º B",
+      "Geografia 1º B"
+    ]
+  },
+  "1º C": {
+    "seg": [
+      "Inglês 1º C",
+      "Geografia 1º C",
+      "Português 1º C",
+      "Português 1º C",
+      "Geografia 1º C"
+    ],
+    "ter": [
+      "Artes 1º C",
+      "Artes 1º C",
+      "História 1º C",
+      "Português 1º C",
+      "Matemática 1º C"
+    ],
+    "qua": [
+      "Redação 1º C",
+      "Redação 1º C",
+      "Matemática 1º C",
+      "História 1º C",
+      "Inglês 1º C"
+    ],
+    "qui": [
+      "Matemática 1º C",
+      "Matemática 1º C",
+      "Ed. Física 1º C",
+      "Ed. Física 1º C",
+      "Ciências 1º C"
+    ],
+    "sex": [
+      "Português 1º C",
+      "Ciências 1º C",
+      "Português 1º C",
+      "Ciências 1º C",
+      "Matemática 1º C"
+    ]
+  }
+}

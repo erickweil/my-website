@@ -64,7 +64,11 @@ pub struct FomularioHorarioDisciplina {
     pub nome: String,
     pub turma: String,
     pub aulas: i32,
+    // Formulários exportados pela UI podem omitir estes campos (no TS ficam `undefined`,
+    // tratados como 0/false). Sem `default`, a desserialização falharia com "missing field".
+    #[serde(default)]
     pub agrupar: i32,
+    #[serde(default)]
     pub dividir: bool,
 }
 
@@ -85,6 +89,7 @@ pub struct FomularioHorarioProfessor {
 pub struct FomularioHorario {
     pub turmas: Vec<FomularioHorarioTurma>,
     pub disciplinas: Vec<FomularioHorarioDisciplina>,
+    #[serde(default)]
     pub disciplinas_unidas: Vec<FomularioHorarioDisciplinaUnida>,
     pub professores: Vec<FomularioHorarioProfessor>,
 }
@@ -292,5 +297,30 @@ impl RegrasHorario {
         }
 
         quadro
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Trecho no formato exportado pela UI: disciplina sem `dividir`/`agrupar`, campos extras
+    /// (`id`, `checkAgrupar`) e sem `disciplinas_unidas`.
+    #[test]
+    fn aceita_formulario_com_campos_omitidos() {
+        let json = r#"{
+            "turmas": [{ "nome": "T", "horarios": { "seg": [1, 2] }, "id": "abc" }],
+            "disciplinas": [
+                { "nome": "A", "turma": "T", "aulas": 1, "agrupar": 2, "checkAgrupar": false },
+                { "nome": "B", "turma": "T", "aulas": 1 }
+            ],
+            "professores": [{ "nome": "P", "disciplinas": ["A", "B"], "horarios": { "seg": [1, 2] } }]
+        }"#;
+        let f: FomularioHorario = serde_json::from_str(json).expect("deveria aceitar campos omitidos");
+        assert!(!f.disciplinas[0].dividir);
+        assert_eq!(f.disciplinas[1].agrupar, 0);
+        assert!(f.disciplinas_unidas.is_empty());
+        let regras = RegrasHorario::new(f);
+        assert_eq!(regras.n_tempos, 2);
     }
 }

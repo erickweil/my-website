@@ -202,34 +202,23 @@ impl GAProblem for RegrasHorario {
         // Mutação de trocas dentro das turmas
         let n_mutations = poisson_knuth_sample((quadro.len() as f64) * mutation_rate);
         for _ in 0..n_mutations {            
-            // 1. Escolhe aleatoriamente o primeiro índice
-            let idx = {
-                let mut ret_idx = 0;
-                for _ in 0..10 {
-                    let idx = random_range(0, quadro.len());
-                    if quadro[idx] != -1 {
-                        ret_idx = idx;
-                        break
-                    }
-                }
-                ret_idx
-            };
-            
-            // 2. Escolhe aleatoriamente outro tempo dentro da mesma turma para trocar
+            // 1. Escolhe aleatoriamente o primeiro índice (somente slots ativos).
+            // Se nenhuma tentativa acertar um slot ativo, pula esta mutação: usar um índice
+            // padrão (ex.: 0) poderia trocar um slot inativo (-1) para dentro do horário da
+            // turma, quebrando a invariante de multiconjunto por turma.
+            let Some(idx) = (0..10)
+                .map(|_| random_range(0, quadro.len()))
+                .find(|&i| quadro[i] != -1)
+            else { continue };
+
+            // 2. Escolhe aleatoriamente outro slot ativo dentro da mesma turma para trocar
             let turma_id = (idx / self.n_tempos) / QUANTOS_DIAS;
             let start_turma = turma_id * self.n_tempos * QUANTOS_DIAS;
             let end_turma =  (turma_id + 1) * self.n_tempos * QUANTOS_DIAS;
-            let outro_idx = {
-                let mut ret_idx = idx;
-                for _ in 0..10 {
-                    let outro_idx = random_range_except(start_turma, end_turma, idx);
-                    if quadro[outro_idx] != -1 {
-                        ret_idx = outro_idx;
-                        break
-                    }
-                }
-                ret_idx
-            };
+            let Some(outro_idx) = (0..10)
+                .map(|_| random_range_except(start_turma, end_turma, idx))
+                .find(|&i| quadro[i] != -1)
+            else { continue };
 
             quadro.swap(idx, outro_idx);
         }
@@ -286,3 +275,98 @@ crate::ga_runner! {
     ),
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::genetic::ga::{GAConfig, GeneticAlgorithm};
+    use crate::horario::horario_regras::{
+        FomularioHorario, FomularioHorarioDisciplina, FomularioHorarioProfessor, FomularioHorarioTurma,
+    };
+    use std::collections::HashMap;
+    use wasm_bindgen_test::*;
+
+    fn horarios(dias: &[(&str, &[i32])]) -> HashMap<String, Vec<i32>> {
+        dias.iter().map(|(d, t)| (d.to_string(), t.to_vec())).collect()
+    }
+
+    /// Instância com POUCOS slots ativos (3 de 21 por turma, ~14%), para que o sorteio
+    /// de índice ativo falhe com frequência e o caminho de "nenhum índice encontrado" seja exercitado.
+    fn regras_esparsas() -> RegrasHorario {
+        let disc = |nome: &str, turma: &str, aulas: i32| FomularioHorarioDisciplina {
+            nome: nome.into(), turma: turma.into(), aulas, agrupar: 0, dividir: false,
+        };
+        RegrasHorario::new(FomularioHorario {
+            turmas: vec![
+                FomularioHorarioTurma { nome: "A".into(), horarios: horarios(&[("seg", &[1, 2, 3])]) },
+                FomularioHorarioTurma { nome: "B".into(), horarios: horarios(&[("seg", &[1, 2, 3])]) },
+            ],
+            disciplinas: vec![
+                disc("Mat A", "A", 2), disc("Port A", "A", 1),
+                disc("Mat B", "B", 1), disc("Port B", "B", 2),
+            ],
+            disciplinas_unidas: vec![],
+            professores: vec![
+                FomularioHorarioProfessor {
+                    nome: "P1".into(),
+                    disciplinas: vec!["Mat A".into(), "Mat B".into()],
+                    horarios: horarios(&[("seg", &[1, 2, 3])]),
+                },
+                FomularioHorarioProfessor {
+                    nome: "P2".into(),
+                    disciplinas: vec!["Port A".into(), "Port B".into()],
+                    horarios: horarios(&[("seg", &[1, 2, 3])]),
+                },
+            ],
+        })
+    }
+
+    /// Verifica a invariante: slots inativos (-1) continuam nos mesmos lugares e o
+    /// multiconjunto de disciplinas de cada turma é o mesmo do quadro de referência.
+    fn assert_invariantes(regras: &RegrasHorario, referencia: &QuadroHorario, quadro: &QuadroHorario) {
+        let vazio = regras.get_quadro_vazio();
+        for (i, (&v, &base)) in quadro.iter().zip(vazio.iter()).enumerate() {
+            assert_eq!(v == -1, base == -1, "slot {} mudou de ativo/inativo (valor {})", i, v);
+        }
+        let por_turma = QUANTOS_DIAS * regras.n_tempos;
+        for t in 0..regras.turmas.len() {
+            let mut a = referencia[t * por_turma..(t + 1) * por_turma].to_vec();
+            let mut b = quadro[t * por_turma..(t + 1) * por_turma].to_vec();
+            a.sort_unstable();
+            b.sort_unstable();
+            assert_eq!(a, b, "multiconjunto da turma {} mudou", t);
+        }
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn mutacao_preserva_invariantes() {
+        fastrand::seed(42);
+        let regras = regras_esparsas();
+        let mut state = regras.initial_state();
+        let referencia = regras.random_genes();
+        let mut quadro = referencia.clone();
+        for _ in 0..20_000 {
+            regras.mutate(&mut state, &mut quadro, 0.5);
+            assert_invariantes(&regras, &referencia, &quadro);
+        }
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn ga_preserva_invariantes_e_resolve_instancia_pequena() {
+        fastrand::seed(7);
+        let regras = regras_esparsas();
+        let referencia = regras.random_genes();
+        let mut ga = GeneticAlgorithm::new(regras, GAConfig {
+            population_size: 32,
+            mutation_rate: 0.9,
+            crossover_rate: 0.9,
+            mutation_gene_rate: 0.1,
+            ..GAConfig::new()
+        });
+        ga.run(200);
+        let info = ga.get_info();
+        let genes = info.best_genes.expect("deveria ter um melhor indivíduo");
+        assert_invariantes(&ga.problem, &referencia, &genes);
+        assert_eq!(info.best_fitness, Some(0.0), "instância trivial deveria ser resolvida");
+    }
+}

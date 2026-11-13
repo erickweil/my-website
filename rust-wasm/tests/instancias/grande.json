@@ -1,0 +1,4867 @@
+{
+  "turmas": [
+    {
+      "nome": "1º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "1º B",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "1º C",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "1º D",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "2º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "2º B",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "2º C",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "2º D",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "3º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "3º B",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "3º C",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "3º D",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "4º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "4º B",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "4º C",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "4º D",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "5º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "5º B",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "5º C",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "5º D",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "6º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "6º B",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "6º C",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "6º D",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "7º A",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    }
+  ],
+  "disciplinas": [
+    {
+      "nome": "Português 1º A",
+      "turma": "1º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 1º A",
+      "turma": "1º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 1º A",
+      "turma": "1º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 1º A",
+      "turma": "1º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 1º A",
+      "turma": "1º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 1º A",
+      "turma": "1º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 1º A",
+      "turma": "1º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 1º A",
+      "turma": "1º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 1º A",
+      "turma": "1º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 1º B",
+      "turma": "1º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 1º B",
+      "turma": "1º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 1º B",
+      "turma": "1º B",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 1º B",
+      "turma": "1º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 1º B",
+      "turma": "1º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 1º B",
+      "turma": "1º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 1º B",
+      "turma": "1º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 1º B",
+      "turma": "1º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 1º B",
+      "turma": "1º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 1º C",
+      "turma": "1º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 1º C",
+      "turma": "1º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 1º C",
+      "turma": "1º C",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 1º C",
+      "turma": "1º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 1º C",
+      "turma": "1º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 1º C",
+      "turma": "1º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 1º C",
+      "turma": "1º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 1º C",
+      "turma": "1º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 1º C",
+      "turma": "1º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 1º D",
+      "turma": "1º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 1º D",
+      "turma": "1º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 1º D",
+      "turma": "1º D",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 1º D",
+      "turma": "1º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 1º D",
+      "turma": "1º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 1º D",
+      "turma": "1º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 1º D",
+      "turma": "1º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 1º D",
+      "turma": "1º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 1º D",
+      "turma": "1º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 2º A",
+      "turma": "2º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 2º A",
+      "turma": "2º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 2º A",
+      "turma": "2º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 2º A",
+      "turma": "2º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 2º A",
+      "turma": "2º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 2º A",
+      "turma": "2º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 2º A",
+      "turma": "2º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 2º A",
+      "turma": "2º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 2º A",
+      "turma": "2º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 2º B",
+      "turma": "2º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 2º B",
+      "turma": "2º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 2º B",
+      "turma": "2º B",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 2º B",
+      "turma": "2º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 2º B",
+      "turma": "2º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 2º B",
+      "turma": "2º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 2º B",
+      "turma": "2º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 2º B",
+      "turma": "2º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 2º B",
+      "turma": "2º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 2º C",
+      "turma": "2º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 2º C",
+      "turma": "2º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 2º C",
+      "turma": "2º C",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 2º C",
+      "turma": "2º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 2º C",
+      "turma": "2º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 2º C",
+      "turma": "2º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 2º C",
+      "turma": "2º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 2º C",
+      "turma": "2º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 2º C",
+      "turma": "2º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 2º D",
+      "turma": "2º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 2º D",
+      "turma": "2º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 2º D",
+      "turma": "2º D",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 2º D",
+      "turma": "2º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 2º D",
+      "turma": "2º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 2º D",
+      "turma": "2º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 2º D",
+      "turma": "2º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 2º D",
+      "turma": "2º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 2º D",
+      "turma": "2º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 3º A",
+      "turma": "3º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 3º A",
+      "turma": "3º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 3º A",
+      "turma": "3º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 3º A",
+      "turma": "3º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 3º A",
+      "turma": "3º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 3º A",
+      "turma": "3º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 3º A",
+      "turma": "3º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 3º A",
+      "turma": "3º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 3º A",
+      "turma": "3º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 3º B",
+      "turma": "3º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 3º B",
+      "turma": "3º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 3º B",
+      "turma": "3º B",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 3º B",
+      "turma": "3º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 3º B",
+      "turma": "3º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 3º B",
+      "turma": "3º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 3º B",
+      "turma": "3º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 3º B",
+      "turma": "3º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 3º B",
+      "turma": "3º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 3º C",
+      "turma": "3º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 3º C",
+      "turma": "3º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 3º C",
+      "turma": "3º C",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 3º C",
+      "turma": "3º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 3º C",
+      "turma": "3º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 3º C",
+      "turma": "3º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 3º C",
+      "turma": "3º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 3º C",
+      "turma": "3º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 3º C",
+      "turma": "3º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 3º D",
+      "turma": "3º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 3º D",
+      "turma": "3º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 3º D",
+      "turma": "3º D",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 3º D",
+      "turma": "3º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 3º D",
+      "turma": "3º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 3º D",
+      "turma": "3º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 3º D",
+      "turma": "3º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 3º D",
+      "turma": "3º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 3º D",
+      "turma": "3º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 4º A",
+      "turma": "4º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 4º A",
+      "turma": "4º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 4º A",
+      "turma": "4º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 4º A",
+      "turma": "4º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 4º A",
+      "turma": "4º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 4º A",
+      "turma": "4º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 4º A",
+      "turma": "4º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 4º A",
+      "turma": "4º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 4º A",
+      "turma": "4º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 4º B",
+      "turma": "4º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 4º B",
+      "turma": "4º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 4º B",
+      "turma": "4º B",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 4º B",
+      "turma": "4º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 4º B",
+      "turma": "4º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 4º B",
+      "turma": "4º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 4º B",
+      "turma": "4º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 4º B",
+      "turma": "4º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 4º B",
+      "turma": "4º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 4º C",
+      "turma": "4º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 4º C",
+      "turma": "4º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 4º C",
+      "turma": "4º C",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 4º C",
+      "turma": "4º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 4º C",
+      "turma": "4º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 4º C",
+      "turma": "4º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 4º C",
+      "turma": "4º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 4º C",
+      "turma": "4º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 4º C",
+      "turma": "4º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 4º D",
+      "turma": "4º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 4º D",
+      "turma": "4º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 4º D",
+      "turma": "4º D",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 4º D",
+      "turma": "4º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 4º D",
+      "turma": "4º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 4º D",
+      "turma": "4º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 4º D",
+      "turma": "4º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 4º D",
+      "turma": "4º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 4º D",
+      "turma": "4º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 5º A",
+      "turma": "5º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 5º A",
+      "turma": "5º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 5º A",
+      "turma": "5º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 5º A",
+      "turma": "5º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 5º A",
+      "turma": "5º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 5º A",
+      "turma": "5º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 5º A",
+      "turma": "5º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 5º A",
+      "turma": "5º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 5º A",
+      "turma": "5º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 5º B",
+      "turma": "5º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 5º B",
+      "turma": "5º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 5º B",
+      "turma": "5º B",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 5º B",
+      "turma": "5º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 5º B",
+      "turma": "5º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 5º B",
+      "turma": "5º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 5º B",
+      "turma": "5º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 5º B",
+      "turma": "5º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 5º B",
+      "turma": "5º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 5º C",
+      "turma": "5º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 5º C",
+      "turma": "5º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 5º C",
+      "turma": "5º C",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 5º C",
+      "turma": "5º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 5º C",
+      "turma": "5º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 5º C",
+      "turma": "5º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 5º C",
+      "turma": "5º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 5º C",
+      "turma": "5º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 5º C",
+      "turma": "5º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 5º D",
+      "turma": "5º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 5º D",
+      "turma": "5º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 5º D",
+      "turma": "5º D",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 5º D",
+      "turma": "5º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 5º D",
+      "turma": "5º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 5º D",
+      "turma": "5º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 5º D",
+      "turma": "5º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 5º D",
+      "turma": "5º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 5º D",
+      "turma": "5º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 6º A",
+      "turma": "6º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 6º A",
+      "turma": "6º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 6º A",
+      "turma": "6º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 6º A",
+      "turma": "6º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 6º A",
+      "turma": "6º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 6º A",
+      "turma": "6º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 6º A",
+      "turma": "6º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 6º A",
+      "turma": "6º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 6º A",
+      "turma": "6º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 6º B",
+      "turma": "6º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 6º B",
+      "turma": "6º B",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 6º B",
+      "turma": "6º B",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 6º B",
+      "turma": "6º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 6º B",
+      "turma": "6º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 6º B",
+      "turma": "6º B",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 6º B",
+      "turma": "6º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 6º B",
+      "turma": "6º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 6º B",
+      "turma": "6º B",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 6º C",
+      "turma": "6º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 6º C",
+      "turma": "6º C",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 6º C",
+      "turma": "6º C",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 6º C",
+      "turma": "6º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 6º C",
+      "turma": "6º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 6º C",
+      "turma": "6º C",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 6º C",
+      "turma": "6º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 6º C",
+      "turma": "6º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 6º C",
+      "turma": "6º C",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 6º D",
+      "turma": "6º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 6º D",
+      "turma": "6º D",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 6º D",
+      "turma": "6º D",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 6º D",
+      "turma": "6º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 6º D",
+      "turma": "6º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 6º D",
+      "turma": "6º D",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 6º D",
+      "turma": "6º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 6º D",
+      "turma": "6º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 6º D",
+      "turma": "6º D",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Português 7º A",
+      "turma": "7º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Matemática 7º A",
+      "turma": "7º A",
+      "aulas": 5,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Ciências 7º A",
+      "turma": "7º A",
+      "aulas": 3,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "História 7º A",
+      "turma": "7º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Geografia 7º A",
+      "turma": "7º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Inglês 7º A",
+      "turma": "7º A",
+      "aulas": 2,
+      "agrupar": 0,
+      "dividir": false
+    },
+    {
+      "nome": "Artes 7º A",
+      "turma": "7º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Ed. Física 7º A",
+      "turma": "7º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Redação 7º A",
+      "turma": "7º A",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": true
+    }
+  ],
+  "disciplinas_unidas": [
+    {
+      "grupo": "Ed. Física unida",
+      "disciplinas": [
+        "Ed. Física 1º A",
+        "Ed. Física 1º B"
+      ]
+    }
+  ],
+  "professores": [
+    {
+      "nome": "Prof. Matemática 1",
+      "disciplinas": [
+        "Matemática 2º D",
+        "Matemática 4º A",
+        "Matemática 5º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 2",
+      "disciplinas": [
+        "Matemática 3º A",
+        "Matemática 6º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          3
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "qua": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          2,
+          3,
+          5
+        ],
+        "sex": [
+          1,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 1",
+      "disciplinas": [
+        "Português 1º B",
+        "Português 2º C",
+        "Português 4º C"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          2,
+          3,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "qui": [
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Redação 1",
+      "disciplinas": [
+        "Redação 2º D",
+        "Redação 3º C",
+        "Redação 4º D",
+        "Redação 5º A",
+        "Redação 5º B",
+        "Redação 6º A",
+        "Redação 6º C",
+        "Redação 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 2",
+      "disciplinas": [
+        "Português 2º A",
+        "Português 4º B",
+        "Português 5º C"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          3,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 3",
+      "disciplinas": [
+        "Português 4º D",
+        "Português 5º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          4,
+          5
+        ],
+        "ter": [
+          4,
+          5
+        ],
+        "qua": [
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          3
+        ],
+        "sex": [
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Redação 2",
+      "disciplinas": [
+        "Redação 1º A",
+        "Redação 2º C",
+        "Redação 3º B",
+        "Redação 4º A",
+        "Redação 4º C",
+        "Redação 5º C",
+        "Redação 5º D",
+        "Redação 6º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. História 1",
+      "disciplinas": [
+        "História 1º A",
+        "História 1º D",
+        "História 2º B",
+        "História 3º C",
+        "História 5º C",
+        "História 5º D",
+        "História 6º B",
+        "História 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          2,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          2,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Artes 1",
+      "disciplinas": [
+        "Artes 1º B",
+        "Artes 1º C",
+        "Artes 2º B",
+        "Artes 3º A",
+        "Artes 3º C",
+        "Artes 4º B",
+        "Artes 6º B",
+        "Artes 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 1",
+      "disciplinas": [
+        "Inglês 1º A",
+        "Inglês 3º A",
+        "Inglês 3º B",
+        "Inglês 3º D",
+        "Inglês 4º D",
+        "Inglês 6º B",
+        "Inglês 6º C",
+        "Inglês 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "sex": [
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 1",
+      "disciplinas": [
+        "Ciências 1º A",
+        "Ciências 1º C",
+        "Ciências 1º D",
+        "Ciências 4º B",
+        "Ciências 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Geografia 1",
+      "disciplinas": [
+        "Geografia 1º A",
+        "Geografia 1º B",
+        "Geografia 3º B",
+        "Geografia 3º C",
+        "Geografia 3º D",
+        "Geografia 4º A",
+        "Geografia 5º D",
+        "Geografia 6º B"
+      ],
+      "horarios": {
+        "seg": [
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "qui": [
+          2,
+          3,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Geografia 2",
+      "disciplinas": [
+        "Geografia 3º A",
+        "Geografia 4º C",
+        "Geografia 4º D",
+        "Geografia 5º B",
+        "Geografia 6º C",
+        "Geografia 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          5
+        ],
+        "qua": [
+          1,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          5
+        ],
+        "sex": [
+          1,
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 2",
+      "disciplinas": [
+        "Ciências 2º A",
+        "Ciências 2º C",
+        "Ciências 3º A",
+        "Ciências 3º D",
+        "Ciências 4º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 4",
+      "disciplinas": [
+        "Português 3º A",
+        "Português 3º D",
+        "Português 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "ter": [
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 1",
+      "disciplinas": [
+        "Ed. Física 1º C",
+        "Ed. Física 2º B",
+        "Ed. Física 2º C",
+        "Ed. Física 2º D",
+        "Ed. Física 3º B",
+        "Ed. Física 3º D",
+        "Ed. Física 4º A",
+        "Ed. Física 4º C",
+        "Ed. Física 4º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 3",
+      "disciplinas": [
+        "Matemática 1º C",
+        "Matemática 2º A",
+        "Matemática 3º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. História 2",
+      "disciplinas": [
+        "História 2º A",
+        "História 3º A",
+        "História 4º C",
+        "História 4º D",
+        "História 5º B",
+        "História 6º A"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          3,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3
+        ],
+        "qui": [
+          1,
+          2,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 4",
+      "disciplinas": [
+        "Matemática 3º C",
+        "Matemática 4º D",
+        "Matemática 6º C"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Artes 2",
+      "disciplinas": [
+        "Artes 1º D",
+        "Artes 2º D",
+        "Artes 3º D",
+        "Artes 5º A",
+        "Artes 5º C",
+        "Artes 6º A",
+        "Artes 6º C"
+      ],
+      "horarios": {
+        "seg": [
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Geografia 3",
+      "disciplinas": [
+        "Geografia 2º A",
+        "Geografia 2º C",
+        "Geografia 2º D",
+        "Geografia 5º A",
+        "Geografia 6º A"
+      ],
+      "horarios": {
+        "seg": [
+          5
+        ],
+        "ter": [
+          2,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 5",
+      "disciplinas": [
+        "Português 5º B",
+        "Português 5º D"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "qua": [
+          1,
+          3,
+          5
+        ],
+        "qui": [
+          1,
+          5
+        ],
+        "sex": [
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Artes 3",
+      "disciplinas": [
+        "Artes 1º A",
+        "Artes 4º A",
+        "Artes 5º B",
+        "Artes 5º D"
+      ],
+      "horarios": {
+        "seg": [
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 2",
+      "disciplinas": [
+        "Ed. Física 2º A",
+        "Ed. Física 3º C",
+        "Ed. Física 5º A",
+        "Ed. Física 5º B",
+        "Ed. Física 6º A",
+        "Ed. Física 6º B",
+        "Ed. Física 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "qui": [
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 2",
+      "disciplinas": [
+        "Inglês 1º C",
+        "Inglês 1º D",
+        "Inglês 3º C",
+        "Inglês 4º A",
+        "Inglês 5º D",
+        "Inglês 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "ter": [
+          2,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3
+        ],
+        "sex": [
+          1,
+          2,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. História 3",
+      "disciplinas": [
+        "História 1º B",
+        "História 3º D",
+        "História 4º A",
+        "História 6º C",
+        "História 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3
+        ],
+        "ter": [
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          4
+        ],
+        "qui": [
+          4,
+          5
+        ],
+        "sex": [
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 3",
+      "disciplinas": [
+        "Ciências 2º B",
+        "Ciências 4º A",
+        "Ciências 5º C",
+        "Ciências 6º C",
+        "Ciências 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 3",
+      "disciplinas": [
+        "Inglês 1º B",
+        "Inglês 2º B",
+        "Inglês 2º C",
+        "Inglês 6º A"
+      ],
+      "horarios": {
+        "seg": [
+          4
+        ],
+        "ter": [
+          4,
+          5
+        ],
+        "qua": [
+          2,
+          4
+        ],
+        "qui": [
+          2,
+          3,
+          5
+        ],
+        "sex": [
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 5",
+      "disciplinas": [
+        "Matemática 5º C"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3
+        ],
+        "ter": [],
+        "qua": [
+          3,
+          5
+        ],
+        "qui": [
+          5
+        ],
+        "sex": [
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 6",
+      "disciplinas": [
+        "Matemática 1º B",
+        "Matemática 2º C",
+        "Matemática 6º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          3,
+          5
+        ],
+        "ter": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          4,
+          5
+        ],
+        "sex": [
+          2,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 4",
+      "disciplinas": [
+        "Ciências 5º D",
+        "Ciências 6º A",
+        "Ciências 6º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          4
+        ],
+        "qua": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          2,
+          3
+        ],
+        "sex": [
+          1,
+          2,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Artes 4",
+      "disciplinas": [
+        "Artes 3º B",
+        "Artes 4º C",
+        "Artes 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          5
+        ],
+        "ter": [
+          1,
+          2
+        ],
+        "qua": [
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          3,
+          4
+        ],
+        "sex": [
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 4",
+      "disciplinas": [
+        "Inglês 4º B",
+        "Inglês 5º A",
+        "Inglês 5º B"
+      ],
+      "horarios": {
+        "seg": [
+          2
+        ],
+        "ter": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "qua": [
+          3,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "sex": [
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 5",
+      "disciplinas": [
+        "Ciências 1º B",
+        "Ciências 2º D",
+        "Ciências 3º B",
+        "Ciências 3º C",
+        "Ciências 4º C"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. História 4",
+      "disciplinas": [
+        "História 1º C",
+        "História 2º D",
+        "História 4º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "qua": [
+          5
+        ],
+        "qui": [
+          2,
+          5
+        ],
+        "sex": [
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 6",
+      "disciplinas": [
+        "Português 2º B",
+        "Português 3º C",
+        "Português 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 5",
+      "disciplinas": [
+        "Inglês 2º D",
+        "Inglês 4º C"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          4
+        ],
+        "ter": [
+          3
+        ],
+        "qua": [
+          1,
+          2,
+          5
+        ],
+        "qui": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 3",
+      "disciplinas": [
+        "Ed. Física 3º A",
+        "Ed. Física 5º C",
+        "Ed. Física 5º D",
+        "Ed. Física 6º C"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2
+        ],
+        "ter": [
+          1
+        ],
+        "qua": [
+          1,
+          2,
+          4
+        ],
+        "qui": [
+          2
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Redação 3",
+      "disciplinas": [
+        "Redação 1º B",
+        "Redação 1º C",
+        "Redação 1º D",
+        "Redação 3º D",
+        "Redação 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          4
+        ],
+        "qui": [
+          3,
+          4
+        ],
+        "sex": [
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 7",
+      "disciplinas": [
+        "Português 1º C",
+        "Português 4º A",
+        "Português 6º B"
+      ],
+      "horarios": {
+        "seg": [
+          3,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3
+        ],
+        "qua": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          4
+        ],
+        "sex": [
+          2,
+          3,
+          4,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Geografia 4",
+      "disciplinas": [
+        "Geografia 1º C",
+        "Geografia 2º B",
+        "Geografia 5º C",
+        "Geografia 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 7",
+      "disciplinas": [
+        "Matemática 3º D",
+        "Matemática 5º B"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3
+        ],
+        "ter": [
+          5
+        ],
+        "qua": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 8",
+      "disciplinas": [
+        "Português 1º A"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3
+        ],
+        "ter": [
+          1,
+          2,
+          4,
+          5
+        ],
+        "qua": [
+          2,
+          5
+        ],
+        "qui": [
+          1,
+          4,
+          5
+        ],
+        "sex": [
+          2,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 8",
+      "disciplinas": [
+        "Matemática 4º B"
+      ],
+      "horarios": {
+        "seg": [
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          4,
+          5
+        ],
+        "sex": [
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 4",
+      "disciplinas": [
+        "Ed. Física 4º B",
+        "Ed. Física 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          5
+        ],
+        "ter": [
+          2,
+          3
+        ],
+        "qua": [
+          1,
+          2
+        ],
+        "qui": [
+          3
+        ],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 6",
+      "disciplinas": [
+        "Inglês 2º A"
+      ],
+      "horarios": {
+        "seg": [
+          1
+        ],
+        "ter": [
+          2
+        ],
+        "qua": [
+          2,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          4
+        ],
+        "sex": [
+          2,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 5",
+      "disciplinas": [
+        "Ed. Física 1º A"
+      ],
+      "horarios": {
+        "seg": [
+          4,
+          5
+        ],
+        "ter": [
+          3,
+          5
+        ],
+        "qua": [
+          2,
+          5
+        ],
+        "qui": [
+          1,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Redação 4",
+      "disciplinas": [
+        "Redação 2º A",
+        "Redação 3º A",
+        "Redação 4º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2
+        ],
+        "qua": [],
+        "qui": [
+          1,
+          3
+        ],
+        "sex": [
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 9",
+      "disciplinas": [
+        "Português 3º B"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          5
+        ],
+        "qua": [
+          2,
+          5
+        ],
+        "qui": [
+          2
+        ],
+        "sex": [
+          2,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 9",
+      "disciplinas": [
+        "Matemática 4º C",
+        "Matemática 6º A"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          3,
+          5
+        ],
+        "ter": [
+          1,
+          3,
+          5
+        ],
+        "qua": [
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 10",
+      "disciplinas": [
+        "Matemática 1º A",
+        "Matemática 2º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          2,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2
+        ],
+        "sex": [
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Redação 5",
+      "disciplinas": [
+        "Redação 2º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          4
+        ],
+        "ter": [
+          3
+        ],
+        "qua": [
+          3,
+          4
+        ],
+        "qui": [],
+        "sex": [
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 6",
+      "disciplinas": [
+        "Ciências 5º B"
+      ],
+      "horarios": {
+        "seg": [
+          5
+        ],
+        "ter": [
+          2,
+          5
+        ],
+        "qua": [
+          5
+        ],
+        "qui": [
+          2,
+          3,
+          5
+        ],
+        "sex": [
+          1,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 10",
+      "disciplinas": [
+        "Português 1º D",
+        "Português 6º A"
+      ],
+      "horarios": {
+        "seg": [
+          5
+        ],
+        "ter": [
+          1,
+          4
+        ],
+        "qua": [
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. História 5",
+      "disciplinas": [
+        "História 2º C",
+        "História 3º B",
+        "História 5º A"
+      ],
+      "horarios": {
+        "seg": [],
+        "ter": [
+          1,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 11",
+      "disciplinas": [
+        "Matemática 1º D",
+        "Matemática 5º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          3
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Artes 5",
+      "disciplinas": [
+        "Artes 2º A",
+        "Artes 4º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          3
+        ],
+        "ter": [
+          1,
+          2
+        ],
+        "qua": [
+          4
+        ],
+        "qui": [
+          2,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Geografia 5",
+      "disciplinas": [
+        "Geografia 1º D",
+        "Geografia 4º B"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          5
+        ],
+        "ter": [
+          5
+        ],
+        "qua": [
+          2,
+          3
+        ],
+        "qui": [
+          1,
+          4,
+          5
+        ],
+        "sex": [
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Matemática 12",
+      "disciplinas": [
+        "Matemática 7º A"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2
+        ],
+        "ter": [
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          2
+        ],
+        "sex": [
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 6",
+      "disciplinas": [
+        "Ed. Física 1º B"
+      ],
+      "horarios": {
+        "seg": [],
+        "ter": [
+          3,
+          4,
+          5
+        ],
+        "qua": [
+          3,
+          4,
+          5
+        ],
+        "qui": [
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Artes 6",
+      "disciplinas": [
+        "Artes 2º C"
+      ],
+      "horarios": {
+        "seg": [
+          2
+        ],
+        "ter": [
+          4
+        ],
+        "qua": [
+          2,
+          4,
+          5
+        ],
+        "qui": [
+          1,
+          3,
+          5
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ed. Física 7",
+      "disciplinas": [
+        "Ed. Física 1º D"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          4
+        ],
+        "ter": [],
+        "qua": [
+          2,
+          4
+        ],
+        "qui": [],
+        "sex": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 11",
+      "disciplinas": [
+        "Português 6º C"
+      ],
+      "horarios": {
+        "seg": [
+          4,
+          5
+        ],
+        "ter": [
+          2,
+          3,
+          5
+        ],
+        "qua": [
+          1
+        ],
+        "qui": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Ciências 7",
+      "disciplinas": [
+        "Ciências 5º A"
+      ],
+      "horarios": {
+        "seg": [
+          2,
+          4,
+          5
+        ],
+        "ter": [
+          1,
+          2,
+          4
+        ],
+        "qua": [
+          5
+        ],
+        "qui": [
+          1,
+          3,
+          4,
+          5
+        ],
+        "sex": [
+          1,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Inglês 7",
+      "disciplinas": [
+        "Inglês 5º C"
+      ],
+      "horarios": {
+        "seg": [
+          3,
+          5
+        ],
+        "ter": [
+          3
+        ],
+        "qua": [
+          4
+        ],
+        "qui": [
+          1
+        ],
+        "sex": [
+          2,
+          3,
+          5
+        ]
+      }
+    },
+    {
+      "nome": "Prof. Português 12",
+      "disciplinas": [
+        "Português 2º D"
+      ],
+      "horarios": {
+        "seg": [
+          3,
+          5
+        ],
+        "ter": [
+          1,
+          5
+        ],
+        "qua": [
+          4,
+          5
+        ],
+        "qui": [
+          4
+        ],
+        "sex": [
+          5
+        ]
+      }
+    }
+  ]
+}
