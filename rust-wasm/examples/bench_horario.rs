@@ -1,7 +1,8 @@
-//! Benchmark nativo do solver genético de horários.
+//! Benchmark nativo dos solvers de horários (GA e Pencilmark).
 //!
-//! Roda o mesmo `GeneticAlgorithm<RegrasHorario>` usado no WASM, com a mesma configuração do
-//! worker (`horario-genetic-wasm.worker.ts`), mas compilado para a máquina local — sem browser.
+//! Roda os mesmos solvers usados no WASM — `GeneticAlgorithm<RegrasHorario>` com a configuração do
+//! worker (`horario-genetic-wasm.worker.ts`) ou o Pencilmark (`HorarioRegrasPencilmark`) —
+//! compilados para a máquina local, sem browser.
 //!
 //! Uso:
 //!   cargo run --release --example bench_horario -- <instancia.json> [opções]
@@ -11,7 +12,10 @@
 //!   --runs N       número de execuções independentes (padrão: 3)
 //!   --seed N       semente da 1ª execução; a execução i usa seed+i (padrão: 1)
 //!   --pop-mult N   população = tamanho do quadro × N (padrão: 4, igual ao worker)
-//!   --csv ARQ      grava a curva de convergência (run,ms,geracao,fitness) em ARQ
+//!   --csv ARQ      grava a curva de convergência (run,ms,geracao,fitness) em ARQ (só GA)
+//!   --solver S     ga (padrão) ou pencilmark
+//!   --base-iter N  Pencilmark: reinícios com orçamento 2^N, 2^(N+1)…; "none" = sem reinícios,
+//!                  como o worker 0 do site (padrão: none)
 //!
 //! Se existir `<instancia>.solucao.json` ao lado da instância (gerado por
 //! `tests/instancias/gerar.mjs`), o fitness da solução de referência é conferido antes
@@ -24,8 +28,12 @@ use rust_wasm::{
         ga::{GAConfig, GeneticAlgorithm},
         problems::GAProblem,
     },
-    horario::{DiaSemana, FomularioHorario, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
+    horario::{DiaSemana, FomularioHorario, HorarioRegrasPencilmark, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
+    pencilmark::ExecucaoPencilmark,
 };
+
+/// Nós do Pencilmark processados entre cada verificação do relógio.
+const ITER_POR_PASSO: u64 = 2048;
 
 /// Gerações executadas entre cada medição. Pequeno o bastante para a curva ter resolução,
 /// grande o bastante para o custo de `get_info()` (que clona os genes) ser desprezível.
@@ -38,17 +46,19 @@ struct Opcoes {
     seed: u64,
     pop_mult: usize,
     csv: Option<String>,
+    solver: String,
+    base_iter: Option<u32>,
 }
 
 fn uso(msg: &str) -> ! {
     eprintln!("erro: {msg}\n");
-    eprintln!("uso: cargo run --release --example bench_horario -- <instancia.json> [--segundos N] [--runs N] [--seed N] [--pop-mult N] [--csv ARQ]");
+    eprintln!("uso: cargo run --release --example bench_horario -- <instancia.json> [--segundos N] [--runs N] [--seed N] [--pop-mult N] [--csv ARQ] [--solver ga|pencilmark] [--base-iter N|none]");
     process::exit(2);
 }
 
 fn ler_opcoes() -> Opcoes {
     let mut args = env::args().skip(1);
-    let mut op = Opcoes { instancia: String::new(), segundos: 10.0, runs: 3, seed: 1, pop_mult: 4, csv: None };
+    let mut op = Opcoes { instancia: String::new(), segundos: 10.0, runs: 3, seed: 1, pop_mult: 4, csv: None, solver: "ga".into(), base_iter: None };
     while let Some(a) = args.next() {
         let mut valor = |nome: &str| args.next().unwrap_or_else(|| uso(&format!("{nome} precisa de um valor")));
         match a.as_str() {
@@ -57,6 +67,14 @@ fn ler_opcoes() -> Opcoes {
             "--seed" => op.seed = valor("--seed").parse().unwrap_or_else(|_| uso("--seed inválido")),
             "--pop-mult" => op.pop_mult = valor("--pop-mult").parse().unwrap_or_else(|_| uso("--pop-mult inválido")),
             "--csv" => op.csv = Some(valor("--csv")),
+            "--solver" => op.solver = match valor("--solver").as_str() {
+                s @ ("ga" | "pencilmark") => s.to_string(),
+                s => uso(&format!("solver desconhecido: {s} (use ga ou pencilmark)")),
+            },
+            "--base-iter" => op.base_iter = match valor("--base-iter").as_str() {
+                "none" => None,
+                n => Some(n.parse().unwrap_or_else(|_| uso("--base-iter inválido"))),
+            },
             _ if a.starts_with("--") => uso(&format!("opção desconhecida: {a}")),
             _ if op.instancia.is_empty() => op.instancia = a,
             _ => uso(&format!("argumento inesperado: {a}")),
@@ -124,18 +142,18 @@ fn main() {
     let slots_ativos = regras.get_quadro_vazio().iter().filter(|&&v| v == 0).count();
     let cfg = config_do_worker(size, op.pop_mult);
 
-    println!("=== Benchmark nativo: GA de horários ===");
+    println!("=== Benchmark nativo: {} de horários ===", if op.solver == "ga" { "GA" } else { "Pencilmark" });
     println!("instância: {}", op.instancia);
     println!(
         "turmas={} disciplinas={} professores={} tempos/dia={} quadro={} (ativos={})",
         regras.turmas.len(), regras.disciplinas.len(), regras.professores.len(),
         regras.n_tempos, size, slots_ativos,
     );
-    println!(
+    if op.solver == "ga" { println!(
         "pop={} crossover={} mutação={} mutação/gene={:.5} torneio={} max_estagnação={:?}",
         cfg.population_size, cfg.crossover_rate, cfg.mutation_rate,
         cfg.mutation_gene_rate, cfg.tournament_size, cfg.max_stagnation,
-    );
+    ); }
 
     // Confere a solução de referência, se houver
     let caminho_sol = Path::new(&op.instancia).with_extension("solucao.json");
@@ -149,6 +167,11 @@ fn main() {
         }
     } else {
         println!("solução de referência: não há (instância pode ser inviável)");
+    }
+
+    if op.solver == "pencilmark" {
+        bench_pencilmark(&op, &formulario, slots_ativos);
+        return;
     }
 
     let mut csv = op.csv.as_ref().map(|arq| {
@@ -216,5 +239,54 @@ fn main() {
     println!("avaliações/s (média):   {:.0}", resumo.iter().map(|r| r.3).sum::<f64>() / n);
     if let Some(arq) = &op.csv {
         println!("curva de convergência:  {arq}");
+    }
+}
+
+fn bench_pencilmark(op: &Opcoes, formulario: &FomularioHorario, slots_ativos: usize) {
+    println!("base_iter={}", op.base_iter.map_or("none (sem reinícios)".to_string(), |b| b.to_string()));
+    println!();
+    println!("{:>3} {:>6} {:>10} {:>12} {:>14} {:>12} {:>10}", "run", "seed", "resolveu", "iterações", "preenchidos", "ms", "iter/s");
+
+    let mut resolvidos = Vec::new();
+    for run in 0..op.runs {
+        let seed = op.seed + run as u64;
+        fastrand::seed(seed);
+
+        let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(formulario.clone()));
+        let (quadro, n_possibs) = (regras.quadro_vazio(), regras.n_possibs());
+        let inativos = quadro.iter().filter(|&&v| v != 0).count();
+        let mut exec = ExecucaoPencilmark::new(regras, quadro, n_possibs, 1, op.base_iter);
+
+        let inicio = Instant::now();
+        while !exec.executar(ITER_POR_PASSO) && inicio.elapsed().as_secs_f64() < op.segundos {}
+        let ms = inicio.elapsed().as_secs_f64() * 1000.0;
+
+        let s = &exec.solver;
+        let resolveu = match s.solucoes.first() {
+            Some(sol) => {
+                // Checagem cruzada: a solução do Pencilmark precisa ter fitness 0 nas regras do GA
+                let mut state = s.regras.regras.initial_state();
+                let fit = s.regras.regras.fitness(&mut state, sol);
+                if fit != 0.0 {
+                    eprintln!("AVISO: solução do Pencilmark tem fitness {fit} no GA — regras divergem");
+                }
+                resolvidos.push(ms);
+                "sim"
+            }
+            None if exec.terminou() => "impossível",
+            None => "não",
+        };
+        // Células de aula preenchidas no melhor quadro parcial
+        let preenchidos = s.melhor_preenchidos.saturating_sub(inativos);
+        println!(
+            "{:>3} {:>6} {:>10} {:>12} {:>14} {:>12.0} {:>10.0}",
+            run, seed, resolveu, s.iter, format!("{preenchidos}/{slots_ativos}"), ms, s.iter as f64 / (ms / 1000.0),
+        );
+    }
+
+    println!();
+    println!("resolvidas: {}/{}", resolvidos.len(), op.runs);
+    if !resolvidos.is_empty() {
+        println!("tempo médio p/ solução: {:.0} ms", resolvidos.iter().sum::<f64>() / resolvidos.len() as f64);
     }
 }

@@ -6,6 +6,8 @@ mod random;
 pub mod turing;
 pub mod genetic;
 pub mod horario;
+pub mod pencilmark;
+pub mod bitflag;
 
 // https://oneuptime.com/blog/post/2026-02-01-rust-webassembly-wasm/view
 // Call this once when your module loads

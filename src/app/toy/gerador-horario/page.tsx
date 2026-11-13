@@ -42,7 +42,7 @@ const getContrastColor = (hex: string) => {
     return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
 };
 
-type SolverType = "pencilmark" | "genetic" | "genetic-wasm";
+type SolverType = "pencilmark" | "pencilmark-wasm" | "genetic" | "genetic-wasm";
 
 const execQuadroHorarioWorker = (
     formData: FormularioHorario, 
@@ -54,6 +54,7 @@ const execQuadroHorarioWorker = (
     const nWorkers = 1;
 
     const isWasm = solverType === "genetic-wasm";
+    const isPencilmarkWasm = solverType === "pencilmark-wasm";
 
     const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
         n: nWorkers,
@@ -63,12 +64,14 @@ const execQuadroHorarioWorker = (
             baseIter: workerID === 0 ? null : 10,
             formData,
             diasAtivos,
-            // O worker WASM não usa solverType — ele é sempre "genetic-wasm"
+            // Os workers WASM não usam solverType — cada um roda um único solver
             solverType: isWasm ? "genetic" : solverType,
         }),
         createWorker: () => isWasm
             ? new Worker(new URL('./horario-genetic-wasm.worker.ts', import.meta.url))
-            : new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
+            : isPencilmarkWasm
+                ? new Worker(new URL('./horario-pencilmark-wasm.worker.ts', import.meta.url))
+                : new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
         onMessage: (workerID, msg) => {
             if (!msg.value) return;
             console.log(`Worker ${workerID}: Iteração ${msg.value.iter}, profundidade ${msg.value.depth}`);
@@ -791,6 +794,7 @@ export default function GeradorHorario() {
                                 <div className="flex items-center gap-2">
                                     {([
                                         { id: "pencilmark", label: "Pencilmark" },
+                                        { id: "pencilmark-wasm", label: "Pencilmark (WASM)" },
                                         { id: "genetic", label: "Genético v1 (TS)" },
                                         { id: "genetic-wasm", label: "Genético v2 (WASM)" },
                                     ] as const).map(({ id, label }) => (

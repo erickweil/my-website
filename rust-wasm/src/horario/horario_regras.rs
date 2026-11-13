@@ -139,6 +139,12 @@ impl Horario {
     }
 
     #[inline(always)]
+    pub fn set(&mut self, dia: DiaSemana, tempo: usize, valor: i32) {
+        let idx = tempo * QUANTOS_DIAS + dia.to_index();
+        self.slots[idx] = valor;
+    }
+
+    #[inline(always)]
     pub fn desmarcar(&mut self, dia: DiaSemana, tempo: usize) {
         let idx = tempo * QUANTOS_DIAS + dia.to_index();
         self.slots[idx] -= 1;
