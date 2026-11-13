@@ -12,13 +12,13 @@ COPY rust-wasm ./rust-wasm
 RUN cd rust-wasm && wasm-pack build --release --target web --out-dir ../src/pkg
 
 # ---------- Stage 2: dependências Node ----------
-FROM node:24-bookworm-slim AS deps
+FROM node:26-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # ---------- Stage 3: build do Next.js ----------
-FROM node:24-bookworm-slim AS builder
+FROM node:26-bookworm-slim AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
@@ -28,13 +28,13 @@ COPY --from=wasm /build/src/pkg ./src/pkg
 RUN npm run build
 
 # ---------- Stage 4: dependências de produção apenas ----------
-FROM node:24-bookworm-slim AS prod-deps
+FROM node:26-bookworm-slim AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # ---------- Stage 5: runtime ----------
-FROM node:24-bookworm-slim AS runner
+FROM node:26-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
