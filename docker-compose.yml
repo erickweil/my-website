@@ -1,0 +1,18 @@
+services:
+  my-website:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: my-website:local
+    container_name: my-website
+    restart: unless-stopped
+    # Porta livre no host, apenas para debug direto; o acesso público
+    # chega pelo nginx-proxy através da rede webproxy.
+    ports:
+      - "3200:3000"
+    networks:
+      - webproxy
+
+networks:
+  webproxy:
+    external: true

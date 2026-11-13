@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+.git
+.github
+src/pkg
+rust-wasm/target
+npm-debug.log*
+.env*
