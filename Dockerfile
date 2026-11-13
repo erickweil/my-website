@@ -4,12 +4,17 @@ FROM rust:1-bookworm AS wasm
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -sSfL https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
-RUN rustup target add wasm32-unknown-unknown
+# Threads no WASM (rayon) exigem recompilar a std com atomics, o que só o nightly faz
+# (-Z build-std). Usa o nightly mais recente disponível no momento do build.
+RUN rustup toolchain install nightly --profile minimal \
+        --component rust-src --target wasm32-unknown-unknown
 
 WORKDIR /build
 COPY rust-wasm ./rust-wasm
-# Mesmo comando do buildWasm.sh: gera os artefatos em /build/src/pkg
-RUN cd rust-wasm && wasm-pack build --release --target web --out-dir ../src/pkg
+# Mesmo comando do buildWasm.sh: gera os artefatos em /build/src/pkg.
+# As flags de atomics/memória compartilhada estão em rust-wasm/.cargo/config.toml.
+RUN cd rust-wasm && rustup run nightly wasm-pack build . --release --target web --out-dir ../src/pkg \
+        -- -Z build-std=panic_abort,std
 
 # ---------- Stage 2: dependências Node ----------
 FROM node:26-bookworm-slim AS deps
