@@ -1,16 +1,14 @@
-//! Regras do gerador de horários para o solver Pencilmark — port de
-//! `src/app/toy/gerador-horario/horario-pencilmark.ts` (`HorarioSolverPencilmark`).
+//! Regras do gerador de horários para o solver Pencilmark — port do antigo
+//! `horario-pencilmark.ts` (`HorarioSolverPencilmark`, removido; ver o histórico do git).
+//! Também são as regras usadas para validar o resultado dos dois solvers (`horario_resultado.rs`).
 //!
 //! Mantém o comportamento do TS: cada célula do quadro tem `n_possibs = disciplinas.len()`
 //! possibilidades (todas as disciplinas, de todas as turmas), e as de outra turma são descartadas
 //! em `pode_disciplina`.
 
-use serde::Serialize;
-use wasm_bindgen::prelude::*;
-
 use crate::{
-    horario::{DiaSemana, FomularioHorario, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
-    pencilmark::{ExecucaoPencilmark, Possib, RegrasQuadro},
+    horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
+    pencilmark::{Possib, RegrasQuadro},
 };
 
 pub struct HorarioRegrasPencilmark {
@@ -241,62 +239,11 @@ impl RegrasQuadro for HorarioRegrasPencilmark {
     }
 }
 
-// ── Runner exposto ao JS ─────────────────────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-struct PencilmarkInfo<'a> {
-    /// Nós visitados (f64 porque u64 não cabe com segurança num Number do JS)
-    iter: f64,
-    /// Profundidade atual da busca
-    depth: usize,
-    /// true quando achou `max_solucoes` soluções ou esgotou a busca
-    terminou: bool,
-    solucoes: &'a [Vec<i32>],
-    /// Quadro parcial mais preenchido até agora (vazio antes da primeira análise)
-    melhor: &'a [i32],
-}
-
-/// Solver Pencilmark de horários exposto ao JS. Roda em blocos de iterações (`run`), como o GA.
-#[wasm_bindgen]
-pub struct HorarioPencilmarkRunner {
-    exec: ExecucaoPencilmark<HorarioRegrasPencilmark>,
-}
-
-#[wasm_bindgen]
-impl HorarioPencilmarkRunner {
-    /// `base_iter`: `undefined`/`null` = sem reinícios; `N` = reinicia com orçamento 2^N, 2^(N+1)…
-    #[wasm_bindgen(constructor)]
-    pub fn new(formulario: JsValue, base_iter: Option<u32>, max_solucoes: usize) -> Self {
-        let formulario: FomularioHorario = serde_wasm_bindgen::from_value(formulario)
-            .expect("Erro ao desserializar o formulário de regras de horário");
-        let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(formulario));
-        let quadro = regras.quadro_vazio();
-        let n_possibs = regras.n_possibs();
-        Self { exec: ExecucaoPencilmark::new(regras, quadro, n_possibs, max_solucoes.max(1), base_iter) }
-    }
-
-    /// Avança a busca em até `iteracoes` nós. Retorna true quando terminou.
-    pub fn run(&mut self, iteracoes: u32) -> bool {
-        self.exec.executar(iteracoes as u64)
-    }
-
-    pub fn get_info(&self) -> Result<JsValue, serde_wasm_bindgen::Error> {
-        let s = &self.exec.solver;
-        serde_wasm_bindgen::to_value(&PencilmarkInfo {
-            iter: s.iter as f64,
-            depth: s.profundidade(),
-            terminou: self.exec.terminou(),
-            solucoes: &s.solucoes,
-            melhor: &s.melhor,
-        })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::genetic::problems::GAProblem;
-    use crate::horario::{FomularioHorarioDisciplina, FomularioHorarioProfessor, FomularioHorarioTurma};
+    use crate::horario::{FomularioHorario, FomularioHorarioDisciplina, FomularioHorarioProfessor, FomularioHorarioTurma};
     use crate::pencilmark::{solucionar_quadro, ExecucaoPencilmark};
     use std::collections::HashMap;
     use wasm_bindgen_test::*;
@@ -308,7 +255,7 @@ mod tests {
         if let Some(f) = json.get_mut("formData") {
             json = f.take();
         }
-        RegrasHorario::new(serde_json::from_value(json).unwrap())
+        RegrasHorario::new(serde_json::from_value(json).unwrap()).unwrap()
     }
 
     /// Checagem cruzada entre as duas implementações de regras em Rust: toda solução completa do
@@ -376,7 +323,7 @@ mod tests {
                 disciplinas: vec!["A".into(), "B".into()],
                 horarios: h(&[1]),
             }],
-        }));
+        }).unwrap());
         let (quadro, n) = (regras.quadro_vazio(), regras.n_possibs());
         let mut exec = ExecucaoPencilmark::new(regras, quadro.clone(), n, 1, None);
         assert!(exec.executar(u64::MAX));

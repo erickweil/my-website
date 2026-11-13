@@ -24,8 +24,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { MultiSelect } from "@/components/multiSelect";
 import { raceWorkers } from "@/lib/workerRace";
 
-import { DIAS_SEMANA_MAP, FormularioHorario, HorarioDia, HorariosPorDia, TODOS_OS_DIAS, type TurmaHorarioResult } from "./horario-regras";
-import { HorarioWorkerTaskValue } from "./horario-solver";
+import {
+    DIAS_SEMANA_MAP,
+    FormularioHorario,
+    HorarioDia,
+    HorarioWorkerTaskValue,
+    HorariosPorDia,
+    SolverHorario,
+    TODOS_OS_DIAS,
+    type TurmaHorarioResult,
+} from "./horario-regras";
 
 // ─── Constantes ───────────────────────────────────────────────────────────────
 const PALETA_CORES = [
@@ -42,51 +50,19 @@ const getContrastColor = (hex: string) => {
     return (r * 299 + g * 587 + b * 114) / 1000 >= 128 ? "#000" : "#fff";
 };
 
-type SolverType = "pencilmark" | "pencilmark-wasm" | "genetic" | "genetic-wasm";
-
 const execQuadroHorarioWorker = (
-    formData: FormularioHorario, 
-    diasAtivos: HorarioDia[], 
-    solverType: SolverType,
-    progressCallback?: (workerID: number, iter: number, depth: number, msPorGeracao?: number, solucao?: TurmaHorarioResult[]) => void
-) => {
-    //const nWorkers = navigator.hardwareConcurrency || 8;
-    const nWorkers = 1;
-
-    const isWasm = solverType === "genetic-wasm";
-    const isPencilmarkWasm = solverType === "pencilmark-wasm";
-
-    const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
-        n: nWorkers,
-        initMessage: (workerID) => ({
-            action: "solucionarQuadroHorario",
-            // Worker 0 irá tentar resolver sem reinícios
-            baseIter: workerID === 0 ? null : 10,
-            formData,
-            diasAtivos,
-            // Os workers WASM não usam solverType — cada um roda um único solver
-            solverType: isWasm ? "genetic" : solverType,
-        }),
-        createWorker: () => isWasm
-            ? new Worker(new URL('./horario-genetic-wasm.worker.ts', import.meta.url))
-            : isPencilmarkWasm
-                ? new Worker(new URL('./horario-pencilmark-wasm.worker.ts', import.meta.url))
-                : new Worker(new URL('./horario-solver-task.worker.ts', import.meta.url)),
-        onMessage: (workerID, msg) => {
-            if (!msg.value) return;
-            console.log(`Worker ${workerID}: Iteração ${msg.value.iter}, profundidade ${msg.value.depth}`);
-            progressCallback?.(workerID, msg.value.iter, msg.value.depth, msg.value.msPorGeracao, msg.value.solucao);
-        }
-    });
-
-    return {
-        promise: promise.then((resultado) => {
-            if (!resultado.solucao) throw new Error("Falha ao gerar solução!");
-            return resultado;
-        }),
-        abort,
-    };
-};
+    formData: FormularioHorario,
+    diasAtivos: HorarioDia[],
+    solver: SolverHorario,
+    progressCallback?: (progresso: HorarioWorkerTaskValue) => void
+) => raceWorkers<HorarioWorkerTaskValue>({
+    n: 1,
+    initMessage: () => ({ action: "solucionarQuadroHorario", solver, formData, diasAtivos }),
+    createWorker: () => new Worker(new URL("./horario-wasm.worker.ts", import.meta.url)),
+    onMessage: (_workerID, msg) => {
+        if (msg.value) progressCallback?.(msg.value);
+    },
+});
 
 // ─── Componente: TabelaHorariosCheckbox ──────────────────────────────────────
 function TabelaHorariosCheckbox({
@@ -178,7 +154,7 @@ export default function GeradorHorario() {
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
     const [professoresDisciplinas, setProfessoresDisciplinas] = useState<Record<string, string>>({});
-    const [solverType, setSolverType] = useState<SolverType>("pencilmark");
+    const [solverType, setSolverType] = useState<SolverHorario>("pencilmark");
 
     // ─── Configurações de grade ───────────────────────────────────────────────
     const [quantidadeTempos, setQuantidadeTempos] = useState(5);
@@ -322,19 +298,17 @@ export default function GeradorHorario() {
         localStorage.setItem("configGeracaoHorario", JSON.stringify({ quantidadeTempos, diasAtivos }));
 
         try {
-            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (workerID, iter, depth, msPorGeracao, solucao) => {
-                if (solucao) {
-                    console.log(solucao);
-                    setHorarioGerado(solucao);
-                    setProgresso({ iter, depth, msPorGeracao });
+            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (parcial) => {
+                if (parcial.solucao) {
+                    setHorarioGerado(parcial.solucao);
+                    setProgresso({ iter: parcial.iter, depth: parcial.depth, msPorGeracao: parcial.msPorGeracao });
                 }
             });
             abortRef.current = abort;
             const resultado = await promise;
-            setHorarioGerado(resultado.solucao ?? null);
-            if (resultado.violacoes && !resultado.violacoes.every((v) => v === undefined)) {
-                const errorMesage = resultado.violacoes.at(-1) || "Não foi possível gerar um horário completo com as configurações fornecidas.";
-                setError(errorMesage);
+            setHorarioGerado(resultado.solucao);
+            if (resultado.alguma_violacao) {
+                setError(resultado.mensagem ?? "Não foi possível gerar um horário completo com as configurações fornecidas.");
             }
         } catch (e) {
             if (e instanceof DOMException && e.name === "AbortError") {
@@ -794,9 +768,7 @@ export default function GeradorHorario() {
                                 <div className="flex items-center gap-2">
                                     {([
                                         { id: "pencilmark", label: "Pencilmark" },
-                                        { id: "pencilmark-wasm", label: "Pencilmark (WASM)" },
-                                        { id: "genetic", label: "Genético v1 (TS)" },
-                                        { id: "genetic-wasm", label: "Genético v2 (WASM)" },
+                                        { id: "genetic", label: "Genético" },
                                     ] as const).map(({ id, label }) => (
                                         <button
                                             key={id}
@@ -843,7 +815,9 @@ export default function GeradorHorario() {
                                 </div>
                                 {isLoading && progresso && (
                                     <span className="ml-2 text-sm text-muted-foreground">
-                                        Iteração {progresso.iter}, profundidade {progresso.depth}, {progresso.msPorGeracao?.toFixed(2)} ms/geração
+                                        {solverType === "genetic"
+                                            ? `Geração ${progresso.iter}, ${progresso.depth} sem melhora${progresso.msPorGeracao !== undefined ? `, ${progresso.msPorGeracao.toFixed(2)} ms/geração` : ""}`
+                                            : `Iteração ${progresso.iter}, profundidade ${progresso.depth}`}
                                     </span>
                                 )}
                             </div>

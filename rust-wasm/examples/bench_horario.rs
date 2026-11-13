@@ -1,7 +1,7 @@
 //! Benchmark nativo dos solvers de horários (GA e Pencilmark).
 //!
-//! Roda os mesmos solvers usados no WASM — `GeneticAlgorithm<RegrasHorario>` com a configuração do
-//! worker (`horario-genetic-wasm.worker.ts`) ou o Pencilmark (`HorarioRegrasPencilmark`) —
+//! Roda os mesmos solvers usados no WASM — `GeneticAlgorithm<RegrasHorario>` com a configuração da
+//! página (`config_ga_horario`) ou o Pencilmark (`HorarioRegrasPencilmark`) —
 //! compilados para a máquina local, sem browser.
 //!
 //! Uso:
@@ -28,7 +28,7 @@ use rust_wasm::{
         ga::{GAConfig, GeneticAlgorithm},
         problems::GAProblem,
     },
-    horario::{DiaSemana, FomularioHorario, HorarioRegrasPencilmark, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
+    horario::{config_ga_horario, DiaSemana, FomularioHorario, HorarioRegrasPencilmark, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
     pencilmark::ExecucaoPencilmark,
 };
 
@@ -86,17 +86,9 @@ fn ler_opcoes() -> Opcoes {
     op
 }
 
-/// Mesma configuração do worker WASM (horario-genetic-wasm.worker.ts)
+/// A config do GA usada na página, com o multiplicador de população da linha de comando.
 fn config_do_worker(size: usize, pop_mult: usize) -> GAConfig {
-    GAConfig {
-        population_size: size * pop_mult,
-        crossover_rate: 0.9,
-        mutation_rate: 0.9,
-        mutation_gene_rate: 1.0 / size as f64,
-        tournament_size: 10,
-        max_stagnation: Some(5000),
-        diversity_check: false,
-    }
+    GAConfig { population_size: size * pop_mult, ..config_ga_horario(size) }
 }
 
 /// Converte `{ turma: { dia: [disciplina por tempo] } }` no quadro linearizado.
@@ -110,7 +102,8 @@ fn carregar_solucao(regras: &RegrasHorario, caminho: &Path) -> QuadroHorario {
         let turma = regras.turmas.iter().find(|t| &t.nome == nome_turma)
             .unwrap_or_else(|| panic!("turma '{nome_turma}' da solução não existe na instância"));
         for (dia_str, tempos) in dias {
-            let dia = DiaSemana::from(dia_str.as_str());
+            let dia = DiaSemana::try_from(dia_str.as_str())
+                .unwrap_or_else(|d| panic!("dia '{d}' inválido na solução de referência"));
             for (tempo, disc) in tempos.iter().enumerate() {
                 let Some(nome_disc) = disc else { continue };
                 let disc = regras.disciplinas.iter().find(|d| &d.nome == nome_disc)
@@ -137,7 +130,8 @@ fn main() {
     let formulario: FomularioHorario = serde_json::from_value(json)
         .unwrap_or_else(|e| uso(&format!("formulário inválido em '{}': {e}", op.instancia)));
 
-    let regras = RegrasHorario::new(formulario.clone());
+    let regras = RegrasHorario::new(formulario.clone())
+        .unwrap_or_else(|e| uso(&format!("formulário inválido em '{}': {e}", op.instancia)));
     let size = regras.turmas.len() * QUANTOS_DIAS * regras.n_tempos;
     let slots_ativos = regras.get_quadro_vazio().iter().filter(|&&v| v == 0).count();
     let cfg = config_do_worker(size, op.pop_mult);
@@ -188,7 +182,7 @@ fn main() {
         let seed = op.seed + run as u64;
         fastrand::seed(seed);
 
-        let mut ga = GeneticAlgorithm::new(RegrasHorario::new(formulario.clone()), cfg.clone());
+        let mut ga = GeneticAlgorithm::new(RegrasHorario::new(formulario.clone()).unwrap(), cfg.clone());
         let inicio = Instant::now();
         let mut melhor = f64::NEG_INFINITY;
         let mut ms_otimo = None;
@@ -252,7 +246,7 @@ fn bench_pencilmark(op: &Opcoes, formulario: &FomularioHorario, slots_ativos: us
         let seed = op.seed + run as u64;
         fastrand::seed(seed);
 
-        let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(formulario.clone()));
+        let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(formulario.clone()).unwrap());
         let (quadro, n_possibs) = (regras.quadro_vazio(), regras.n_possibs());
         let inativos = quadro.iter().filter(|&&v| v != 0).count();
         let mut exec = ExecucaoPencilmark::new(regras, quadro, n_possibs, 1, op.base_iter);

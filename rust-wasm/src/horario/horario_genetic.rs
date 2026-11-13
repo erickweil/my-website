@@ -1,4 +1,4 @@
-use crate::{console_log, genetic::{operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
+use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
 
 #[derive(Clone)]
 pub struct HorarioGAState {
@@ -266,15 +266,20 @@ impl GAProblem for RegrasHorario {
     }
 }
 
-crate::ga_runner! {
-    /// Runner concreto do problema de geração de horários exposto ao JS via WASM.
-    HorarioGAProblemRunner,
-    problem: RegrasHorario,
-    new(formulario: wasm_bindgen::JsValue) => RegrasHorario::new(
-        serde_wasm_bindgen::from_value(formulario).expect("Erro ao desserializar o formulário de regras de horário")
-    ),
+/// Configuração do GA para o quadro de horários usada pela página (a mesma do antigo worker em TS).
+/// `tamanho` é o número de células do quadro ([`RegrasHorario::tamanho_quadro`]).
+pub fn config_ga_horario(tamanho: usize) -> GAConfig {
+    GAConfig {
+        population_size: tamanho * 4,
+        crossover_rate: 0.9,
+        mutation_rate: 0.9,
+        // em média 1 gene mutado por indivíduo
+        mutation_gene_rate: 1.0 / tamanho.max(1) as f64,
+        tournament_size: 10,
+        max_stagnation: Some(5000),
+        diversity_check: false,
+    }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -318,7 +323,7 @@ mod tests {
                     horarios: horarios(&[("seg", &[1, 2, 3])]),
                 },
             ],
-        })
+        }).unwrap()
     }
 
     /// Verifica a invariante: slots inativos (-1) continuam nos mesmos lugares e o

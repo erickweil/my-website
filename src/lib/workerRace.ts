@@ -63,7 +63,10 @@ export function raceWorkers<T>(options: RaceWorkersOptions<T>): RaceWorkersHandl
                 } else if (result.type === "error") {
                     errorCount++;
                     if (errorCount >= n) {
-                        reject(new Error(`Todos os ${n} workers falharam. Último erro: ${result.message}`));
+                        // Com um único worker, a mensagem dele já é o erro (ex.: formulário inválido)
+                        reject(new Error(n === 1
+                            ? result.message ?? "Erro desconhecido no worker."
+                            : `Todos os ${n} workers falharam. Último erro: ${result.message}`));
                     }
                 } else if (result.type === "message") {
                     onMessage?.(workerID, result);
