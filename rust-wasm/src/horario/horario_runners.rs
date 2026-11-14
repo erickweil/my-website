@@ -15,10 +15,10 @@ use wasm_bindgen::prelude::*;
 use crate::{
     genetic::ga::{GAConfig, GeneticAlgorithm},
     horario::{
-        config_ga_horario, validar, ErroFormulario, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario,
+        config_ga_horario, validar, ErroFormulario, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario, MSG_IMPOSSIVEL,
         ResultadoHorario, Validacao,
     },
-    pencilmark::ExecucaoPencilmark,
+    pencilmark::{BuscaExaustiva, ExecucaoPencilmark},
 };
 
 /// Limite de gerações do GA (o worker em TS rodava 1000 blocos de 500 gerações).
@@ -34,35 +34,81 @@ fn resultado_js(r: ResultadoHorario) -> Result<JsValue, JsError> {
 
 // ── Pencilmark ───────────────────────────────────────────────────────────────────────────────
 
+/// A busca do Pencilmark por trás do runner.
+enum BuscaPencilmark {
+    /// Explora a árvore inteira, dividindo o trabalho entre as threads quando há pool: acha um
+    /// horário ou prova que não existe nenhum.
+    Exaustiva(BuscaExaustiva<HorarioRegrasPencilmark>),
+    /// Uma thread, com reinícios aleatórios (orçamento 2^n, 2^(n+1)…). Não prova impossibilidade.
+    Reinicios(ExecucaoPencilmark<HorarioRegrasPencilmark>),
+}
+
 #[wasm_bindgen]
 pub struct HorarioPencilmarkRunner {
-    exec: ExecucaoPencilmark<HorarioRegrasPencilmark>,
+    busca: BuscaPencilmark,
+    /// Regras só para validar o quadro final
+    validador: HorarioRegrasPencilmark,
     versao: u32,
     /// (preenchidos do melhor parcial, nº de soluções) na última vez que `versao` mudou
     visto: (usize, usize),
 }
 
 impl HorarioPencilmarkRunner {
-    /// `base_iter`: `None` = sem reinícios; `Some(n)` = reinicia com orçamento 2^n, 2^(n+1)…
+    /// `base_iter`: `None` = busca exaustiva (em paralelo quando há pool de threads);
+    /// `Some(n)` = uma thread com reinícios de orçamento 2^n, 2^(n+1)…
     pub fn de_regras(regras: RegrasHorario, base_iter: Option<u32>) -> Self {
         let regras = HorarioRegrasPencilmark::new(regras);
         let (quadro, n_possibs) = (regras.quadro_vazio(), regras.n_possibs());
-        Self { exec: ExecucaoPencilmark::new(regras, quadro, n_possibs, 1, base_iter), versao: 0, visto: (0, 0) }
+        let validador = regras.clone();
+        let busca = match base_iter {
+            None => BuscaPencilmark::Exaustiva(BuscaExaustiva::new(regras, quadro, n_possibs, 1)),
+            Some(_) => BuscaPencilmark::Reinicios(ExecucaoPencilmark::new(regras, quadro, n_possibs, 1, base_iter)),
+        };
+        Self { busca, validador, versao: 0, visto: (0, 0) }
+    }
+
+    fn terminou(&self) -> bool {
+        match &self.busca {
+            BuscaPencilmark::Exaustiva(b) => b.terminou(),
+            BuscaPencilmark::Reinicios(e) => e.terminou(),
+        }
+    }
+
+    /// (primeira solução, melhor quadro parcial, preenchidos do melhor parcial)
+    fn quadros(&self) -> (Option<&Vec<i32>>, &Vec<i32>, usize) {
+        match &self.busca {
+            BuscaPencilmark::Exaustiva(b) => (b.solucoes.first(), &b.melhor, b.melhor_preenchidos),
+            BuscaPencilmark::Reinicios(e) => (e.solver.solucoes.first(), &e.solver.melhor, e.solver.melhor_preenchidos),
+        }
+    }
+
+    /// true quando a busca exaustiva terminou sem achar nada: está provado que não existe horário.
+    pub fn provou_impossivel(&self) -> bool {
+        matches!(&self.busca, BuscaPencilmark::Exaustiva(b) if b.impossivel())
     }
 
     pub fn resultado(&mut self) -> ResultadoHorario {
-        let terminou = self.exec.terminou();
-        let s = &mut self.exec.solver;
-        let (iter, depth) = (s.iter as f64, s.profundidade());
+        let terminou = self.terminou();
+        let impossivel = self.provou_impossivel();
+        // Nós visitados; e a profundidade da busca (com reinícios) ou as subárvores em aberto (exaustiva)
+        let (iter, depth) = match &self.busca {
+            BuscaPencilmark::Exaustiva(b) => (b.nos as f64, b.tarefas_pendentes()),
+            BuscaPencilmark::Reinicios(e) => (e.solver.iter as f64, e.solver.profundidade()),
+        };
 
         // Sem solução completa, mostra o quadro parcial mais preenchido
-        let quadro = s.solucoes.first().cloned().or_else(|| (!s.melhor.is_empty()).then(|| s.melhor.clone()));
+        let (solucao, melhor, _) = self.quadros();
+        let quadro = solucao.cloned().or_else(|| (!melhor.is_empty()).then(|| melhor.clone()));
         let quadro = quadro.map(|q| {
             // Durante a busca, só marca o que falta; no fim, valida de verdade
-            let v = if terminou { validar(&mut s.regras, &q) } else { Validacao::incompleto(&q) };
+            let v = if terminou { validar(&mut self.validador, &q) } else { Validacao::incompleto(&q) };
             (q, v)
         });
-        ResultadoHorario::novo(&s.regras.regras, quadro.as_ref().map(|(q, v)| (q.as_slice(), v)), iter, depth, terminou)
+        let mut resultado = ResultadoHorario::novo(&self.validador.regras, quadro.as_ref().map(|(q, v)| (q.as_slice(), v)), iter, depth, terminou);
+        if impossivel {
+            resultado.mensagem = Some(MSG_IMPOSSIVEL);
+        }
+        resultado
     }
 }
 
@@ -73,11 +119,14 @@ impl HorarioPencilmarkRunner {
         Ok(Self::de_regras(RegrasHorario::from_js(formulario).map_err(erro_js)?, base_iter))
     }
 
-    /// Avança a busca em até `iteracoes` nós. Retorna true quando terminou.
+    /// Avança a busca em até `iteracoes` nós (somando todas as threads). Retorna true quando terminou.
     pub fn run(&mut self, iteracoes: u32) -> bool {
-        let terminou = self.exec.executar(iteracoes as u64);
-        let s = &self.exec.solver;
-        let atual = (s.melhor_preenchidos, s.solucoes.len());
+        let terminou = match &mut self.busca {
+            BuscaPencilmark::Exaustiva(b) => b.executar(iteracoes as u64),
+            BuscaPencilmark::Reinicios(e) => e.executar(iteracoes as u64),
+        };
+        let (solucao, _, preenchidos) = self.quadros();
+        let atual = (preenchidos, solucao.is_some() as usize);
         if atual != self.visto {
             self.visto = atual;
             self.versao += 1;
@@ -87,6 +136,16 @@ impl HorarioPencilmarkRunner {
 
     pub fn versao(&self) -> u32 {
         self.versao
+    }
+
+    /// true se a busca está dividindo o trabalho entre várias threads (exaustiva, com pool criado).
+    pub fn usando_threads(&self) -> bool {
+        matches!(&self.busca, BuscaPencilmark::Exaustiva(b) if b.usando_threads())
+    }
+
+    /// true quando está provado que não existe horário que atenda às restrições.
+    pub fn impossivel(&self) -> bool {
+        self.provou_impossivel()
     }
 
     pub fn get_resultado(&mut self) -> Result<JsValue, JsError> {
@@ -227,6 +286,62 @@ mod tests {
         assert!(res.alguma_violacao);
         if res.terminou {
             assert!(res.mensagem.is_some());
+        }
+    }
+
+    /// Quadro real com um professor lotado que perde um horário: não existe solução, e a busca
+    /// exaustiva tem que provar isso (em paralelo e, com `threads = 1`, em sequência).
+    #[wasm_bindgen_test(unsupported = test)]
+    fn pencilmark_prova_que_o_quadro_e_impossivel() {
+        let impossivel = || {
+            let caminho = format!("{}/tests/instancias/faculdade-anonimizado.json", env!("CARGO_MANIFEST_DIR"));
+            let mut f: FomularioHorario = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
+            // "Professor D" tem 16 aulas e 16 horários: tira um
+            let prof = f.professores.iter_mut().find(|p| p.nome == "Professor D").unwrap();
+            prof.horarios.get_mut("ter").unwrap().pop();
+            RegrasHorario::new(f).unwrap()
+        };
+        for threads in [0, 1] {
+            fastrand::seed(2);
+            let mut r = HorarioPencilmarkRunner::de_regras(impossivel(), None);
+            if let BuscaPencilmark::Exaustiva(b) = &mut r.busca {
+                b.threads = threads;
+                b.nos_por_fatia = 256;
+            }
+            assert!(!r.provou_impossivel());
+            let mut chamadas = 0;
+            while !r.run(2_000) {
+                chamadas += 1;
+                assert!(chamadas < 100_000, "a busca não termina");
+                assert!(!r.provou_impossivel());
+            }
+            assert!(chamadas > 1, "deveria ter pausado");
+            assert!(r.provou_impossivel());
+            let res = r.resultado();
+            assert!(res.terminou && res.alguma_violacao);
+            assert_eq!(res.mensagem, Some(MSG_IMPOSSIVEL));
+            assert!(res.solucao.is_some(), "mostra o quadro parcial mais preenchido");
+        }
+
+        // Com reinícios a busca não é exaustiva: nunca afirma que é impossível
+        fastrand::seed(2);
+        let mut r = HorarioPencilmarkRunner::de_regras(impossivel(), Some(8));
+        for _ in 0..20 { r.run(5_000); }
+        assert!(!r.provou_impossivel());
+    }
+
+    /// O quadro real viável continua sendo resolvido pela busca exaustiva, nos dois modos.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn pencilmark_exaustivo_resolve_o_quadro_real() {
+        for threads in [0, 1] {
+            for semente in 1..=4 {
+                fastrand::seed(semente);
+                let mut r = HorarioPencilmarkRunner::de_regras(carregar("faculdade-anonimizado"), None);
+                if let BuscaPencilmark::Exaustiva(b) = &mut r.busca { b.threads = threads; }
+                while !r.run(20_000) {}
+                let res = r.resultado();
+                assert!(res.terminou && !res.alguma_violacao && !r.provou_impossivel(), "threads={threads} semente={semente}: {:?}", res.mensagem);
+            }
         }
     }
 

@@ -159,6 +159,45 @@ impl<R: RegrasQuadro> PencilmarkSolver<R> {
         self.pilha.len()
     }
 
+    /// Reparte uma busca PAUSADA (depois de `buscar` retornar `Pausado`): tira deste solver as
+    /// alternativas ainda não tentadas do nível mais raso da pilha que tiver alguma, e devolve um
+    /// quadro para cada uma (o quadro como estava naquele nível, com a alternativa aplicada).
+    ///
+    /// Quem chama cria um solver novo para cada quadro devolvido. Juntos, este solver e os novos
+    /// exploram exatamente a mesma árvore que este exploraria sozinho, sem repetir nem pular nada:
+    /// é o que permite dividir uma busca exaustiva entre threads.
+    /// Devolve vazio se não há o que repartir (este solver já está no último ramo de cada nível).
+    pub fn repartir(&mut self) -> Vec<Vec<i32>> {
+        for nivel in 0..self.pilha.len() {
+            let p = &self.cache_possib[nivel * 2 + 1];
+            let n = p.n_flags();
+            let escolha = self.pilha[nivel];
+            let alternativas: Vec<usize> = (escolha.i..n).map(|j| (escolha.offset + j) % n).filter(|&k| p.ler(k)).collect();
+            if alternativas.is_empty() {
+                continue;
+            }
+
+            // O quadro como estava ao chegar neste nível: desfaz as escolhas dele para baixo
+            let mut base = self.quadro.clone();
+            for l in nivel..self.pilha.len() {
+                base[self.cache_possib[l * 2 + 1].index] = 0;
+            }
+            let celula = p.index;
+            // Este solver não tenta mais essas alternativas
+            self.pilha[nivel].i = n;
+
+            return alternativas
+                .into_iter()
+                .map(|k| {
+                    let mut quadro = base.clone();
+                    quadro[celula] = k as i32 + 1;
+                    quadro
+                })
+                .collect();
+        }
+        Vec::new()
+    }
+
     /// Analisa todas as células vazias e encontra a de menor entropia (`obterMelhorPossib` no TS).
     pub fn obter_melhor_possib(&mut self, depth: usize) -> MelhorPossib {
         while self.cache_possib.len() < depth * 2 + 2 {

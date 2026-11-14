@@ -175,9 +175,94 @@ pub fn teste_ga_threads(segundos: f64) -> Result<JsValue, JsError> {
     serde_wasm_bindgen::to_value(&executar_ga(segundos)).map_err(|e| JsError::new(&e.to_string()))
 }
 
+// ── Benchmark da busca exaustiva do Pencilmark: sequencial × paralelo ────────────────────────
+
+/// N rainhas como problema do Pencilmark (a célula `i` é a linha `i`; o valor, a coluna da rainha).
+/// Serve de carga genérica: enumerar todas as soluções percorre a árvore de busca inteira.
+#[derive(Clone)]
+pub struct Rainhas;
+
+impl crate::pencilmark::RegrasQuadro for Rainhas {
+    fn verificar_quadro(&mut self, _quadro: &[i32]) -> bool {
+        true
+    }
+
+    fn verificar_celula(&mut self, quadro: &[i32], possib: &mut crate::pencilmark::Possib) -> bool {
+        let n = quadro.len() as i32;
+        let linha = possib.index as i32;
+        for (outra, &v) in quadro.iter().enumerate() {
+            if v <= 0 { continue; }
+            let (outra, coluna) = (outra as i32, v - 1);
+            // Mesma coluna e as duas diagonais
+            for c in [coluna, coluna + (linha - outra), coluna - (linha - outra)] {
+                if (0..n).contains(&c) {
+                    possib.desmarcar(c as usize);
+                }
+            }
+        }
+        true
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct ResultadoExaustivo {
+    pub problema: String,
+    /// Soluções encontradas (todas as que existem).
+    pub solucoes: usize,
+    pub nos: f64,
+    pub ms_sequencial: f64,
+    pub ms_paralelo: f64,
+    pub ganho: f64,
+    /// Os dois modos acharam o mesmo número de soluções? (tem que ser sempre true)
+    pub mesmo_resultado: bool,
+    /// Subárvores em que a busca foi repartida no modo paralelo.
+    pub tarefas: f64,
+}
+
+/// Enumera todas as soluções das `n` rainhas em sequência e em paralelo.
+pub fn medir_exaustivo(n: usize) -> ResultadoExaustivo {
+    use crate::pencilmark::BuscaExaustiva;
+    use web_time::Instant;
+
+    let rodar = |threads: usize| {
+        fastrand::seed(1);
+        let mut busca = BuscaExaustiva::new(Rainhas, vec![0; n], n, usize::MAX);
+        busca.threads = threads;
+        let inicio = Instant::now();
+        while !busca.executar(1_000_000) {}
+        (inicio.elapsed().as_secs_f64() * 1000.0, busca)
+    };
+    let (ms_sequencial, seq) = rodar(1);
+    let (ms_paralelo, par) = rodar(0);
+    ResultadoExaustivo {
+        problema: format!("{n} rainhas (todas as soluções)"),
+        solucoes: par.solucoes.len(),
+        nos: par.nos as f64,
+        ms_sequencial,
+        ms_paralelo,
+        ganho: ms_sequencial / ms_paralelo,
+        mesmo_resultado: seq.solucoes.len() == par.solucoes.len() && seq.esgotou() && par.esgotou(),
+        tarefas: par.tarefas as f64,
+    }
+}
+
+/// Exposto ao JS: mede a busca exaustiva do Pencilmark em sequência e em paralelo.
+#[wasm_bindgen]
+pub fn teste_pencilmark_threads() -> Result<JsValue, JsError> {
+    let resultados: Vec<ResultadoExaustivo> = [11, 12, 13].into_iter().map(medir_exaustivo).collect();
+    serde_wasm_bindgen::to_value(&resultados).map_err(|e| JsError::new(&e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn benchmark_exaustivo_acha_todas_as_solucoes_nos_dois_modos() {
+        let r = medir_exaustivo(9);
+        assert_eq!(r.solucoes, 352);
+        assert!(r.mesmo_resultado, "{r:?}");
+    }
 
     #[test]
     fn paralelo_da_o_mesmo_resultado_e_usa_varias_threads() {

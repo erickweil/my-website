@@ -151,7 +151,7 @@ export default function GeradorHorario() {
     const [error, setError] = useState<string | null>(null);
     const abortRef = useRef<(() => void) | null>(null);
     const [horarioGerado, setHorarioGerado] = useState<TurmaHorarioResult[] | null>(null);
-    const [progresso, setProgresso] = useState<{ iter: number; depth: number; msPorGeracao?: number; ilhas?: number } | null>(null);
+    const [progresso, setProgresso] = useState<{ iter: number; depth: number; msPorGeracao?: number; ilhas?: number; threads?: number } | null>(null);
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
     const [professoresDisciplinas, setProfessoresDisciplinas] = useState<Record<string, string>>({});
@@ -304,7 +304,7 @@ export default function GeradorHorario() {
             const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, usarIlhas, (parcial) => {
                 if (parcial.solucao) {
                     setHorarioGerado(parcial.solucao);
-                    setProgresso({ iter: parcial.iter, depth: parcial.depth, msPorGeracao: parcial.msPorGeracao, ilhas: parcial.ilhas });
+                    setProgresso({ iter: parcial.iter, depth: parcial.depth, msPorGeracao: parcial.msPorGeracao, ilhas: parcial.ilhas, threads: parcial.threads });
                 }
             });
             abortRef.current = abort;
@@ -833,7 +833,7 @@ export default function GeradorHorario() {
                                     <span className="ml-2 text-sm text-muted-foreground">
                                         {solverType === "genetic"
                                             ? `Geração ${progresso.iter}, ${progresso.depth} sem melhora${progresso.msPorGeracao !== undefined ? `, ${progresso.msPorGeracao.toFixed(2)} ms/geração` : ""}${progresso.ilhas ? `, ${progresso.ilhas} ilhas` : ""}`
-                                            : `Iteração ${progresso.iter}, profundidade ${progresso.depth}`}
+                                            : `${progresso.iter.toLocaleString("pt-BR")} possibilidades testadas, ${progresso.depth} ramos em aberto${progresso.threads ? `, ${progresso.threads} threads` : ""}`}
                                     </span>
                                 )}
                             </div>

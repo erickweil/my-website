@@ -20,6 +20,7 @@ pub const MSG_REGRA_FALHOU: &str = "Algo de errado não está certo";
 pub const MSG_MARCACAO_INVALIDA: &str = "Marcação não deveria estar aqui";
 pub const MSG_INCOMPLETO: &str = "Incompleto";
 pub const MSG_SEM_SOLUCAO: &str = "Não foi possível encontrar uma solução viável para este horário com as restrições dadas.";
+pub const MSG_IMPOSSIVEL: &str = "Não existe horário que atenda a todas as restrições: todas as possibilidades foram testadas.";
 pub const MSG_COM_VIOLACOES: &str = "Não foi possível gerar um horário completo com as configurações fornecidas.";
 
 /// Violações encontradas num quadro.

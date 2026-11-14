@@ -68,7 +68,7 @@ export interface ResultadoHorario {
     mensagem: string | null;
     /** Pencilmark: nós visitados. GA: geração. */
     iter: number;
-    /** Pencilmark: profundidade da busca. GA: gerações sem melhora. */
+    /** Pencilmark: ramos da busca ainda em aberto. GA: gerações sem melhora. */
     depth: number;
     terminou: boolean;
 }
@@ -79,4 +79,6 @@ export type HorarioWorkerTaskValue = ResultadoHorario & {
     msPorGeracao?: number;
     /** Só no GA: número de ilhas em uso (0 = uma população só). */
     ilhas?: number;
+    /** Só no Pencilmark: threads dividindo a busca (ausente enquanto roda em uma só). */
+    threads?: number;
 };

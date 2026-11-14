@@ -33,9 +33,20 @@ export type ResultadoGA = {
     ganho_ilhas: number;
 };
 
+export type ResultadoExaustivo = {
+    problema: string;
+    solucoes: number;
+    nos: number;
+    ms_sequencial: number;
+    ms_paralelo: number;
+    ganho: number;
+    mesmo_resultado: boolean;
+    tarefas: number;
+};
+
 export type MensagemTeste =
     | { tipo: "log"; texto: string }
-    | { tipo: "fim"; threads: number; sequencialMs: number; paraleloMs: number; sequencial: ResultadoTeste; paralelo: ResultadoTeste; ga: ResultadoGA[] }
+    | { tipo: "fim"; threads: number; sequencialMs: number; paraleloMs: number; sequencial: ResultadoTeste; paralelo: ResultadoTeste; ga: ResultadoGA[]; exaustivo: ResultadoExaustivo[] }
     | { tipo: "erro"; texto: string };
 
 const log = (texto: string) => {
@@ -76,7 +87,14 @@ self.onmessage = async (ev: MessageEvent<{ threads: number; tarefas: number; pas
                 `${r.ilhas} ilhas: ${r.geracoes_por_s_ilhas.toFixed(0)} ger/s equivalentes (${r.ganho_ilhas.toFixed(2)}x)`);
         }
 
-        self.postMessage({ tipo: "fim", threads, sequencialMs, paraleloMs, sequencial, paralelo, ga } satisfies MensagemTeste);
+        log("medindo a busca exaustiva do Pencilmark (sequencial x paralelo)...");
+        const exaustivo = wasm.teste_pencilmark_threads() as ResultadoExaustivo[];
+        for (const r of exaustivo) {
+            log(`Pencilmark ${r.problema}: ${r.solucoes} soluções, ${r.nos} nós, ${r.ms_sequencial.toFixed(0)} -> ${r.ms_paralelo.toFixed(0)} ms (${r.ganho.toFixed(2)}x), ` +
+                `mesmo resultado: ${r.mesmo_resultado}, ${r.tarefas} tarefas`);
+        }
+
+        self.postMessage({ tipo: "fim", threads, sequencialMs, paraleloMs, sequencial, paralelo, ga, exaustivo } satisfies MensagemTeste);
     } catch (e) {
         const texto = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
         console.error("[threads-teste]", e);

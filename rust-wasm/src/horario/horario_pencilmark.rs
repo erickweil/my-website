@@ -6,13 +6,18 @@
 //! possibilidades (todas as disciplinas, de todas as turmas), e as de outra turma são descartadas
 //! em `pode_disciplina`.
 
+use std::sync::Arc;
+
 use crate::{
     horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
     pencilmark::{Possib, RegrasQuadro},
 };
 
+/// `Clone` é barato (as regras ficam atrás de um `Arc`): a busca exaustiva em paralelo dá uma cópia
+/// para cada tarefa.
+#[derive(Clone)]
 pub struct HorarioRegrasPencilmark {
-    pub regras: RegrasHorario,
+    pub regras: Arc<RegrasHorario>,
 
     // Estado derivado do quadro, recalculado em `verificar_quadro`:
     /// Por professor: 1 = disponível, 0 = indisponível OU já ocupado em outra turma neste (dia, tempo)
@@ -25,7 +30,7 @@ impl HorarioRegrasPencilmark {
     pub fn new(regras: RegrasHorario) -> Self {
         let prof_matriz = regras.professores.iter().map(|p| p.horarios.clone()).collect();
         let cont_aulas = vec![0; regras.disciplinas.len()];
-        Self { regras, prof_matriz, cont_aulas }
+        Self { regras: Arc::new(regras), prof_matriz, cont_aulas }
     }
 
     /// Número de possibilidades por célula (o `nPossibs` do TS).

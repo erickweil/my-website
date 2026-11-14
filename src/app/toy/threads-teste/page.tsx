@@ -178,6 +178,42 @@ export default function ThreadsTeste() {
                     </Card>
                 )}
 
+                {fim && fim.exaustivo.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Busca exaustiva do Pencilmark com {fim.threads} threads</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <table className="w-full font-mono text-sm">
+                                <thead>
+                                    <tr className="text-left text-muted-foreground">
+                                        <th className="py-1">problema</th>
+                                        <th className="text-right">soluções</th>
+                                        <th className="text-right">nós</th>
+                                        <th className="text-right">1 thread (ms)</th>
+                                        <th className="text-right">paralelo (ms)</th>
+                                        <th className="text-right">ganho</th>
+                                        <th className="text-right">mesmo resultado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {fim.exaustivo.map((r) => (
+                                        <tr key={r.problema} className="border-t">
+                                            <td className="py-1">{r.problema}</td>
+                                            <td className="text-right">{r.solucoes}</td>
+                                            <td className="text-right">{r.nos}</td>
+                                            <td className="text-right">{r.ms_sequencial.toFixed(0)}</td>
+                                            <td className="text-right">{r.ms_paralelo.toFixed(0)}</td>
+                                            <td className="text-right">{r.ganho.toFixed(2)}×</td>
+                                            <td className="text-right">{r.mesmo_resultado ? "✅" : "❌"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {erro && (
                     <Card className="border-destructive">
                         <CardHeader>

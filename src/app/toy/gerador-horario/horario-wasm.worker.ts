@@ -30,6 +30,9 @@ const PASSOS_POR_CHAMADA: Record<SolverHorario, number> = {
  */
 const MS_POR_BLOCO = 100;
 
+/** Tempo de busca do Pencilmark em sequência antes de criar o pool de threads. */
+const MS_ATE_USAR_THREADS = 300;
+
 /**
  * Número de ilhas do GA quando a opção está ligada: uma por thread, entre 2 e 16.
  * Medido (rust-wasm/examples/bench_ga_qualidade): no quadro pequeno, 16 ilhas resolveram 18 de 20
@@ -67,8 +70,9 @@ self.onmessage = async (message) => {
             throw new Error(`Solver desconhecido: ${solver}`);
         }
 
-        // O GA roda os blocos da população em paralelo e precisa do pool de threads. O Pencilmark é
-        // sequencial: não vale a pena criar um worker por núcleo só para ele.
+        // O GA roda em paralelo desde o início e precisa do pool de threads. O Pencilmark resolve a
+        // maioria dos quadros em milissegundos, menos que o tempo de criar o pool: ele começa em
+        // sequência e só passa a dividir a busca entre as threads se demorar (ver abaixo).
         let wasm;
         if (solver === "genetic") {
             wasm = await iniciarWasmComThreads();
@@ -85,6 +89,8 @@ self.onmessage = async (message) => {
 
         try {
             let versao = runner.versao();
+            const inicioDaBusca = performance.now();
+            let poolPedido = false;
             for (;;) {
                 let terminou = false;
                 let feitos = 0;
@@ -96,11 +102,21 @@ self.onmessage = async (message) => {
                 const msPorGeracao = solver === "genetic" ? (performance.now() - inicio) / feitos : undefined;
                 if (terminou) break;
 
+                // Pencilmark demorando: cria o pool. A busca exaustiva é a mesma; a partir daqui
+                // o Rust reparte a árvore de busca entre as threads.
+                if (solver === "pencilmark" && !poolPedido && performance.now() - inicioDaBusca > MS_ATE_USAR_THREADS) {
+                    poolPedido = true;
+                    await iniciarWasmComThreads();
+                }
+
                 // Só posta progresso quando o melhor quadro mudou
                 if (runner.versao() !== versao) {
                     versao = runner.versao();
                     const resultado = runner.get_resultado() as ResultadoHorario;
-                    postMsg({ type: "message", value: { ...filtrarDias(resultado, diasAtivos), msPorGeracao, ilhas } });
+                    const threads = runner instanceof wasm.HorarioPencilmarkRunner && runner.usando_threads()
+                        ? navigator.hardwareConcurrency
+                        : undefined;
+                    postMsg({ type: "message", value: { ...filtrarDias(resultado, diasAtivos), msPorGeracao, ilhas, threads } });
                 }
             }
 
