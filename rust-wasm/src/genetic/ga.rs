@@ -6,7 +6,7 @@ use crate::{
         problems::{GAProblem, Individual},
     },
     paralelo::pool_disponivel,
-    random::{random_f64, random_range},
+    random::random_f64,
 };
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
@@ -45,6 +45,34 @@ pub struct GAConfig {
     /// Sem pool disponível (ex.: thread principal do navegador) roda sempre em sequência.
     /// Padrão 0
     pub threads: usize,
+
+    /// Modelo de ilhas: número de subpopulações que evoluem separadas, em anel. 0 ou 1 = uma
+    /// população só (modelo clássico). Com ilhas, `population_size` é o tamanho de CADA ilha (a
+    /// população total é `population_size * ilhas`), o torneio só enxerga a própria ilha e o
+    /// elitismo é por ilha. O controle de estagnação e o reinício continuam globais.
+    /// Cada ilha roda numa thread, com uma sincronização por época em vez de uma por geração.
+    ///
+    /// Quando usar (medido em examples/bench_ga_qualidade, mesmo número de avaliações):
+    /// - ajuda em problemas com ótimos locais e população pequena (horário pequeno: 16 a 18 de 20
+    ///   execuções resolvidas com 8 ou 16 ilhas, contra 10 de 20 no modelo clássico), e quando a
+    ///   geração é curta demais para dividir em blocos (o paralelismo por geração rende pouco);
+    /// - não ajuda em problemas fáceis (OneMax gasta 5 a 7 vezes mais avaliações) nem nos
+    ///   grandes, em que é melhor usar as threads para acelerar uma população só.
+    /// Padrão 0
+    pub ilhas: usize,
+    /// Com ilhas: gerações que cada ilha evolui sozinha entre uma migração e outra.
+    /// Medido: 100 a 200 foi o melhor no horário; o TSP preferiu 50; 1000 foi pior nos dois.
+    /// Padrão 100
+    pub epoca: usize,
+    /// Com ilhas: fração de cada ilha que passa para a ilha vizinha a cada época (0.0 a 1.0).
+    /// A migração é um giro do array da população: a fronteira entre as ilhas desliza.
+    /// Medido no horário: de 0% a 50% a diferença ficou dentro do ruído entre sementes.
+    /// Padrão 0.1
+    pub migracao: f64,
+    /// Com ilhas: quem migra. false = indivíduos quaisquer (o melhor de cada ilha fica nela);
+    /// true = o melhor de cada ilha vai junto (espalha mais rápido, mas aumenta a pressão de
+    /// seleção). Medido: sem diferença clara entre os dois. Padrão false
+    pub migrar_elite: bool,
 }
 
 #[wasm_bindgen]
@@ -60,6 +88,10 @@ impl GAConfig {
             mutation_gene_rate: 0.01,
             diversity_check: false,
             threads: 0,
+            ilhas: 0,
+            epoca: 100,
+            migracao: 0.1,
+            migrar_elite: false,
         }
     }
 }
@@ -108,6 +140,15 @@ pub struct GeneticAlgorithm<P: GAProblem> {
     /// evolução depende apenas da semente inicial, não de quantas threads executam os blocos.
     rng: fastrand::Rng,
     calibragem: Calibragem,
+
+    // Modelo de ilhas (ver `run_ilhas`)
+    /// Gerações que faltam para a próxima migração (0 = ainda não começou uma época).
+    ate_migrar: usize,
+    /// Estado do gerador aleatório de cada ilha, guardado entre um trecho e outro: assim a
+    /// evolução não depende de em quantas chamadas de `run` uma época é dividida.
+    sementes_ilhas: Vec<u64>,
+    /// Com `diversity_check`: hashes já vistos na geração atual de cada ilha.
+    hashes_ilhas: Vec<FxHashSet<u64>>,
 
     pub config: GAConfig,
 }
@@ -177,6 +218,9 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
             // Semeado pelo gerador global: `fastrand::seed(n)` antes de criar o GA o torna reproduzível
             rng: fastrand::Rng::with_seed(fastrand::u64(..)),
             calibragem: Calibragem::INICIO,
+            ate_migrar: 0,
+            sementes_ilhas: Vec::new(),
+            hashes_ilhas: Vec::new(),
             config,
         }
     }
@@ -184,6 +228,11 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
     /// Há como rodar em paralelo? (configuração permite, existe pool e ele tem mais de uma thread)
     fn pode_usar_threads(&self) -> bool {
         self.config.threads != 1 && pool_disponivel() && rayon::current_num_threads() >= 2
+    }
+
+    /// Número de ilhas (1 = modelo clássico, uma população só).
+    fn n_ilhas(&self) -> usize {
+        self.config.ilhas.max(1)
     }
 
     /// Roda os blocos da próxima geração em várias threads?
@@ -230,7 +279,8 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
     /// true se as gerações estão rodando em paralelo (no modo automático: a última decisão). Para diagnóstico.
     pub fn usando_threads(&self) -> bool {
-        self.pode_usar_threads() && match (self.config.threads, self.calibragem) {
+        // Com ilhas não há calibragem: a sincronização é por época, então o paralelo sempre compensa
+        self.pode_usar_threads() && self.n_ilhas() > 1 || self.pode_usar_threads() && match (self.config.threads, self.calibragem) {
             (0, Calibragem::Decidido { paralelo, .. }) => paralelo,
             (0, Calibragem::Medindo { .. }) => false,
             _ => true,
@@ -258,23 +308,29 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
         let max_generations = self.generation + generations;
         while self.generation < max_generations {
-            // 1. Avalia a geração atual e produz a próxima
-            let paralelo = self.usar_threads();
-            // Só mede o tempo durante a calibragem do modo automático (e só se houver pool)
-            if self.config.threads == 0 && matches!(self.calibragem, Calibragem::Medindo { .. }) && self.pode_usar_threads() {
-                let inicio = Instant::now();
-                self.run_generation(paralelo);
-                self.registrar_tempo(inicio.elapsed());
+            // 1. Avalia a geração atual e produz a(s) próxima(s)
+            let (best_idx, geracoes, fim_de_epoca) = if self.n_ilhas() > 1 {
+                self.run_ilhas(max_generations - self.generation)
             } else {
-                self.run_generation(paralelo);
-            }
+                let paralelo = self.usar_threads();
+                // Só mede o tempo durante a calibragem do modo automático (e só se houver pool)
+                if self.config.threads == 0 && matches!(self.calibragem, Calibragem::Medindo { .. }) && self.pode_usar_threads() {
+                    let inicio = Instant::now();
+                    self.run_generation(paralelo);
+                    self.registrar_tempo(inicio.elapsed());
+                } else {
+                    self.run_generation(paralelo);
+                }
+                // O elite fica na posição 0; no modelo clássico cada geração é uma "época"
+                (0, 1, true)
+            };
 
-            // 2. Verifica melhora global
-            let current_best_fitness = self.population[0].fitness.unwrap_or(f64::MIN);
+            // 2. Melhor global (a cada trecho: não interfere na evolução)
+            let current_best_fitness = self.population[best_idx].fitness.unwrap_or(f64::MIN);
             if self.best_fitness.is_none_or(|bf| current_best_fitness > bf) {
                 if let Some(bg) = &mut self.best_genes {
                     // clone_from previne realocação
-                    bg.clone_from(&self.population[0].genes); 
+                    bg.clone_from(&self.population[best_idx].genes);
                 }
                 self.best_fitness = Some(current_best_fitness);
 
@@ -284,67 +340,81 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
                     break;
                 }
             }
+            self.generation += geracoes;
 
-            let stagnated_for = self.generation - self.stag_start;
-            // A FAZER: usar i64 para comparação de fitness para evitar problemas de precisão
+            // 3. Estagnação e reinício: só no fim da época, para a evolução não depender de em
+            // quantas chamadas de `run` a época foi dividida
+            if fim_de_epoca {
+                let epoca = if self.n_ilhas() > 1 { self.config.epoca.max(1) } else { 1 };
+                self.controlar_estagnacao(current_best_fitness, epoca);
+            }
+        }
+    }
+
+    /// Controle global de estagnação, chamado a cada `passo` gerações (1 no modelo clássico; uma
+    /// época com ilhas): mutação adaptativa, reintrodução do melhor e reinício da população.
+    /// `current_best_fitness` é o melhor fitness da população atual.
+    fn controlar_estagnacao(&mut self, current_best_fitness: f64, passo: usize) {
+        // Última geração rodada, e há quantas gerações ela está sem melhora
+        let ultima = self.generation - 1;
+        let stagnated_for = ultima.saturating_sub(self.stag_start);
+        // A FAZER: usar i64 para comparação de fitness para evitar problemas de precisão
+        #[cfg(debug_assertions)]
+        let mut improved = false;
+        if self.stag_fitness.is_none_or(|sf| current_best_fitness > (sf + f64::EPSILON)) {
+            self.stag_fitness = Some(current_best_fitness);
+            self.stag_start = ultima;
+            self.mutation_multiplier = 1.0;
+            self.tournament_multiplier = 1.0;
             #[cfg(debug_assertions)]
-            let mut improved = false;
-            if self.stag_fitness.is_none_or(|sf| current_best_fitness > (sf + f64::EPSILON)) {
-                self.stag_fitness = Some(current_best_fitness);
-                self.stag_start = self.generation;
+            { improved = true; }
+        } else if let Some(max_stag) = self.config.max_stagnation {
+            // Experimento: Controle de estagnação adaptativo
+            // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
+
+            // Aumenta a taxa de mutação em até 2x após STAG/2 gerações sem melhora
+            let half_stag = (max_stag / 2).max(1); // evita divisão por zero quando max_stagnation <= 1
+
+            let excess = stagnated_for.saturating_sub(half_stag);
+            // 1.0 ... 2.0+
+            self.mutation_multiplier = 1.0 + (excess as f64 / half_stag as f64);
+            self.tournament_multiplier = 1.0 - (excess as f64 / half_stag as f64).min(1.0);
+
+            // A estagnação cruzou a metade do limite neste passo (com passo 1: chegou nela)
+            if stagnated_for >= half_stag && stagnated_for - half_stag < passo {
+                // Re-introduz o melhor indivíduo (sorteio no gerador do motor: ver `rng`)
+                let r_idx = self.rng.usize(0..self.population.len());
+                if let Some(bg) = &self.best_genes {
+                    self.population[r_idx].genes.clone_from(bg);
+                }
+                self.population[r_idx].fitness = self.best_fitness;
+                self.population[r_idx].hash = None;
+            }
+
+            // Se ficou estagnado mais tempo do que o recorde de melhoria sem melhora
+            if stagnated_for > max_stag {
+                #[cfg(debug_assertions)]
+                console_log!("[GA] Estagnado por {} gens. Reiniciando população", stagnated_for);
+
+                self.initialize_population(true);
+                self.stag_fitness = None;
+                self.stag_start = ultima;
                 self.mutation_multiplier = 1.0;
                 self.tournament_multiplier = 1.0;
-                #[cfg(debug_assertions)]
-                { improved = true; }
-            } else if let Some(max_stag) = self.config.max_stagnation {
-                // Experimento: Controle de estagnação adaptativo
-                // Se não houve melhora, podemos aumentar a taxa de mutação para tentar escapar de platôs
-
-                // Aumenta a taxa de mutação em até 2x após STAG/2 gerações sem melhora
-                let half_stag = (max_stag / 2).max(1); // evita divisão por zero quando max_stagnation <= 1
-
-                let excess = stagnated_for.saturating_sub(half_stag);
-                // 1.0 ... 2.0+
-                self.mutation_multiplier = 1.0 + (excess as f64 / half_stag as f64);
-                self.tournament_multiplier = 1.0 - (excess as f64 / half_stag as f64).min(1.0);
-
-                if stagnated_for == half_stag {
-                    // Re-introduz o melhor indivíduo
-                    let r_idx = random_range(0, self.population.len());
-                    if let Some(bg) = &self.best_genes {
-                        self.population[r_idx].genes.clone_from(bg);
-                    }
-                    self.population[r_idx].fitness = self.best_fitness;
-                    self.population[r_idx].hash = None;
-                }
-
-                // Se ficou estagnado mais tempo do que o recorde de melhoria sem melhora
-                if stagnated_for > max_stag {
-                    #[cfg(debug_assertions)]
-                    console_log!("[GA] Estagnado por {} gens. Reiniciando população", stagnated_for);
-
-                    self.initialize_population(true);
-                    self.stag_fitness = None;
-                    self.stag_start = self.generation;
-                    self.mutation_multiplier = 1.0;
-                    self.tournament_multiplier = 1.0;
-                }
             }
+        }
 
-            // A FAZER: implementar progressCallback
-            #[cfg(debug_assertions)]
-            {
-                if improved || self.generation.is_multiple_of(1000) {
-                    console_log!(
-                        "[GA] Gen {:>8} | fitness {:>4} / {:>4} (best {:>4}) | stag: {}",
-                        self.generation, current_best_fitness, self.problem.max_fitness().unwrap_or(0.0),
-                        self.best_fitness.unwrap_or(0.0),
-                        self.generation - self.stag_start
-                    );
-                }
+        // A FAZER: implementar progressCallback
+        #[cfg(debug_assertions)]
+        {
+            if improved || ultima.is_multiple_of(1000) {
+                console_log!(
+                    "[GA] Gen {:>8} | fitness {:>4} / {:>4} (best {:>4}) | stag: {}",
+                    ultima, current_best_fitness, self.problem.max_fitness().unwrap_or(0.0),
+                    self.best_fitness.unwrap_or(0.0),
+                    ultima - self.stag_start
+                );
             }
-
-            self.generation += 1;
         }
     }
 
@@ -369,12 +439,17 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
     /// Inicializa a população com indivíduos aleatórios
     /// Se a população já tiver indivíduos e `reset_population` for true, eles serão re-inicializados com novos genes aleatórios
     fn initialize_population(&mut self, reset_population: bool) {
-        let pop_size = self.config.population_size;
+        // Com ilhas, `population_size` é o tamanho de cada ilha
+        let n_ilhas = self.n_ilhas();
+        let pop_size = self.config.population_size * n_ilhas;
 
-        // Um estado por bloco
-        let n_blocos = pop_size.div_ceil(tamanho_bloco(pop_size));
+        // Um estado de trabalho por bloco (modelo clássico) ou por ilha
+        let n_estados = if n_ilhas > 1 { n_ilhas } else { pop_size.div_ceil(tamanho_bloco(pop_size)) };
         let problem = &self.problem;
-        self.estados.resize_with(n_blocos, || problem.initial_state());
+        self.estados.resize_with(n_estados, || problem.initial_state());
+        self.hashes_ilhas.resize_with(if n_ilhas > 1 { n_ilhas } else { 0 }, FxHashSet::default);
+        let rng = &mut self.rng;
+        self.sementes_ilhas.resize_with(if n_ilhas > 1 { n_ilhas } else { 0 }, || rng.u64(..));
 
         // Os genes novos são sorteados nesta thread: semeia o gerador dela a partir do gerador do motor
         if reset_population || self.population.len() < pop_size {
@@ -409,6 +484,86 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
 
         // Limpa o hash da população para não considerar indivíduos antigos
         self.population_hashes.clear();
+    }
+
+    /// Modelo de ilhas: evolui todas as ilhas por um trecho de até `max_geracoes` gerações (o
+    /// trecho termina na próxima migração, se ela vier antes) e, se a época acabou, faz a migração.
+    /// Retorna (índice do melhor indivíduo da população, gerações rodadas, se a época terminou).
+    ///
+    /// A ilha `i` é a fatia `[i * tam, (i + 1) * tam)` do array da população. As ilhas são
+    /// independentes durante o trecho, então rodam em sequência ou uma por thread com exatamente
+    /// o mesmo resultado — e as threads só se sincronizam uma vez por trecho, não a cada geração.
+    ///
+    /// Migração: o array é girado em `migracao * tam` posições, ou seja, a fronteira entre as ilhas
+    /// desliza e os indivíduos de uma ponta de cada ilha passam a pertencer à vizinha (anel).
+    /// O elite fica na posição 0 da ilha; girar para a direita leva embora os ÚLTIMOS (filhos em
+    /// ordem qualquer) e o elite fica; girar para a esquerda leva os PRIMEIROS, elite incluído.
+    fn run_ilhas(&mut self, max_geracoes: usize) -> (usize, usize, bool) {
+        let tam = self.config.population_size;
+        let epoca = self.config.epoca.max(1);
+        if self.ate_migrar == 0 || self.ate_migrar > epoca {
+            self.ate_migrar = epoca;
+        }
+        let geracoes = max_geracoes.min(self.ate_migrar);
+
+        let tournament_size = ((self.config.tournament_size as f64) * self.tournament_multiplier).floor() as usize;
+        let params = ParamsGeracao {
+            crossover_rate: self.config.crossover_rate,
+            mutation_rate: self.config.mutation_rate * self.mutation_multiplier,
+            mutation_gene_rate: self.config.mutation_gene_rate * self.mutation_multiplier,
+            tournament_size: tournament_size.max(2),
+        };
+        let diversity_check = self.config.diversity_check;
+        // Uma sincronização por trecho: com pool, o paralelo sempre compensa (não há calibragem)
+        let paralelo = self.pode_usar_threads();
+        let problem = &self.problem;
+
+        let ilha = |((((pop, filhos), estado), hashes), semente): Ilha<P>| {
+            evoluir_ilha(problem, pop, filhos, estado, hashes, semente, geracoes, diversity_check, params);
+        };
+        if paralelo {
+            self.population.par_chunks_mut(tam)
+                .zip(self.offspring.par_chunks_mut(tam))
+                .zip(self.estados.par_iter_mut())
+                .zip(self.hashes_ilhas.par_iter_mut())
+                .zip(self.sementes_ilhas.par_iter_mut())
+                .for_each(ilha);
+        } else {
+            self.population.chunks_mut(tam)
+                .zip(self.offspring.chunks_mut(tam))
+                .zip(self.estados.iter_mut())
+                .zip(self.hashes_ilhas.iter_mut())
+                .zip(self.sementes_ilhas.iter_mut())
+                .for_each(ilha);
+        }
+
+        // Depois de um número ímpar de gerações, a geração mais nova de todas as ilhas está em `offspring`
+        if geracoes % 2 == 1 {
+            mem::swap(&mut self.population, &mut self.offspring);
+        }
+        // Migração no fim da época
+        self.ate_migrar -= geracoes;
+        let fim_de_epoca = self.ate_migrar == 0;
+        if fim_de_epoca {
+            let migrantes = ((self.config.migracao.clamp(0.0, 1.0) * tam as f64).round() as usize).min(tam);
+            if self.config.migrar_elite {
+                self.population.rotate_left(migrantes);
+            } else {
+                self.population.rotate_right(migrantes);
+            }
+        }
+
+        // Todos saem avaliados de `evoluir_ilha`; o melhor global é o melhor entre as ilhas
+        let mut best_idx = 0;
+        let mut best_fitness = f64::MIN;
+        for (i, ind) in self.population.iter().enumerate() {
+            let fit = ind.fitness.unwrap_or(f64::MIN);
+            if fit > best_fitness {
+                best_fitness = fit;
+                best_idx = i;
+            }
+        }
+        (best_idx, geracoes, fim_de_epoca)
     }
 
     /// Produz a próxima geração.
@@ -514,6 +669,74 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
     }
 }
 
+/// O que uma ilha precisa para evoluir sozinha: as suas fatias da população e dos filhos, o seu
+/// estado de trabalho, os hashes da geração (para `diversity_check`) e o estado do seu gerador.
+type Ilha<'a, P> = (
+    (((&'a mut [Individual<<P as GAProblem>::Gene>], &'a mut [Individual<<P as GAProblem>::Gene>]), &'a mut <P as GAProblem>::State), &'a mut FxHashSet<u64>),
+    &'a mut u64,
+);
+
+/// Evolui uma ilha por `geracoes` gerações, sem olhar para as outras: o torneio sorteia pais só
+/// dentro dela e o elitismo guarda o melhor dela. A cada geração `pop` e `filhos` trocam de papel;
+/// depois de um número ímpar de gerações, a geração mais nova está na fatia que era `filhos`.
+#[allow(clippy::too_many_arguments)]
+fn evoluir_ilha<'a, P: GAProblem>(
+    problem: &P,
+    mut pop: &'a mut [Individual<P::Gene>],
+    mut filhos: &'a mut [Individual<P::Gene>],
+    estado: &mut P::State,
+    hashes: &mut FxHashSet<u64>,
+    semente: &mut u64,
+    geracoes: usize,
+    diversity_check: bool,
+    p: ParamsGeracao,
+) {
+    // Como nos blocos: a sequência aleatória depende da ilha, não da thread que a executa.
+    // O gerador global da thread continua de onde esta ilha parou no trecho anterior.
+    fastrand::seed(*semente);
+
+    for _ in 0..geracoes {
+        // Avalia quem falta (ilha nova, reiniciada, ou que recebeu migrantes ainda sem fitness)
+        let mut melhor = 0;
+        let mut melhor_fitness = f64::MIN;
+        for (i, ind) in pop.iter_mut().enumerate() {
+            let fit = *ind.fitness.get_or_insert_with(|| problem.fitness(estado, &ind.genes));
+            if fit > melhor_fitness {
+                melhor_fitness = fit;
+                melhor = i;
+            }
+        }
+
+        // Elitismo da ilha: o melhor dela vai para a posição 0 da próxima geração
+        filhos[0].genes.clone_from(&pop[melhor].genes);
+        filhos[0].fitness = Some(melhor_fitness);
+        filhos[0].hash = None;
+
+        reproduzir(problem, pop, &mut filhos[1..], estado, p);
+
+        // Diversidade dentro da ilha: filho igual a outro já visto recebe mais uma mutação
+        if diversity_check {
+            hashes.clear();
+            for filho in filhos.iter_mut() {
+                let mut hash = problem.hash(&filho.genes);
+                if hash.is_some_and(|h| hashes.contains(&h)) {
+                    problem.mutate(estado, &mut filho.genes, p.mutation_gene_rate);
+                    filho.fitness = Some(problem.fitness(estado, &filho.genes));
+                    hash = problem.hash(&filho.genes);
+                }
+                filho.hash = hash;
+                if let Some(h) = hash {
+                    hashes.insert(h);
+                }
+            }
+        }
+
+        mem::swap(&mut pop, &mut filhos);
+    }
+
+    *semente = fastrand::get_seed();
+}
+
 /// Gera e avalia os filhos de um bloco. Só lê a população e só escreve nos próprios filhos e no
 /// próprio estado, então blocos diferentes podem rodar ao mesmo tempo.
 fn reproduzir_bloco<P: GAProblem>(
@@ -527,7 +750,19 @@ fn reproduzir_bloco<P: GAProblem>(
     // Os operadores usam o gerador global da thread; o bloco inteiro roda numa thread só, então
     // semeá-lo aqui faz a sequência depender do bloco, e não de qual thread o executou.
     fastrand::seed(semente);
+    reproduzir(problem, population, filhos, estado, p);
+}
 
+/// Seleção, crossover, mutação e avaliação de `filhos`, com pais sorteados em `population`.
+/// Usa o gerador global da thread (quem chama é responsável por semeá-lo).
+#[inline(always)]
+fn reproduzir<P: GAProblem>(
+    problem: &P,
+    population: &[Individual<P::Gene>],
+    filhos: &mut [Individual<P::Gene>],
+    estado: &mut P::State,
+    p: ParamsGeracao,
+) {
     let (pares, resto) = filhos.as_chunks_mut::<2>();
     for [child_a, child_b] in pares.iter_mut() {
         // Seleciona pais aleatórios da geração anterior
@@ -582,6 +817,7 @@ mod tests {
             max_stagnation: Some(40),
             diversity_check: false,
             threads: 0,
+            ..GAConfig::new()
         }
     }
 
@@ -607,8 +843,6 @@ mod tests {
     {
         assert!(pool_disponivel() && rayon::current_num_threads() > 1, "o teste precisa de mais de uma thread");
         let (info_seq, pop_seq) = evoluir(criar(), cfg.clone(), 1, geracoes);
-        assert!(pop_seq.iter().all(|(_, f)| f.is_some()), "todos os indivíduos saem avaliados");
-
         // 2 = sempre paralelo; 0 = automático, que alterna entre os dois modos durante a execução
         for (modo, threads) in [("paralelo", 2), ("automático", 0)] {
             let (info, pop) = evoluir(criar(), cfg.clone(), threads, geracoes);
@@ -651,6 +885,126 @@ mod tests {
         };
         let tamanho = criar().tamanho_quadro();
         assert_paralelo_igual_ao_sequencial(criar, config(tamanho * 2, tamanho), 150);
+    }
+
+    // ── Modelo de ilhas ─────────────────────────────────────────────────────────────────────
+
+    fn config_ilhas(pop_por_ilha: usize, genes: usize, ilhas: usize, epoca: usize, migracao: f64, migrar_elite: bool) -> GAConfig {
+        GAConfig { ilhas, epoca, migracao, migrar_elite, ..config(pop_por_ilha, genes) }
+    }
+
+    #[test]
+    fn ilhas_paralelo_igual_ao_sequencial() {
+        fastrand::seed(9);
+        let cidades = TSPGAProblem::generate_random_cities(40);
+        // Época ímpar (troca população/filhos no fim), par, e maior que as gerações de cada chamada
+        for (epoca, migrar_elite) in [(7, false), (10, true), (500, false)] {
+            let cfg = config_ilhas(60, 40, 5, epoca, 0.1, migrar_elite);
+            assert_paralelo_igual_ao_sequencial(|| TSPGAProblem::new(cidades.clone()), cfg, 150);
+        }
+        assert_paralelo_igual_ao_sequencial(|| OneMaxGAProblem::new(300), config_ilhas(31, 300, 4, 5, 0.25, false), 120);
+        let cfg = GAConfig { diversity_check: true, ..config_ilhas(40, 12, 3, 6, 0.1, false) };
+        fastrand::seed(10);
+        let poucas = TSPGAProblem::generate_random_cities(12);
+        assert_paralelo_igual_ao_sequencial(|| TSPGAProblem::new(poucas.clone()), cfg, 120);
+    }
+
+    #[test]
+    fn ilhas_horario_paralelo_igual_ao_sequencial() {
+        let criar = || {
+            let caminho = format!("{}/tests/instancias/pequena.json", env!("CARGO_MANIFEST_DIR"));
+            let f: FomularioHorario = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
+            RegrasHorario::new(f).unwrap()
+        };
+        let tamanho = criar().tamanho_quadro();
+        assert_paralelo_igual_ao_sequencial(criar, config_ilhas(tamanho, tamanho, 4, 20, 0.1, false), 150);
+    }
+
+    #[test]
+    fn ilhas_multiplicam_a_populacao_e_uma_ilha_e_o_modelo_classico() {
+        let (_, pop) = evoluir(OneMaxGAProblem::new(100), config_ilhas(30, 100, 4, 10, 0.1, false), 1, 20);
+        assert_eq!(pop.len(), 120);
+
+        // ilhas = 0 ou 1: exatamente o modelo clássico
+        let (info_classico, pop_classico) = evoluir(OneMaxGAProblem::new(100), config(30, 100), 1, 60);
+        for ilhas in [0, 1] {
+            let (info, pop) = evoluir(OneMaxGAProblem::new(100), config_ilhas(30, 100, ilhas, 10, 0.1, false), 1, 60);
+            assert_eq!(pop.len(), 30);
+            assert_eq!(info.best_fitness, info_classico.best_fitness);
+            assert!(pop == pop_classico, "ilhas = {ilhas} deveria ser igual ao modelo clássico");
+        }
+    }
+
+    /// A migração acontece a cada `epoca` gerações, não importa em quantas chamadas o `run` é dividido.
+    #[test]
+    fn ilhas_cadencia_nao_depende_das_chamadas_ao_run() {
+        fastrand::seed(11);
+        let cidades = TSPGAProblem::generate_random_cities(30);
+        let rodar = |passos: &[usize]| {
+            fastrand::seed(42);
+            let mut ga = GeneticAlgorithm::new(TSPGAProblem::new(cidades.clone()), config_ilhas(40, 30, 4, 15, 0.2, false));
+            for &p in passos {
+                ga.run(p);
+            }
+            (ga.generation, ga.best_fitness, ga.population.iter().map(|i| i.genes.clone()).collect::<Vec<_>>())
+        };
+        let de_uma_vez = rodar(&[120]);
+        assert_eq!(de_uma_vez.0, 120);
+        assert!(de_uma_vez == rodar(&[50, 50, 20]), "50+50+20");
+        assert!(de_uma_vez == rodar(&[1; 120]), "120 chamadas de 1 geração");
+        assert!(de_uma_vez == rodar(&[7, 15, 30, 68]), "7+15+30+68");
+    }
+
+    /// Sem migração e sem reinício, o melhor de cada ilha nunca piora (elitismo por ilha), e as
+    /// ilhas evoluem de forma diferente umas das outras.
+    #[test]
+    fn ilhas_tem_elitismo_proprio() {
+        let (ilhas, tam) = (4, 30);
+        let cfg = GAConfig { max_stagnation: None, ..config_ilhas(tam, 200, ilhas, 5, 0.0, false) };
+        fastrand::seed(5);
+        let mut ga = GeneticAlgorithm::new(OneMaxGAProblem::new(200), cfg);
+        let melhores = |ga: &GeneticAlgorithm<OneMaxGAProblem>| -> Vec<f64> {
+            ga.population.chunks(tam).map(|ilha| ilha.iter().filter_map(|i| i.fitness).fold(f64::MIN, f64::max)).collect()
+        };
+        ga.run(5);
+        let mut anterior = melhores(&ga);
+        assert_eq!(anterior.len(), ilhas);
+        for _ in 0..20 {
+            ga.run(5);
+            let atual = melhores(&ga);
+            for (i, (a, b)) in anterior.iter().zip(&atual).enumerate() {
+                assert!(b >= a, "ilha {i} piorou: {a} -> {b}");
+            }
+            anterior = atual;
+        }
+        assert!(anterior.iter().any(|&f| f != anterior[0]), "ilhas isoladas deveriam divergir: {anterior:?}");
+        // O melhor global é o melhor entre as ilhas
+        assert_eq!(ga.best_fitness, Some(anterior.iter().cloned().fold(f64::MIN, f64::max)));
+    }
+
+    /// Girar o array muda quem pertence a cada ilha, sem criar nem perder indivíduos.
+    #[test]
+    fn migracao_desloca_a_fronteira_das_ilhas() {
+        let (ilhas, tam) = (3, 20);
+        for (migrar_elite, deslocamento) in [(false, 5isize), (true, -5)] {
+            // Taxas zeradas: sem crossover nem mutação os genes só são copiados, e dá para segui-los
+            let cfg = GAConfig { crossover_rate: 0.0, mutation_rate: 0.0, max_stagnation: None, ..config_ilhas(tam, 64, ilhas, 4, 0.25, migrar_elite) };
+            fastrand::seed(6);
+            let mut ga = GeneticAlgorithm::new(OneMaxGAProblem::new(64), cfg);
+            ga.run(3); // falta 1 geração para a migração
+            let antes: Vec<_> = ga.population.iter().map(|i| i.genes.clone()).collect();
+            // Roda a última geração da época numa cópia sem migração, para comparar posição a posição
+            let mut sem_migrar = GeneticAlgorithm::new(OneMaxGAProblem::new(64), GAConfig { migracao: 0.0, ..ga.config.clone() });
+            fastrand::seed(6);
+            sem_migrar = { let mut g = GeneticAlgorithm::new(OneMaxGAProblem::new(64), sem_migrar.config.clone()); g.run(4); g };
+            ga.run(1);
+            assert_eq!(antes.len(), ilhas * tam);
+            let n = (ilhas * tam) as isize;
+            for (i, ind) in sem_migrar.population.iter().enumerate() {
+                let destino = (i as isize + deslocamento).rem_euclid(n) as usize;
+                assert!(ga.population[destino].genes == ind.genes, "elite={migrar_elite}: indivíduo {i} deveria estar em {destino}");
+            }
+        }
     }
 
     #[test]

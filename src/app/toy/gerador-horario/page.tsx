@@ -54,10 +54,11 @@ const execQuadroHorarioWorker = (
     formData: FormularioHorario,
     diasAtivos: HorarioDia[],
     solver: SolverHorario,
+    ilhas: boolean,
     progressCallback?: (progresso: HorarioWorkerTaskValue) => void
 ) => raceWorkers<HorarioWorkerTaskValue>({
     n: 1,
-    initMessage: () => ({ action: "solucionarQuadroHorario", solver, formData, diasAtivos }),
+    initMessage: () => ({ action: "solucionarQuadroHorario", solver, formData, diasAtivos, ilhas }),
     createWorker: () => new Worker(new URL("./horario-wasm.worker.ts", import.meta.url)),
     onMessage: (_workerID, msg) => {
         if (msg.value) progressCallback?.(msg.value);
@@ -150,11 +151,13 @@ export default function GeradorHorario() {
     const [error, setError] = useState<string | null>(null);
     const abortRef = useRef<(() => void) | null>(null);
     const [horarioGerado, setHorarioGerado] = useState<TurmaHorarioResult[] | null>(null);
-    const [progresso, setProgresso] = useState<{ iter: number; depth: number; msPorGeracao?: number } | null>(null);
+    const [progresso, setProgresso] = useState<{ iter: number; depth: number; msPorGeracao?: number; ilhas?: number } | null>(null);
     const [abaAtiva, setAbaAtiva] = useState("0");
     const [professoresCores, setProfessoresCores] = useState<Record<string, string>>({});
     const [professoresDisciplinas, setProfessoresDisciplinas] = useState<Record<string, string>>({});
     const [solverType, setSolverType] = useState<SolverHorario>("pencilmark");
+    // Só no Genético: várias populações em paralelo (ilhas), que ajudam a escapar de ótimos locais
+    const [usarIlhas, setUsarIlhas] = useState(true);
 
     // ─── Configurações de grade ───────────────────────────────────────────────
     const [quantidadeTempos, setQuantidadeTempos] = useState(5);
@@ -298,10 +301,10 @@ export default function GeradorHorario() {
         localStorage.setItem("configGeracaoHorario", JSON.stringify({ quantidadeTempos, diasAtivos }));
 
         try {
-            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, (parcial) => {
+            const { promise, abort } = execQuadroHorarioWorker(formData, diasAtivos, solverType, usarIlhas, (parcial) => {
                 if (parcial.solucao) {
                     setHorarioGerado(parcial.solucao);
-                    setProgresso({ iter: parcial.iter, depth: parcial.depth, msPorGeracao: parcial.msPorGeracao });
+                    setProgresso({ iter: parcial.iter, depth: parcial.depth, msPorGeracao: parcial.msPorGeracao, ilhas: parcial.ilhas });
                 }
             });
             abortRef.current = abort;
@@ -784,6 +787,19 @@ export default function GeradorHorario() {
                                             {label}
                                         </button>
                                     ))}
+                                    {solverType === "genetic" && (
+                                        <label
+                                            className="ml-2 flex cursor-pointer items-center gap-2 text-sm"
+                                            title="Várias populações evoluem em paralelo, uma por thread, e trocam indivíduos entre si de tempos em tempos. Ajuda o algoritmo genético a não ficar preso num horário quase bom."
+                                        >
+                                            <Checkbox
+                                                checked={usarIlhas}
+                                                onCheckedChange={(v) => setUsarIlhas(v === true)}
+                                                disabled={isLoading}
+                                            />
+                                            Usar ilhas
+                                        </label>
+                                    )}
                                 </div>
                                 <div className="flex gap-3">
                                     <Button
@@ -816,7 +832,7 @@ export default function GeradorHorario() {
                                 {isLoading && progresso && (
                                     <span className="ml-2 text-sm text-muted-foreground">
                                         {solverType === "genetic"
-                                            ? `Geração ${progresso.iter}, ${progresso.depth} sem melhora${progresso.msPorGeracao !== undefined ? `, ${progresso.msPorGeracao.toFixed(2)} ms/geração` : ""}`
+                                            ? `Geração ${progresso.iter}, ${progresso.depth} sem melhora${progresso.msPorGeracao !== undefined ? `, ${progresso.msPorGeracao.toFixed(2)} ms/geração` : ""}${progresso.ilhas ? `, ${progresso.ilhas} ilhas` : ""}`
                                             : `Iteração ${progresso.iter}, profundidade ${progresso.depth}`}
                                     </span>
                                 )}

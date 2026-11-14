@@ -81,6 +81,11 @@ pub struct ResultadoGA {
     pub resultado_identico: bool,
     /// O que o modo automático escolheu para este problema.
     pub automatico_escolheu_paralelo: bool,
+    /// Modelo de ilhas em paralelo, em gerações equivalentes (gerações x ilhas): mesmo número de
+    /// indivíduos avaliados que uma geração do modelo clássico.
+    pub ilhas: usize,
+    pub geracoes_por_s_ilhas: f64,
+    pub ganho_ilhas: f64,
 }
 
 fn medir_ga<P: crate::genetic::problems::GAProblem>(
@@ -93,6 +98,7 @@ fn medir_ga<P: crate::genetic::problems::GAProblem>(
     use crate::genetic::ga::{GAConfig, GeneticAlgorithm};
     use web_time::Instant;
 
+    const ILHAS: usize = 8;
     let config = |threads| GAConfig {
         population_size: pop,
         crossover_rate: 0.9,
@@ -102,15 +108,16 @@ fn medir_ga<P: crate::genetic::problems::GAProblem>(
         max_stagnation: None,
         diversity_check: false,
         threads,
+        ..GAConfig::new()
     };
-    let novo = |threads| {
+    let novo_com = |cfg: GAConfig| {
         fastrand::seed(1);
-        GeneticAlgorithm::new(criar(), config(threads))
+        GeneticAlgorithm::new(criar(), cfg)
     };
+    let novo = |threads| novo_com(config(threads));
 
     // Vazão: 1 = sequencial, 2 = sempre paralelo
-    let vazao = |threads| {
-        let mut ga = novo(threads);
+    let vazao_de = |mut ga: GeneticAlgorithm<P>| {
         ga.run(10); // aquecimento
         let (g0, inicio) = (ga.get_info().generation, Instant::now());
         while inicio.elapsed().as_secs_f64() < segundos {
@@ -118,7 +125,9 @@ fn medir_ga<P: crate::genetic::problems::GAProblem>(
         }
         (ga.get_info().generation - g0) as f64 / inicio.elapsed().as_secs_f64()
     };
-    let (seq, par) = (vazao(1), vazao(2));
+    let (seq, par) = (vazao_de(novo(1)), vazao_de(novo(2)));
+    // Ilhas: uma sincronização por época em vez de uma por geração
+    let ilhas = vazao_de(novo_com(GAConfig { ilhas: ILHAS, ..config(0) })) * ILHAS as f64;
 
     // Mesma semente, mesmo número de gerações: o melhor fitness tem que ser igual
     let melhor = |threads| {
@@ -139,6 +148,9 @@ fn medir_ga<P: crate::genetic::problems::GAProblem>(
         ganho: par / seq,
         resultado_identico,
         automatico_escolheu_paralelo: auto.usando_threads(),
+        ilhas: ILHAS,
+        geracoes_por_s_ilhas: ilhas,
+        ganho_ilhas: ilhas / seq,
     }
 }
 

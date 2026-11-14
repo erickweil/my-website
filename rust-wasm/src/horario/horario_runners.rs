@@ -13,7 +13,7 @@
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    genetic::ga::GeneticAlgorithm,
+    genetic::ga::{GAConfig, GeneticAlgorithm},
     horario::{
         config_ga_horario, validar, ErroFormulario, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario,
         ResultadoHorario, Validacao,
@@ -108,8 +108,10 @@ pub struct HorarioGARunner {
 }
 
 impl HorarioGARunner {
-    pub fn de_regras(regras: RegrasHorario) -> Self {
-        let config = config_ga_horario(regras.tamanho_quadro());
+    /// `ilhas`: 0 ou 1 = uma população só; N = modelo de ilhas, com N populações do tamanho padrão
+    /// (ver `GAConfig.ilhas`). O horário sofre com ótimos locais, e as ilhas ajudam a escapar deles.
+    pub fn de_regras(regras: RegrasHorario, ilhas: usize) -> Self {
+        let config = GAConfig { ilhas, ..config_ga_horario(regras.tamanho_quadro()) };
         let validador = HorarioRegrasPencilmark::new(regras.clone());
         Self {
             ga: GeneticAlgorithm::new(regras, config),
@@ -136,8 +138,8 @@ impl HorarioGARunner {
 #[wasm_bindgen]
 impl HorarioGARunner {
     #[wasm_bindgen(constructor)]
-    pub fn new(formulario: JsValue) -> Result<HorarioGARunner, JsError> {
-        Ok(Self::de_regras(RegrasHorario::from_js(formulario).map_err(erro_js)?))
+    pub fn new(formulario: JsValue, ilhas: usize) -> Result<HorarioGARunner, JsError> {
+        Ok(Self::de_regras(RegrasHorario::from_js(formulario).map_err(erro_js)?, ilhas))
     }
 
     /// Roda `geracoes` gerações. Retorna true quando terminou: o melhor quadro não tem nenhuma
@@ -231,7 +233,7 @@ mod tests {
     #[wasm_bindgen_test(unsupported = test)]
     fn ga_resolve_instancia_pequena() {
         fastrand::seed(3);
-        let mut r = HorarioGARunner::de_regras(carregar("pequena"));
+        let mut r = HorarioGARunner::de_regras(carregar("pequena"), 0);
         assert_eq!(r.resultado().mensagem, Some(MSG_SEM_SOLUCAO), "antes de rodar não há quadro");
         let mut blocos = 0;
         while !r.run(100) {
@@ -241,5 +243,26 @@ mod tests {
         let fim = r.resultado();
         assert!(fim.terminou && !fim.alguma_violacao, "{:?}", fim.mensagem);
         assert!(r.versao() > 0);
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn ga_com_ilhas_multiplica_a_populacao_e_entrega_resultado() {
+        fastrand::seed(4);
+        let regras = carregar("pequena");
+        let tamanho = regras.tamanho_quadro();
+        let mut r = HorarioGARunner::de_regras(regras, 4);
+        // Em chamadas pequenas, como o worker faz: a época de ilhas atravessa várias chamadas
+        for _ in 0..12 {
+            if r.run(25) {
+                break;
+            }
+        }
+        assert_eq!(r.ga.config.ilhas, 4);
+        assert_eq!(r.ga.config.population_size, tamanho * 4, "população por ilha é a padrão");
+        assert!(r.versao() > 0, "deveria ter um melhor quadro");
+        let res = r.resultado();
+        assert_eq!(res.solucao.as_ref().map(Vec::len), Some(3), "3 turmas");
+        // Com alguma violação ainda não terminou; sem violação, terminou
+        assert_eq!(res.terminou, !res.alguma_violacao);
     }
 }

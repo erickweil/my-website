@@ -4,7 +4,7 @@
  * Worker que roda o GA do TSP em Rust/WASM. Fica num worker (e não na thread principal) para o
  * motor genético poder usar o pool de threads do rayon, que bloqueia a thread que o chama.
  *
- *  - Recebe { tipo: "iniciar", id, cities }: (re)começa a evolução com essas cidades.
+ *  - Recebe { tipo: "iniciar", id, cities, ilhas }: (re)começa a evolução com essas cidades.
  *  - Recebe { tipo: "parar" }: para a evolução atual.
  *  - Envia { tipo: "progresso", id, ... } a cada ~20 ms, com o melhor caminho até agora.
  *  - Envia { tipo: "erro", texto } se algo falhar.
@@ -15,7 +15,8 @@ import { iniciarWasmComThreads } from "@/lib/wasmThreads";
 declare const self: DedicatedWorkerGlobalScope;
 
 export type TSPWorkerEntrada =
-    | { tipo: "iniciar"; id: number; cities: { x: number; y: number }[] }
+    /** `ilhas`: 0 ou 1 = uma população só; N = modelo de ilhas, com N populações do mesmo tamanho. */
+    | { tipo: "iniciar"; id: number; cities: { x: number; y: number }[]; ilhas: number }
     | { tipo: "parar" };
 
 export type TSPWorkerSaida =
@@ -48,7 +49,7 @@ const ceder = () => new Promise<void>((resolve) => {
     canal.port2.postMessage(null);
 });
 
-async function evoluir(id: number, cities: { x: number; y: number }[]) {
+async function evoluir(id: number, cities: { x: number; y: number }[], ilhas: number) {
     const minha = ++execucao;
     const threads = navigator.hardwareConcurrency || 1;
     const wasm = await iniciarWasmComThreads(threads);
@@ -64,6 +65,9 @@ async function evoluir(id: number, cities: { x: number; y: number }[]) {
     cfg.max_stagnation = 50000;
     cfg.diversity_check = false;
     cfg.threads = 0; // automático: usa as threads só se a geração ficar mais rápida com elas
+    // Com ilhas, population_size é o tamanho de cada ilha. O TSP se saiu melhor com épocas curtas.
+    cfg.ilhas = ilhas;
+    cfg.epoca = 50;
     const runner = new wasm.TSPGAProblemRunner(cities, cfg);
 
     try {
@@ -102,7 +106,7 @@ self.onmessage = (ev: MessageEvent<TSPWorkerEntrada>) => {
         execucao++;
         return;
     }
-    evoluir(msg.id, msg.cities).catch((e) => {
+    evoluir(msg.id, msg.cities, msg.ilhas).catch((e) => {
         console.error("[tsp-wasm]", e);
         self.postMessage({ tipo: "erro", texto: e instanceof Error ? e.message : String(e) } satisfies TSPWorkerSaida);
     });

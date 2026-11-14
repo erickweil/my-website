@@ -77,4 +77,6 @@ export interface ResultadoHorario {
 export type HorarioWorkerTaskValue = ResultadoHorario & {
     /** Só no GA: tempo médio por geração no último bloco. */
     msPorGeracao?: number;
+    /** Só no GA: número de ilhas em uso (0 = uma população só). */
+    ilhas?: number;
 };

@@ -79,7 +79,7 @@ export default function ThreadsTeste() {
 
     return (
         <main className="min-h-screen px-4 py-10">
-            <div className="mx-auto max-w-3xl space-y-6">
+            <div className="mx-auto max-w-5xl space-y-6">
                 <div className="text-center">
                     <h1 className="mb-2 text-4xl font-bold">Teste de threads no WASM</h1>
                     <p className="text-muted-foreground">
@@ -155,6 +155,8 @@ export default function ThreadsTeste() {
                                         <th className="text-right">ganho</th>
                                         <th className="text-right">idêntico</th>
                                         <th className="text-right">automático</th>
+                                        <th className="text-right">{fim.ga[0].ilhas} ilhas (ger/s equiv.)</th>
+                                        <th className="text-right">ganho</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -166,6 +168,8 @@ export default function ThreadsTeste() {
                                             <td className="text-right">{r.ganho.toFixed(2)}×</td>
                                             <td className="text-right">{r.resultado_identico ? "✅" : "❌"}</td>
                                             <td className="text-right">{r.automatico_escolheu_paralelo ? "paralelo" : "sequencial"}</td>
+                                            <td className="text-right">{r.geracoes_por_s_ilhas.toFixed(0)}</td>
+                                            <td className="text-right">{r.ganho_ilhas.toFixed(2)}×</td>
                                         </tr>
                                     ))}
                                 </tbody>

@@ -279,6 +279,7 @@ pub fn config_ga_horario(tamanho: usize) -> GAConfig {
         max_stagnation: Some(5000),
         diversity_check: false,
         threads: 0,
+        ..GAConfig::new()
     }
 }
 

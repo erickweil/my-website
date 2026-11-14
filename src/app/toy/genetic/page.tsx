@@ -104,6 +104,8 @@ function drawTSP(ctx: CanvasRenderingContext2D, ga: GeneticAlgorithm<number[]> |
 export default function Genetic() {
     const [solver, setSolver] = useState<"ts" | "wasm">("ts");
     const [erroWasm, setErroWasm] = useState<string | null>(null);
+    /** Só no WASM: 1 = uma população; N = modelo de ilhas (N populações, uma por thread). */
+    const [ilhas, setIlhas] = useState(1);
 
     // O GA em WASM roda num worker (para poder usar threads); a página só manda as cidades e
     // desenha o último progresso recebido.
@@ -111,6 +113,8 @@ export default function Genetic() {
     const progressoRef = useRef<Extract<TSPWorkerSaida, { tipo: "progresso" }> | null>(null);
     /** `cliques` (versão das cidades) da última evolução pedida ao worker; -1 = nenhuma. */
     const enviadoRef = useRef(-1);
+    /** Muda a cada pedido ao worker, para descartar o progresso de um pedido anterior. */
+    const pedidoRef = useRef(0);
 
     const enviarAoWorker = (msg: TSPWorkerEntrada) => {
         if (!workerRef.current) {
@@ -136,9 +140,10 @@ export default function Genetic() {
         if (solver !== "wasm" && workerRef.current) {
             workerRef.current.postMessage({ tipo: "parar" } satisfies TSPWorkerEntrada);
         }
+        // Trocar de solver ou de número de ilhas recomeça a evolução no worker
         enviadoRef.current = -1;
         progressoRef.current = null;
-    }, [solver]);
+    }, [solver, ilhas]);
 
     useEffect(() => () => {
         workerRef.current?.terminate();
@@ -158,6 +163,18 @@ export default function Genetic() {
             <span className={solver === "wasm" ? "font-bold text-violet-700" : "text-gray-400"}>
                 WASM
             </span>
+            {solver === "wasm" && (
+                <label className="ml-2 flex items-center gap-1 font-normal" title="Modelo de ilhas: N populações do mesmo tamanho evoluem separadas, uma por thread, e trocam indivíduos com a vizinha a cada 50 gerações">
+                    ilhas
+                    <select
+                        value={ilhas}
+                        onChange={(e) => setIlhas(Number(e.target.value))}
+                        className="rounded border bg-white px-1 py-0.5"
+                    >
+                        {[1, 4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                </label>
+            )}
             {erroWasm && <span className="text-red-600" title={erroWasm}>erro: {erroWasm}</span>}
         </div>
         <div className='w-full h-full overflow-hidden'>
@@ -254,12 +271,13 @@ export default function Genetic() {
                     if (enviadoRef.current !== estado.cliques) {
                         enviadoRef.current = estado.cliques;
                         progressoRef.current = null;
-                        enviarAoWorker({ tipo: "iniciar", id: estado.cliques, cities: estado.cities });
+                        pedidoRef.current++;
+                        enviarAoWorker({ tipo: "iniciar", id: pedidoRef.current, cities: estado.cities, ilhas });
                     }
 
-                    // Desenha o último progresso recebido, se for das cidades atuais
+                    // Desenha o último progresso recebido, se for do pedido atual
                     const p = progressoRef.current;
-                    if (p && p.id === estado.cliques) {
+                    if (p && p.id === pedidoRef.current) {
                         mesclarEstado(estado, {
                             ga: null,
                             wasmAtivo: true,

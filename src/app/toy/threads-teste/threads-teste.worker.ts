@@ -28,6 +28,9 @@ export type ResultadoGA = {
     ganho: number;
     resultado_identico: boolean;
     automatico_escolheu_paralelo: boolean;
+    ilhas: number;
+    geracoes_por_s_ilhas: number;
+    ganho_ilhas: number;
 };
 
 export type MensagemTeste =
@@ -65,11 +68,12 @@ self.onmessage = async (ev: MessageEvent<{ threads: number; tarefas: number; pas
             throw new Error(`checksums diferentes: ${sequencial.checksum} x ${paralelo.checksum}`);
         }
 
-        log("medindo o motor genético (sequencial x paralelo, ~1 s por modo e problema)...");
+        log("medindo o motor genético (sequencial x paralelo x ilhas, ~1 s por modo e problema)...");
         const ga = wasm.teste_ga_threads(1) as ResultadoGA[];
         for (const r of ga) {
             log(`GA ${r.problema}: ${r.geracoes_por_s_sequencial.toFixed(0)} -> ${r.geracoes_por_s_paralelo.toFixed(0)} ger/s (${r.ganho.toFixed(2)}x), ` +
-                `resultado idêntico: ${r.resultado_identico}, automático escolheu ${r.automatico_escolheu_paralelo ? "paralelo" : "sequencial"}`);
+                `resultado idêntico: ${r.resultado_identico}, automático escolheu ${r.automatico_escolheu_paralelo ? "paralelo" : "sequencial"}, ` +
+                `${r.ilhas} ilhas: ${r.geracoes_por_s_ilhas.toFixed(0)} ger/s equivalentes (${r.ganho_ilhas.toFixed(2)}x)`);
         }
 
         self.postMessage({ tipo: "fim", threads, sequencialMs, paraleloMs, sequencial, paralelo, ga } satisfies MensagemTeste);
