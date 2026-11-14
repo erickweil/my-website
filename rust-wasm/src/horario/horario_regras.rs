@@ -279,6 +279,8 @@ pub struct RegrasHorario {
     pub disciplinas: Vec<Disciplina>,    
     pub professores: Vec<Professor>,
     pub n_tempos: usize,
+    /// Pesos das regras no fitness do algoritmo genético (ver horario_genetic.rs).
+    pub pesos: super::PesosFitness,
 }
 
 impl RegrasHorario {
@@ -358,7 +360,7 @@ impl RegrasHorario {
             }
         }
 
-        Ok(Self { turmas, disciplinas, professores, n_tempos })
+        Ok(Self { turmas, disciplinas, professores, n_tempos, pesos: Default::default() })
     }
 
     /// Lê o formulário vindo do JS (o objeto `FormularioHorario` da página).
