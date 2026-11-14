@@ -12,6 +12,7 @@
  *  - Envia type="error" em caso de falha
  */
 
+import { iniciarWasmComThreads } from "@/lib/wasmThreads";
 import { WorkerResponseMsg } from "@/lib/workerRace";
 import { FormularioHorario, HorarioDia, HorarioWorkerTaskValue, ResultadoHorario, SolverHorario } from "./horario-regras";
 
@@ -52,8 +53,15 @@ self.onmessage = async (message) => {
             throw new Error(`Solver desconhecido: ${solver}`);
         }
 
-        const wasm = await import("@/pkg/rust_wasm.js");
-        await wasm.default();
+        // O GA roda os blocos da população em paralelo e precisa do pool de threads. O Pencilmark é
+        // sequencial: não vale a pena criar um worker por núcleo só para ele.
+        let wasm;
+        if (solver === "genetic") {
+            wasm = await iniciarWasmComThreads();
+        } else {
+            wasm = await import("@/pkg/rust_wasm.js");
+            await wasm.default();
+        }
 
         // Lança Error com a mensagem do Rust se o formulário for inválido
         const runner = solver === "genetic"

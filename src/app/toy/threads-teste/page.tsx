@@ -36,6 +36,8 @@ export default function ThreadsTeste() {
     const [fim, setFim] = useState<Extract<MensagemTeste, { tipo: "fim" }> | null>(null);
     const [erro, setErro] = useState<string | null>(null);
     const workerRef = useRef<Worker | null>(null);
+    // Tamanho do pool; vazio = todos os núcleos. Útil para comparar, por exemplo, 8 x 16 threads.
+    const [threadsPool, setThreadsPool] = useState("");
 
     useEffect(() => {
         console.log("[threads-teste] página:", lerAmbiente());
@@ -69,7 +71,8 @@ export default function ThreadsTeste() {
             setErro(e.message || "Erro ao carregar o worker (veja o console).");
             setRodando(false);
         };
-        worker.postMessage({ threads: ambiente.nucleos, tarefas: TAREFAS, passos: PASSOS });
+        const threads = Math.max(1, Math.min(parseInt(threadsPool) || ambiente.nucleos, 64));
+        worker.postMessage({ threads, tarefas: TAREFAS, passos: PASSOS });
     };
 
     const ganho = fim ? fim.sequencialMs / fim.paraleloMs : null;
@@ -81,7 +84,7 @@ export default function ThreadsTeste() {
                     <h1 className="mb-2 text-4xl font-bold">Teste de threads no WASM</h1>
                     <p className="text-muted-foreground">
                         Roda {TAREFAS} tarefas pesadas em Rust, primeiro em sequência e depois com rayon em várias
-                        threads. Os detalhes também vão para o console (F12).
+                        threads, e mede o motor genético nos dois modos. Os detalhes também vão para o console (F12).
                     </p>
                 </div>
 
@@ -102,7 +105,19 @@ export default function ThreadsTeste() {
                     </CardContent>
                 </Card>
 
-                <div className="flex justify-center">
+                <div className="flex items-center justify-center gap-3">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                        threads no pool
+                        <input
+                            type="number"
+                            min={1}
+                            max={64}
+                            placeholder={ambiente ? String(ambiente.nucleos) : ""}
+                            value={threadsPool}
+                            onChange={(e) => setThreadsPool(e.target.value)}
+                            className="h-9 w-20 rounded-md border bg-background px-2 text-center font-mono"
+                        />
+                    </label>
                     <Button size="lg" onClick={rodar} disabled={rodando || !ambiente} className="min-w-44 gap-2">
                         {rodando ? <><Loader2 className="size-4 animate-spin" /> Rodando...</> : "Rodar teste"}
                     </Button>
@@ -121,6 +136,40 @@ export default function ThreadsTeste() {
                             <div>ganho: {ganho.toFixed(2)}×</div>
                             <div>thread de cada tarefa: [{fim.paralelo.thread_por_tarefa.join(", ")}]</div>
                             <div>checksum (igual nos dois modos): {fim.paralelo.checksum}</div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {fim && fim.ga.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Motor genético com {fim.threads} threads</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <table className="w-full font-mono text-sm">
+                                <thead>
+                                    <tr className="text-left text-muted-foreground">
+                                        <th className="py-1">problema</th>
+                                        <th className="text-right">1 thread (ger/s)</th>
+                                        <th className="text-right">paralelo (ger/s)</th>
+                                        <th className="text-right">ganho</th>
+                                        <th className="text-right">idêntico</th>
+                                        <th className="text-right">automático</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {fim.ga.map((r) => (
+                                        <tr key={r.problema} className="border-t">
+                                            <td className="py-1">{r.problema}</td>
+                                            <td className="text-right">{r.geracoes_por_s_sequencial.toFixed(0)}</td>
+                                            <td className="text-right">{r.geracoes_por_s_paralelo.toFixed(0)}</td>
+                                            <td className="text-right">{r.ganho.toFixed(2)}×</td>
+                                            <td className="text-right">{r.resultado_identico ? "✅" : "❌"}</td>
+                                            <td className="text-right">{r.automatico_escolheu_paralelo ? "paralelo" : "sequencial"}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </CardContent>
                     </Card>
                 )}

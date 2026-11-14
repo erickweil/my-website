@@ -9,6 +9,7 @@ pub mod horario;
 pub mod pencilmark;
 pub mod bitflag;
 pub mod threads_teste;
+pub mod paralelo;
 
 // `initThreadPool(n)` no JS: cria o pool do rayon com n Web Workers. Precisa ser chamado (e
 // aguardado) depois do `init()` do módulo e antes de qualquer código que use rayon.

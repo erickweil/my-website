@@ -278,6 +278,7 @@ pub fn config_ga_horario(tamanho: usize) -> GAConfig {
         tournament_size: 10,
         max_stagnation: Some(5000),
         diversity_check: false,
+        threads: 0,
     }
 }
 

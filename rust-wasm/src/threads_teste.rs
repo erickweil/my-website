@@ -68,6 +68,101 @@ pub fn teste_threads(n_tarefas: u32, passos: u32, paralelo: bool) -> Result<JsVa
     serde_wasm_bindgen::to_value(&executar(n_tarefas, passos, paralelo)).map_err(|e| JsError::new(&e.to_string()))
 }
 
+// ── Benchmark do motor genético: sequencial × paralelo ───────────────────────────────────────
+
+#[derive(Serialize, Debug)]
+pub struct ResultadoGA {
+    pub problema: String,
+    pub populacao: usize,
+    pub geracoes_por_s_sequencial: f64,
+    pub geracoes_por_s_paralelo: f64,
+    pub ganho: f64,
+    /// A mesma semente deu o mesmo melhor fitness nos dois modos? (tem que ser sempre true)
+    pub resultado_identico: bool,
+    /// O que o modo automático escolheu para este problema.
+    pub automatico_escolheu_paralelo: bool,
+}
+
+fn medir_ga<P: crate::genetic::problems::GAProblem>(
+    nome: &str,
+    criar: impl Fn() -> P,
+    pop: usize,
+    genes: usize,
+    segundos: f64,
+) -> ResultadoGA {
+    use crate::genetic::ga::{GAConfig, GeneticAlgorithm};
+    use web_time::Instant;
+
+    let config = |threads| GAConfig {
+        population_size: pop,
+        crossover_rate: 0.9,
+        mutation_rate: 0.9,
+        mutation_gene_rate: 1.0 / genes as f64,
+        tournament_size: 10,
+        max_stagnation: None,
+        diversity_check: false,
+        threads,
+    };
+    let novo = |threads| {
+        fastrand::seed(1);
+        GeneticAlgorithm::new(criar(), config(threads))
+    };
+
+    // Vazão: 1 = sequencial, 2 = sempre paralelo
+    let vazao = |threads| {
+        let mut ga = novo(threads);
+        ga.run(10); // aquecimento
+        let (g0, inicio) = (ga.get_info().generation, Instant::now());
+        while inicio.elapsed().as_secs_f64() < segundos {
+            ga.run(10);
+        }
+        (ga.get_info().generation - g0) as f64 / inicio.elapsed().as_secs_f64()
+    };
+    let (seq, par) = (vazao(1), vazao(2));
+
+    // Mesma semente, mesmo número de gerações: o melhor fitness tem que ser igual
+    let melhor = |threads| {
+        let mut ga = novo(threads);
+        ga.run(60);
+        ga.get_info().best_fitness
+    };
+    let resultado_identico = melhor(1) == melhor(2);
+
+    let mut auto = novo(0);
+    auto.run(60);
+
+    ResultadoGA {
+        problema: nome.to_string(),
+        populacao: pop,
+        geracoes_por_s_sequencial: seq,
+        geracoes_por_s_paralelo: par,
+        ganho: par / seq,
+        resultado_identico,
+        automatico_escolheu_paralelo: auto.usando_threads(),
+    }
+}
+
+pub fn executar_ga(segundos: f64) -> Vec<ResultadoGA> {
+    use crate::genetic::problems::{OneMaxGAProblem, TSPGAProblem};
+
+    let mut resultados = Vec::new();
+    for cidades in [100, 2000] {
+        fastrand::seed(7);
+        let mapa = TSPGAProblem::generate_random_cities(cidades);
+        resultados.push(medir_ga(&format!("TSP {cidades} cidades"), || TSPGAProblem::new(mapa.clone()), 500, cidades, segundos));
+    }
+    for bits in [1_000, 100_000] {
+        resultados.push(medir_ga(&format!("OneMax {bits} bits"), || OneMaxGAProblem::new(bits), 200, bits, segundos));
+    }
+    resultados
+}
+
+/// Exposto ao JS: mede o motor genético em sequência e em paralelo, `segundos` por modo e problema.
+#[wasm_bindgen]
+pub fn teste_ga_threads(segundos: f64) -> Result<JsValue, JsError> {
+    serde_wasm_bindgen::to_value(&executar_ga(segundos)).map_err(|e| JsError::new(&e.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,4 +178,15 @@ mod tests {
             assert!(par.threads_usadas > 1, "{par:?}");
         }
     }
+
+    #[test]
+    fn benchmark_do_ga_da_resultado_identico_nos_dois_modos() {
+        let resultados = executar_ga(0.05);
+        assert_eq!(resultados.len(), 4);
+        for r in &resultados {
+            assert!(r.resultado_identico, "{r:?}");
+            assert!(r.geracoes_por_s_sequencial > 0.0 && r.geracoes_por_s_paralelo > 0.0, "{r:?}");
+        }
+    }
 }
+
