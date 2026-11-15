@@ -24,8 +24,8 @@ use crate::{
 /// Limite de gerações do GA (o worker em TS rodava 1000 blocos de 500 gerações).
 pub const MAX_GERACOES_GA: usize = 500_000;
 
-/// Com um horário já válido, o GA continua para atender às regras de qualidade (horários a evitar)
-/// e para depois deste número de gerações sem melhora.
+/// Com um horário já válido, o GA continua para atender às regras de qualidade (horários a evitar
+/// e as outras regras de qualidade) e para depois deste número de gerações sem melhora.
 pub const GERACOES_SEM_MELHORA_NA_QUALIDADE: usize = 1_000;
 
 fn erro_js(e: ErroEntrada) -> JsError {
@@ -248,11 +248,6 @@ impl HorarioGARunner {
         self.valido
     }
 
-    /// Aulas do melhor quadro em horário que algum professor pediu para evitar.
-    pub fn aulas_a_evitar(&self) -> usize {
-        self.melhor.as_ref().map_or(0, |(q, _)| self.ga.problem.aulas_a_evitar(q))
-    }
-
     pub fn get_resultado(&self) -> Result<JsValue, JsError> {
         resultado_js(self.resultado())
     }
@@ -426,7 +421,7 @@ mod tests {
         let mut pior = r.get_quadro_vazio();
         for (tempo, d) in [2, 2, 2, 2].into_iter().enumerate() { pior[r.to_quadro_index(0, DiaSemana::Segunda, tempo)] = d; }
         for (tempo, d) in [1, 1, 1, 1].into_iter().enumerate() { pior[r.to_quadro_index(0, DiaSemana::Terca, tempo)] = d; }
-        assert_eq!(r.aulas_a_evitar(&pior), 4);
+        assert_eq!(r.qualidade(&pior).0.evitar, 4);
         let f = r.fitness_rapido(&mut estado, &pior);
         assert!(f < 0.0 && f > -20.0, "as 4 aulas a evitar valem menos que uma violação obrigatória: {f}");
 
@@ -443,7 +438,7 @@ mod tests {
             assert!(blocos < 2_000, "o GA deveria terminar");
         }
         assert!(ga.valido() && !ga.resultado().alguma_violacao);
-        assert_eq!(ga.aulas_a_evitar(), 0, "há horário válido sem nenhuma aula na terça para P");
+        assert!(ga.resultado().qualidade.is_empty(), "há horário válido sem nenhuma aula na terça para P");
         assert_eq!(ga.melhor_fitness, Some(0.0));
     }
 
@@ -466,6 +461,6 @@ mod tests {
             assert!(geracoes <= GERACOES_SEM_MELHORA_NA_QUALIDADE + 200, "deveria ter parado por falta de melhora");
         }
         assert!(!ga.resultado().alguma_violacao);
-        assert_eq!(ga.aulas_a_evitar(), 2);
+        assert_eq!(ga.resultado().qualidade.iter().filter(|o| o.regra == "evitar" && o.recurso.as_deref() == Some("P")).count(), 2);
     }
 }

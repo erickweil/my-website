@@ -308,11 +308,14 @@ interface AreaDeTrabalho {
 
 - **Ambiente é um recurso de ocupação única**, igual a um professor: duas aulas não caem nele ao
   mesmo tempo. Só entram os ambientes usados por mais de uma turma (os outros não restringem).
-- **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. "Evitar" é
-  regra de qualidade: só o algoritmo genético a considera, com peso menor que qualquer obrigatória.
+- **`tempos[]`:** a hora de início e de fim e o turno de cada aula do quadro.
+- **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. As de
+  qualidade só o algoritmo genético considera, com peso menor que qualquer obrigatória: horários
+  a evitar, jornada de até 10 horas no dia, 11 horas de descanso até o dia seguinte, e grupo de
+  aulas partido pelo intervalo ou pela troca de turno com uma aula sozinha. As três últimas usam
+  as horas do quadro. O resultado dos dois métodos traz o que não foi atendido.
 
-**O que o solver ignora:** capacidade e número de alunos (conferidos na tela), horas e duração
-das aulas, intervalos e turnos.
+**O que o solver ignora:** capacidade e número de alunos (conferidos na tela).
 
 ---
 
@@ -326,7 +329,7 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 - **Bloco que não cabe:** bloco de N aulas maior que o maior trecho sem quebra forte nos tempos da turma.
 - **Matriz:** componentes do período sem oferta na turma, e ofertas diferentes da matriz.
 - **Quadro:** faixas fora de ordem ou sobrepostas.
-- **Depois de gerar:** aulas em horários que o professor pediu para evitar.
+- **Depois de gerar:** as regras de qualidade que o horário não atende (medidas pelo solver).
 
 ---
 
@@ -334,10 +337,7 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 
 | Regra | Dado que usa |
 | :--- | :--- |
-| Bloco nunca atravessa troca de turno; evita atravessar intervalo | `Faixa.turno` e faixas de intervalo |
-| Preferência do professor com peso | `DocenteNoProjeto.evitar` |
 | Janelas do professor medidas em minutos reais | `inicio` e `duracaoMin` das faixas |
-| Professor não emenda noturno com a primeira aula da manhã seguinte | idem |
 | Máximo de aulas por dia, espalhar a disciplina na semana | campos novos em `Distribuicao` |
 | Fixar aulas e gerar o resto | `alocacoes[].fixada` |
 

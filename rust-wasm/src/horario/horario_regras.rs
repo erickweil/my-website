@@ -139,10 +139,24 @@ pub struct EntradaAula {
     pub emendar: bool,
 }
 
+/// Uma aula do quadro de horários: quando começa e termina, e o turno. Só as regras de qualidade
+/// usam (ver `horario_qualidade.rs`).
+#[derive(Deserialize, Debug, Clone)]
+pub struct EntradaTempo {
+    /// Minutos desde a meia-noite.
+    pub inicio: i32,
+    pub fim: i32,
+    pub turno: String,
+}
+
 /// Algo de ocupação única: um professor ou um ambiente.
 #[derive(Deserialize, Debug, Clone)]
 pub struct EntradaRecurso {
     pub id: String,
+    /// true = ambiente (sala, laboratório): só não pode ter duas aulas ao mesmo tempo. As regras
+    /// de qualidade (evitar, jornada, descanso) valem só para professores.
+    #[serde(default)]
+    pub ambiente: bool,
     /// REGRA OBRIGATÓRIA: o recurso nunca tem aula fora destes tempos.
     pub disponibilidade: HorariosPorDia,
     /// REGRA DE QUALIDADE: tempos disponíveis em que é melhor não ter aula. Só o algoritmo genético
@@ -156,6 +170,10 @@ pub struct EntradaHorario {
     pub turmas: Vec<EntradaTurma>,
     pub aulas: Vec<EntradaAula>,
     pub recursos: Vec<EntradaRecurso>,
+    /// As aulas do dia, na ordem (a 1ª é o tempo 1). Opcional: sem elas, as regras de qualidade
+    /// que dependem de hora ficam desligadas.
+    #[serde(default)]
+    pub tempos: Vec<EntradaTempo>,
 }
 
 #[derive(Clone)]
@@ -233,6 +251,17 @@ pub struct Professor {
     pub horarios: Horario,
     /// 1 = horário a evitar (regra de qualidade, só do algoritmo genético).
     pub evitar: Horario,
+    /// false = ambiente: sem regras de qualidade.
+    pub pessoa: bool,
+}
+
+/// Uma aula do quadro de horários, em minutos desde a meia-noite.
+#[derive(Clone, Copy, Debug)]
+pub struct TempoDoQuadro {
+    pub inicio: i32,
+    pub fim: i32,
+    /// Número do turno (tempos com o mesmo número são do mesmo turno).
+    pub turno: u8,
 }
 
 /// Uma aula numa turma. Uma aula dada em conjunto vira uma disciplina por turma, "unidas" entre si
@@ -266,6 +295,8 @@ pub struct RegrasHorario {
     pub professores: Vec<Professor>,
     /// Ids das aulas da entrada, na ordem.
     pub aulas: Vec<String>,
+    /// As horas das aulas do dia; vazio se a entrada não trouxe.
+    pub tempos: Vec<TempoDoQuadro>,
     pub n_tempos: usize,
     /// Pesos das regras no fitness do algoritmo genético (ver horario_genetic.rs).
     pub pesos: super::PesosFitness,
@@ -297,7 +328,7 @@ impl RegrasHorario {
         for (i, r) in entrada.recursos.into_iter().enumerate() {
             let horarios = Horario::from_formulario(&r.disponibilidade, n_tempos, &r.id)?;
             let evitar = Horario::from_formulario(&r.evitar, n_tempos, &r.id)?;
-            professores.push(Professor { id: i, nome: r.id, horarios, evitar });
+            professores.push(Professor { id: i, nome: r.id, horarios, evitar, pessoa: !r.ambiente });
         }
         let recurso_por_id: HashMap<&str, usize> = professores.iter().map(|p| (p.nome.as_str(), p.id)).collect();
 
@@ -333,7 +364,14 @@ impl RegrasHorario {
             aulas.push(a.id);
         }
 
-        Ok(Self { turmas, disciplinas, professores, aulas, n_tempos, pesos: Default::default() })
+        // Turnos numerados na ordem em que aparecem
+        let mut turnos: Vec<&str> = Vec::new();
+        let tempos = entrada.tempos.iter().map(|t| {
+            let turno = turnos.iter().position(|&x| x == t.turno).unwrap_or_else(|| { turnos.push(&t.turno); turnos.len() - 1 });
+            TempoDoQuadro { inicio: t.inicio, fim: t.fim, turno: turno as u8 }
+        }).collect();
+
+        Ok(Self { turmas, disciplinas, professores, aulas, tempos, n_tempos, pesos: Default::default() })
     }
 
     /// Lê a entrada vinda do JS (o objeto `EntradaDoSolver` da página).

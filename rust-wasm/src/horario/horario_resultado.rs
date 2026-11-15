@@ -10,7 +10,7 @@
 use serde::Serialize;
 
 use crate::{
-    horario::{DiaSemana, HorarioRegrasPencilmark, RegrasHorario},
+    horario::{DiaSemana, HorarioRegrasPencilmark, Ocorrencia, RegrasHorario},
     pencilmark::{Possib, RegrasQuadro},
 };
 
@@ -155,6 +155,9 @@ pub struct ResultadoHorario {
     pub alguma_violacao: bool,
     /// Mensagem para o usuário quando há violação ou não há solução.
     pub mensagem: Option<&'static str>,
+    /// Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade (que só o
+    /// algoritmo genético tenta atender). Vazio se há violação ou não há quadro.
+    pub qualidade: Vec<Ocorrencia>,
     /// Pencilmark: nós visitados. GA: geração. (f64 porque u64 não cabe num Number do JS)
     pub iter: f64,
     /// Pencilmark: profundidade da busca. GA: gerações sem melhora.
@@ -172,6 +175,7 @@ impl ResultadoHorario {
                 let (alocacoes, problemas) = montar_alocacoes(regras, quadro, validacao);
                 Self {
                     mensagem: alguma_violacao.then(|| validacao.geral.unwrap_or(MSG_COM_VIOLACOES)),
+                    qualidade: if alguma_violacao { Vec::new() } else { regras.qualidade(quadro).1 },
                     alocacoes: Some(alocacoes),
                     problemas,
                     alguma_violacao,
@@ -180,7 +184,7 @@ impl ResultadoHorario {
                     terminou,
                 }
             }
-            _ => Self { alocacoes: None, problemas: Vec::new(), alguma_violacao: true, mensagem: Some(MSG_SEM_SOLUCAO), iter, depth, terminou },
+            _ => Self { alocacoes: None, problemas: Vec::new(), qualidade: Vec::new(), alguma_violacao: true, mensagem: Some(MSG_SEM_SOLUCAO), iter, depth, terminou },
         }
     }
 

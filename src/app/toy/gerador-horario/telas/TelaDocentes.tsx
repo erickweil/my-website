@@ -41,7 +41,7 @@ export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: 
         <div>
             <Cabecalho
                 titulo="Docentes"
-                ajuda="A disponibilidade de cada professor neste projeto. Aparecem os professores que têm alguma aula. Escolha um estado e clique ou arraste na grade para pintar. O professor nunca recebe aula num horário indisponível. Os horários a evitar ficam registrados, mas ainda não são considerados na geração."
+                ajuda="A disponibilidade de cada professor neste projeto. Aparecem os professores que têm alguma aula. Escolha um estado e clique ou arraste na grade para pintar. O professor nunca recebe aula num horário indisponível. Os horários a evitar são uma preferência: o algoritmo genético tenta respeitá-los, e a busca exata os ignora."
             />
 
             {!docente ? (

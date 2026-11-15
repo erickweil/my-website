@@ -156,6 +156,21 @@ const horarioGerado = z.object({
         dia: dia.optional(),
         tempo: inteiro.optional(),
     })),
+    /**
+     * Num horário completo: onde ele deixa a desejar nas regras de qualidade (horários a evitar,
+     * jornada e descanso do professor, grupo de aulas partido pelo intervalo). Só o algoritmo
+     * genético tenta atendê-las; a busca exata as ignora.
+     */
+    qualidade: z.array(z.object({
+        regra: z.enum(["evitar", "jornada", "descanso", "intervalo", "turno"]),
+        professorId: id.optional(),
+        turmaId: id.optional(),
+        ofertaId: id.optional(),
+        /** O dia; no descanso, o primeiro dos dois. */
+        dia,
+        /** Jornada: minutos acima das 10 horas. Descanso: minutos que faltam para as 11 horas. */
+        minutos: inteiro,
+    })).default([]),
 });
 
 const projetoHorario = z.object({

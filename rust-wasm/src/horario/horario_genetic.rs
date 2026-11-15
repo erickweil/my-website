@@ -1,15 +1,15 @@
-use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
+use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{BuffersQualidade, DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario, TabelasQualidade}, random::{random_bool, random_range, random_range_except}};
 
 /// # Regras obrigatórias e regras de qualidade
 ///
 /// As regras OBRIGATÓRIAS (professor disponível e sem choque, aulas em conjunto, blocos) são as
 /// mesmas da busca exata (Pencilmark): um horário só é válido se não quebra nenhuma.
 ///
-/// As regras de QUALIDADE não invalidam o horário, só dizem qual horário válido é melhor. Elas
-/// existem apenas aqui, no algoritmo genético; a busca exata as ignora. Hoje há uma: aula num
-/// horário que o professor pediu para evitar. Para uma regra de qualidade nunca ser trocada por
-/// uma obrigatória, todas as penalidades de qualidade somadas valem menos que a menor penalidade
-/// obrigatória (ver `TabelasFitness::peso_evitar`).
+/// As regras de QUALIDADE não invalidam o horário, só dizem qual horário válido é melhor: horários
+/// a evitar, jornada e descanso do professor, grupos de aulas partidos pelo intervalo (ver
+/// `horario_qualidade.rs`). Elas existem apenas aqui, no algoritmo genético; a busca exata as
+/// ignora. Para uma regra de qualidade nunca ser trocada por uma obrigatória, todas as penalidades
+/// de qualidade somadas valem menos que a menor penalidade obrigatória.
 ///
 /// Pesos de cada regra no fitness (pontos descontados por unidade de violação) e como as violações
 /// são medidas. O fitness é 0 exatamente quando o quadro não viola nenhuma regra, com quaisquer
@@ -87,11 +87,6 @@ struct TabelasFitness {
     slots: usize,
     /// Por professor e horário: 1 = disponível, 0 = não trabalha (cópia de `Professor::horarios`).
     disponibilidade: Vec<i32>,
-    /// Por professor e horário: 1 = disponível, mas a evitar (regra de qualidade).
-    evitar: Vec<i32>,
-    /// Penalidade por aula em horário a evitar: a menor penalidade obrigatória dividida pelo número
-    /// de (aula, professor) do quadro mais um, para a soma nunca alcançar uma regra obrigatória.
-    peso_evitar: f64,
     /// Células em que a turma tem aula: (índice no quadro, horário = tempo * 7 + dia).
     ativas: Vec<(u32, u32)>,
     /// Células em que a turma não tem aula (devem valer -1).
@@ -155,17 +150,9 @@ impl TabelasFitness {
         }
         restos_de.push(n_restos);
 
-        let pares: i32 = r.disciplinas.iter().map(|d| d.aulas.max(0) * d.professores.len() as i32).sum();
-        let menor_obrigatoria = r.pesos.professor.min(r.pesos.conflito).min(r.pesos.unidas).min(r.pesos.agrupar);
-
         Self {
             slots,
             disponibilidade: r.professores.iter().flat_map(|p| p.horarios.slots.iter().copied()).collect(),
-            // Só conta onde o professor está disponível: fora disso já é regra obrigatória
-            evitar: r.professores.iter()
-                .flat_map(|p| p.evitar.slots.iter().zip(&p.horarios.slots).map(|(&e, &h)| (e != 0 && h != 0) as i32))
-                .collect(),
-            peso_evitar: menor_obrigatoria / (pares + 1) as f64,
             ativas,
             inativas,
             linhas,
@@ -198,6 +185,9 @@ pub struct HorarioGAState {
     n_restos: Vec<u8>,
     /// Por disciplina: aulas que precisam sair de onde estão (blocos grudados, com `dividir`).
     sobras: Vec<u16>,
+    /// Regras de qualidade (ver `horario_qualidade.rs`).
+    qualidade: TabelasQualidade,
+    buffers_qualidade: BuffersQualidade,
 }
 
 impl GAProblem for RegrasHorario {
@@ -207,6 +197,8 @@ impl GAProblem for RegrasHorario {
     type State = HorarioGAState;
 
     fn initial_state(&self) -> Self::State { 
+        let menor_obrigatoria = self.pesos.professor.min(self.pesos.conflito).min(self.pesos.unidas).min(self.pesos.agrupar);
+        let qualidade = TabelasQualidade::new(self, menor_obrigatoria);
         HorarioGAState {
             // Capacidade = tamanho do slice de uma turma (pior caso do IPX)
             crossover_ipx: CrossoverIPX::new(QUANTOS_DIAS * self.n_tempos),
@@ -217,6 +209,8 @@ impl GAProblem for RegrasHorario {
             n_restos: vec![0; self.disciplinas.len()],
             sobras: vec![0; self.disciplinas.len()],
             tabelas: TabelasFitness::new(self),
+            buffers_qualidade: qualidade.buffers(),
+            qualidade,
         }
     }
 
@@ -468,27 +462,13 @@ impl RegrasHorario {
         fitness
     }
 
-    /// Quantas aulas do quadro estão em horário que algum professor pediu para evitar (regra de
-    /// qualidade). Conta uma vez por professor da aula.
-    pub fn aulas_a_evitar(&self, quadro: &[i32]) -> usize {
-        let mut n = 0;
-        for (i, &v) in quadro.iter().enumerate() {
-            let Some(d) = (v > 0).then(|| self.disciplinas.get((v - 1) as usize)).flatten() else { continue };
-            let (_, dia, tempo) = self.from_quadro_index(i);
-            n += d.professores.iter()
-                .filter(|&&p| self.professores[p].evitar.get(dia, tempo) != 0 && self.professores[p].horarios.get(dia, tempo) != 0)
-                .count();
-        }
-        n
-    }
-
     /// Fitness do quadro: 0 quando não quebra nenhuma regra, obrigatória ou de qualidade; negativo
     /// proporcional às violações (ver [`PesosFitness`]). Um quadro VÁLIDO (sem violação obrigatória)
     /// tem fitness entre 0 e menos a menor penalidade obrigatória, exclusive. Faz uma passada pelas células ativas para a ocupação dos professores,
     /// outra para as penalidades de professor e de disciplinas unidas, e uma pelos dias com aula
     /// para os blocos.
     pub fn fitness_rapido(&self, state: &mut HorarioGAState, quadro: &[i32]) -> f64 {
-        let HorarioGAState { tabelas: t, ocupacao, restos, n_restos, sobras, .. } = state;
+        let HorarioGAState { tabelas: t, ocupacao, restos, n_restos, sobras, qualidade: tabelas_q, buffers_qualidade: buffers_q, .. } = state;
         let pesos = self.pesos;
 
         // Ocupação de cada professor em cada horário: disponibilidade (1 ou 0) menos uma por turma.
@@ -499,8 +479,6 @@ impl RegrasHorario {
         // (`u_professor`); todas menos a primeira, onde ele trabalha (`u_conflito`).
         let mut u_professor = 0i32;
         let mut u_conflito = 0i32;
-        // Regra de qualidade: aulas em horário que o professor pediu para evitar
-        let mut u_evitar = 0u32;
         ocupacao.copy_from_slice(&t.disponibilidade);
         for &(i, horario) in &t.ativas {
             let d = quadro[i as usize] - 1;
@@ -509,7 +487,6 @@ impl RegrasHorario {
             for &p in &t.professores[ini as usize..fim as usize] {
                 let k = p as usize * t.slots + horario as usize;
                 ocupacao[k] -= 1;
-                u_evitar += t.evitar[k] as u32;
                 if pesos.professor_por_movimentos && ocupacao[k] < 0 {
                     if t.disponibilidade[k] == 0 { u_professor += 1 } else { u_conflito += 1 }
                 }
@@ -610,8 +587,11 @@ impl RegrasHorario {
             }
         }
 
+        // Regras de qualidade: sempre menos que a menor penalidade obrigatória
+        let qualidade = if tabelas_q.ativa { tabelas_q.custo(&tabelas_q.medir(self, quadro, buffers_q, None)) } else { 0.0 };
+
         -(estrutura as f64 * 1000.0
-            + u_evitar as f64 * t.peso_evitar
+            + qualidade
             + u_professor as f64 * pesos.professor
             + u_conflito as f64 * pesos.conflito
             + u_unidas as f64 * pesos.unidas

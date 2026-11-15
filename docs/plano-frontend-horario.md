@@ -18,7 +18,7 @@
 | 4 | Verificações antes de gerar | Não | **feita** |
 | 5 | Tela do horário: por turma, professor e ambiente; problemas; imprimir e exportar | Pequeno | **feita** |
 | 6 | O Rust lê o modelo novo; o adaptador e o formato antigo são removidos | Sim | **feita** |
-| 7 | Regras de qualidade só no genético ("evitar"); quebras e fixar aulas adiados | Sim | **feita** (parte) |
+| 7 | Regras de qualidade só no genético: evitar, jornada, descanso, intervalo | Sim | **feita** |
 
 As etapas 2 a 5 são sequenciais. A 6 pode ser feita a qualquer momento depois da 2.
 
@@ -127,8 +127,19 @@ que só afetam a qualidade do horário existem apenas no algoritmo genético, co
   obrigatória, então uma regra obrigatória nunca é trocada por preferência.
 - **Feito:** o GA entrega o horário assim que ele fica válido e continua melhorando a qualidade;
   para quando zera as penalidades ou fica 1000 gerações sem melhorar.
-- **Adiado:** bloco atravessando intervalo ou troca de turno (não é regra por enquanto).
+- **Feito (15/11/2026, segunda rodada):** mais três regras de qualidade, em
+  `rust-wasm/src/horario/horario_qualidade.rs`, todas só no genético:
+  - **Jornada:** no máximo 10 horas (8 de trabalho + 2 de intervalo) entre o início da primeira
+    aula e o fim da última aula do professor no dia; pesa pelo excesso. Cobre manhã e noite no
+    mesmo dia.
+  - **Descanso:** 11 horas entre o fim da última aula de um dia e o início da primeira do dia
+    seguinte; pesa pelo que falta.
+  - **Intervalo:** grupo de aulas da mesma disciplina que atravessa um intervalo deixando uma aula
+    sozinha de um lado (2 ou mais de cada lado é aceitável); na troca de turno pesa o dobro.
+  - A entrada do solver passou a levar as horas das aulas do quadro e a distinguir professor de
+    ambiente. O resultado traz as ocorrências, medidas no Rust, para os dois métodos.
+  - Ordem dos pesos, do mais grave ao menos: jornada, descanso, evitar e troca de turno, intervalo.
 - **Fora:** fixar aulas (o horário é sempre gerado do zero) e o genético partir do resultado da
   busca exata (ele é para os quadros grandes, que a busca exata não resolve).
 - **Próximas regras de qualidade possíveis**, quando houver o dado no cadastro: janelas do
-  professor, máximo de aulas por dia.
+  professor, máximo de aulas da mesma disciplina por dia.

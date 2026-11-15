@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { raceWorkers } from "@/lib/workerRace";
 import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP, type HorarioWorkerTaskValue, type SolverHorario } from "../horario-regras";
-import { aulasAEvitar, detalharProblema, diagnosticar, observarHorario, type Pendencia } from "../modelo/diagnostico";
+import { detalharProblema, diagnosticar, observarHorario, type Pendencia } from "../modelo/diagnostico";
 import type { Dia, HorarioGerado, Id, Oferta, Professor, ProjetoHorario } from "../modelo/modelo";
 import { ambienteDaOferta, aulasDoQuadro, fimDaFaixa, nomeNaTurma } from "../modelo/operacoes";
 import { doSolver, paraSolver } from "../modelo/para-solver";
@@ -213,7 +213,7 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                             {!parcial
                                 ? "Preparando…"
                                 : parcial.completo
-                                  ? `Horário válido. Melhorando as preferências: ${plural(aulasAEvitar(projeto, parcial), "aula", "aulas")} em horários a evitar…`
+                                  ? `Horário válido. Melhorando a qualidade: ${plural(parcial.qualidade.length, "observação", "observações")}…`
                                   : `${parcial.alocacoes.length} de ${totalDeAulas} aulas alocadas…`}
                         </span>
                     )}
@@ -223,12 +223,18 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                             <Ajuda>
                                 <p>
                                     <strong>Busca exata:</strong> acha um horário que cumpre todas as regras obrigatórias, ou prova que não
-                                    existe. Ignora as preferências (horários que os professores pediram para evitar).
+                                    existe. Ignora as regras de qualidade.
                                 </p>
                                 <p>
                                     <strong>Algoritmo genético:</strong> para quadros grandes, que a busca exata não resolve. Devolve o melhor
                                     horário que encontrar, mesmo com erros, e depois de chegar a um horário válido continua tentando atender
-                                    às preferências. Pode ser interrompido a qualquer momento.
+                                    às regras de qualidade. Pode ser interrompido a qualquer momento.
+                                </p>
+                                <p>
+                                    <strong>Regras de qualidade:</strong> horários que o professor pediu para evitar; no máximo 10 horas
+                                    entre a primeira e a última aula do professor no dia; 11 horas de descanso até a primeira aula do dia
+                                    seguinte; grupo de aulas da mesma disciplina que atravessa o intervalo (ou a troca de turno) sem deixar
+                                    uma aula sozinha de um lado. O horário mostra o que não foi atendido, nos dois métodos.
                                 </p>
                             </Ajuda>
                             <Selecao className="h-8" value={solver} disabled={gerando} onChange={(e) => setSolver(e.target.value as SolverHorario)}>

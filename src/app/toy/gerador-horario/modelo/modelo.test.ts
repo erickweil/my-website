@@ -217,9 +217,17 @@ test("paraSolver: aulas por id, com as turmas, os professores e o ambiente dispu
         ],
         recursos: [
             // Limitados ao quadro: sem domingo, sem sábado e sem o tempo 99
-            { id: "p1", disponibilidade: { seg: [1, 2] }, evitar: { seg: [2] } },
+            { id: "p1", ambiente: false, disponibilidade: { seg: [1, 2] }, evitar: { seg: [2] } },
             // "sala-a" é disputada pelas turmas A e B; "sala-b" não é usada por mais ninguém e não entra
-            { id: "sala-a", disponibilidade: horariosCheios(p.quadro), evitar: {} },
+            { id: "sala-a", ambiente: true, disponibilidade: horariosCheios(p.quadro), evitar: {} },
+        ],
+        // As horas do quadro: manhã 07:30, intervalo depois da 2ª, e a noite com aulas de 45 minutos
+        tempos: [
+            { inicio: 450, fim: 500, turno: "matutino" },
+            { inicio: 500, fim: 550, turno: "matutino" },
+            { inicio: 570, fim: 620, turno: "matutino" },
+            { inicio: 1140, fim: 1185, turno: "noturno" },
+            { inicio: 1185, fim: 1230, turno: "noturno" },
         ],
     });
 });
@@ -256,6 +264,7 @@ test("doSolver: alocações e problemas voltam com os ids do projeto", () => {
         ],
         alguma_violacao: true,
         mensagem: "Não foi possível completar",
+        qualidade: [],
         iter: 1,
         depth: 0,
         terminou: true,
@@ -269,10 +278,25 @@ test("doSolver: alocações e problemas voltam com os ids do projeto", () => {
             { mensagem: "Este espaço não deveria estar vazio", ofertaId: undefined, turmaId: "turma-a", dia: "seg", tempo: 2 },
             { mensagem: "Professor ocupado", ofertaId: "oferta-1", turmaId: "turma-a", dia: "ter", tempo: 1 },
         ],
+        qualidade: [],
     });
 
-    const base = { problemas: [], mensagem: null, iter: 1, depth: 0, terminou: true };
-    assert.equal(doSolver(p, { ...base, alocacoes: [], alguma_violacao: false }).completo, true);
+    const base = { problemas: [], qualidade: [], mensagem: null, iter: 1, depth: 0, terminou: true };
+    // Horário válido com ocorrências de qualidade: completo, e os ids voltam nos campos do projeto
+    const valido = doSolver(p, {
+        ...base,
+        alocacoes: [],
+        alguma_violacao: false,
+        qualidade: [
+            { regra: "jornada", recurso: "prof-1", turma: null, aula: null, dia: "seg", minutos: 30 },
+            { regra: "turno", recurso: null, turma: "turma-a", aula: "oferta-1", dia: "ter", minutos: 0 },
+        ],
+    });
+    assert.equal(valido.completo, true);
+    assert.deepEqual(valido.qualidade, [
+        { regra: "jornada", professorId: "prof-1", turmaId: undefined, ofertaId: undefined, dia: "seg", minutos: 30 },
+        { regra: "turno", professorId: undefined, turmaId: "turma-a", ofertaId: "oferta-1", dia: "ter", minutos: 0 },
+    ]);
     // Sem quadro nenhum: incompleto, com a mensagem do solver
     const semQuadro = doSolver(p, { ...base, alocacoes: null, alguma_violacao: true, mensagem: "Sem solução" });
     assert.deepEqual([semQuadro.completo, semQuadro.alocacoes, semQuadro.problemas], [false, [], [{ mensagem: "Sem solução" }]]);
@@ -305,7 +329,7 @@ test("editar o quadro renumera os tempos sem perder as marcações", () => {
     p = manterDocentes({ ...o.projeto, ofertas: [{ ...o.oferta, professorIds: ["p1"] }] });
     p.docentes[0].disponibilidade = { seg: [1, 4, 5] };
     p.docentes[0].evitar = { seg: [5] };
-    p.horario = { revisao: 0, completo: true, alocacoes: [], problemas: [] };
+    p.horario = { revisao: 0, completo: true, alocacoes: [], problemas: [], qualidade: [] };
 
     // Só mudar a hora de uma aula não renumera nada e mantém o horário gerado
     const soHora = trocarFaixas(p, p.quadro.faixas.map((f, i) => (i === 0 ? { ...f, inicio: "07:00" } : f)));

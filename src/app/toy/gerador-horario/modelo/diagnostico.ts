@@ -3,12 +3,12 @@
  *
  * - `diagnosticar`: o que impede ou ameaça um horário completo, antes de gerar. Cada pendência diz
  *   em que tela se corrige.
- * - `observarHorario`: como um horário já gerado se sai nas regras de qualidade (horários a evitar),
- *   que a busca exata ignora e o algoritmo genético tenta atender.
+ * - `observarHorario`: como um horário já gerado se sai nas regras de qualidade (horários a evitar,
+ *   jornada, descanso, intervalo), que a busca exata ignora e o algoritmo genético tenta atender.
  * - `detalharProblema`: quem está em choque numa célula que o solver marcou com problema.
  */
 
-import type { Cadastros, Dia, HorarioGerado, Id, Oferta, ProjetoHorario, Turma } from "./modelo.ts";
+import { DIAS, type Cadastros, type Dia, type HorarioGerado, type Id, type Oferta, type ProjetoHorario, type Turma } from "./modelo.ts";
 import {
     alunosDaOferta,
     ambienteDaOferta,
@@ -21,6 +21,10 @@ import {
     nomeNaTurma,
     numeroDeTempos,
 } from "./operacoes.ts";
+
+/** Os limites das regras de qualidade (os mesmos de rust-wasm/src/horario/horario_qualidade.rs). */
+export const JORNADA_MAXIMA_MIN = 10 * 60;
+export const DESCANSO_MINIMO_MIN = 11 * 60;
 
 export interface Pendencia {
     /** "erro": com isto não existe horário completo. "aviso": pode atrapalhar, ou merece conferência. */
@@ -155,32 +159,41 @@ export function diagnosticar(projeto: ProjetoHorario, cadastros: Cadastros): Pen
     return lista.sort((a, b) => Number(b.gravidade === "erro") - Number(a.gravidade === "erro"));
 }
 
-/** Aulas em horário que algum professor pediu para evitar (uma por professor da aula). */
-export function aulasAEvitar(projeto: ProjetoHorario, horario: HorarioGerado): number {
-    let n = 0;
-    for (const a of horario.alocacoes) {
-        const oferta = projeto.ofertas.find((o) => o.id === a.ofertaId);
-        for (const d of projeto.docentes) {
-            if (oferta?.professorIds.includes(d.professorId) && d.evitar[a.dia]?.includes(a.tempo) && d.disponibilidade[a.dia]?.includes(a.tempo)) n++;
+const NOME_DO_DIA: Record<Dia, string> = { dom: "domingo", seg: "segunda", ter: "terça", qua: "quarta", qui: "quinta", sex: "sexta", sab: "sábado" };
+
+/** "8h25", "10h" */
+const horas = (minutos: number) => `${Math.floor(minutos / 60)}h${minutos % 60 ? String(minutos % 60).padStart(2, "0") : ""}`;
+
+/**
+ * As regras de qualidade que o horário não atende, em frases. A medição vem do solver
+ * (`horario.qualidade`); aqui só entram os nomes.
+ */
+export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, horario: HorarioGerado): string[] {
+    const professor = (id?: Id) => nome(cadastros.professores.find((p) => p.id === id));
+    const lista: string[] = [];
+
+    // Horários a evitar: uma frase por professor
+    const aEvitar = new Map<Id, number>();
+    for (const o of horario.qualidade) {
+        if (o.regra === "evitar" && o.professorId) aEvitar.set(o.professorId, (aEvitar.get(o.professorId) ?? 0) + 1);
+    }
+    for (const [id, n] of aEvitar) lista.push(`${professor(id)} tem ${n === 1 ? "1 aula" : `${n} aulas`} em horários que pediu para evitar.`);
+
+    for (const o of horario.qualidade) {
+        const dia = NOME_DO_DIA[o.dia];
+        if (o.regra === "jornada") {
+            lista.push(`${professor(o.professorId)}, ${dia}: ${horas(JORNADA_MAXIMA_MIN + o.minutos)} entre o início da primeira aula e o fim da última (o limite é ${horas(JORNADA_MAXIMA_MIN)}).`);
+        } else if (o.regra === "descanso") {
+            const seguinte = NOME_DO_DIA[DIAS[DIAS.indexOf(o.dia) + 1] ?? o.dia];
+            lista.push(`${professor(o.professorId)}: ${horas(DESCANSO_MINIMO_MIN - o.minutos)} de descanso entre a última aula de ${dia} e a primeira de ${seguinte} (o mínimo é ${horas(DESCANSO_MINIMO_MIN)}).`);
+        } else if (o.regra === "intervalo" || o.regra === "turno") {
+            const oferta = projeto.ofertas.find((x) => x.id === o.ofertaId);
+            const turma = projeto.turmas.find((t) => t.id === o.turmaId);
+            const disciplina = (oferta && turma && nomeNaTurma(oferta, turma.id)) || "(sem nome)";
+            lista.push(`${disciplina} (${nome(turma)}), ${dia}: uma aula fica sozinha de um lado ${o.regra === "turno" ? "da troca de turno" : "do intervalo"}.`);
         }
     }
-    return n;
-}
-
-/** Como o horário se sai nas regras de qualidade: quem ficou com aula em horário a evitar. */
-export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, horario: HorarioGerado): string[] {
-    const lista: string[] = [];
-    const oferta = (id: Id) => projeto.ofertas.find((o) => o.id === id);
-
-    // Aulas em horário que o professor pediu para evitar
-    for (const d of projeto.docentes) {
-        const n = horario.alocacoes.filter(
-            (a) => d.evitar[a.dia]?.includes(a.tempo) && d.disponibilidade[a.dia]?.includes(a.tempo) && oferta(a.ofertaId)?.professorIds.includes(d.professorId),
-        ).length;
-        if (n > 0) lista.push(`${nome(cadastros.professores.find((p) => p.id === d.professorId))} tem ${n === 1 ? "1 aula" : `${n} aulas`} em horários que pediu para evitar.`);
-    }
-
-    return lista;
+    return [...new Set(lista)];
 }
 
 /**

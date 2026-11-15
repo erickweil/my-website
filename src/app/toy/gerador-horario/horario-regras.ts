@@ -44,11 +44,32 @@ export interface EntradaDoSolver {
     /** Professores e ambientes. */
     recursos: {
         id: string;
+        /** true = ambiente: só não pode ter duas aulas ao mesmo tempo, sem regras de qualidade. */
+        ambiente: boolean;
         /** Regra obrigatória: nunca tem aula fora destes tempos. */
         disponibilidade: HorariosPorDia;
         /** Regra de qualidade (só o algoritmo genético considera): tempos em que é melhor não ter aula. */
         evitar: HorariosPorDia;
     }[];
+    /**
+     * As aulas do dia, na ordem (a 1ª é o tempo 1), em minutos desde a meia-noite. As regras de
+     * qualidade de jornada, descanso e intervalo saem daqui.
+     */
+    tempos: { inicio: number; fim: number; turno: string }[];
+}
+
+/** Uma ocorrência de regra de qualidade num horário válido (`Ocorrencia` em horario_qualidade.rs). */
+export interface OcorrenciaDeQualidade {
+    regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno";
+    /** O professor (evitar, jornada, descanso). */
+    recurso: string | null;
+    /** A turma e a aula (evitar, intervalo, turno). */
+    turma: string | null;
+    aula: string | null;
+    /** O dia; no descanso, o primeiro dos dois. */
+    dia: HorarioDia;
+    /** Jornada: minutos acima das 10 horas. Descanso: minutos que faltam para as 11 horas. */
+    minutos: number;
 }
 
 export type SolverHorario = "pencilmark" | "genetic";
@@ -63,6 +84,8 @@ export interface ResultadoDoSolver {
     alguma_violacao: boolean;
     /** Mensagem para o usuário quando há violação ou não há solução. */
     mensagem: string | null;
+    /** Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade. */
+    qualidade: OcorrenciaDeQualidade[];
     /** Pencilmark: nós visitados. GA: geração. */
     iter: number;
     /** Pencilmark: ramos da busca ainda em aberto. GA: gerações sem melhora. */

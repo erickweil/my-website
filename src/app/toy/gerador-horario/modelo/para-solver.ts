@@ -5,7 +5,7 @@
 
 import type { EntradaDoSolver, ResultadoDoSolver } from "../horario-regras.ts";
 import type { HorarioGerado, Id, Oferta, ProjetoHorario } from "./modelo.ts";
-import { ambienteDaOferta, horariosCheios, limitarAoQuadro } from "./operacoes.ts";
+import { ambienteDaOferta, aulasDoQuadro, horariosCheios, limitarAoQuadro } from "./operacoes.ts";
 
 /**
  * A entrada do solver para o projeto.
@@ -14,6 +14,7 @@ import { ambienteDaOferta, horariosCheios, limitarAoQuadro } from "./operacoes.t
  * - Os recursos de uma aula são os professores dela e, se disputado, o ambiente. Só entram os
  *   ambientes usados por mais de uma turma: os outros não restringem nada.
  * - Disponibilidades e horários limitados aos dias e tempos do quadro.
+ * - As horas das aulas do quadro, para as regras de qualidade (jornada, descanso, intervalo).
  */
 export function paraSolver(projeto: ProjetoHorario): EntradaDoSolver {
     const ofertas = projeto.ofertas.filter((o) => o.aulasSemana > 0);
@@ -48,11 +49,16 @@ export function paraSolver(projeto: ProjetoHorario): EntradaDoSolver {
                 .filter((d) => comAula.has(d.professorId))
                 .map((d) => ({
                     id: d.professorId,
+                    ambiente: false,
                     disponibilidade: limitarAoQuadro(d.disponibilidade, projeto.quadro),
                     evitar: limitarAoQuadro(d.evitar, projeto.quadro),
                 })),
-            ...[...disputados].map((id) => ({ id, disponibilidade: horariosCheios(projeto.quadro), evitar: {} })),
+            ...[...disputados].map((id) => ({ id, ambiente: true, disponibilidade: horariosCheios(projeto.quadro), evitar: {} })),
         ],
+        tempos: aulasDoQuadro(projeto.quadro).map((f) => {
+            const [h, m] = f.inicio.split(":").map(Number);
+            return { inicio: h * 60 + m, fim: h * 60 + m + f.duracaoMin, turno: f.turno };
+        }),
     };
 }
 
@@ -73,5 +79,13 @@ export function doSolver(projeto: ProjetoHorario, resultado: ResultadoDoSolver):
         completo: resultado.alocacoes !== null && !resultado.alguma_violacao,
         alocacoes: (resultado.alocacoes ?? []).map((a) => ({ ofertaId: a.aula, dia: a.dia, tempo: a.tempo, fixada: false })),
         problemas,
+        qualidade: resultado.qualidade.map((o) => ({
+            regra: o.regra,
+            professorId: o.recurso ?? undefined,
+            turmaId: o.turma ?? undefined,
+            ofertaId: o.aula ?? undefined,
+            dia: o.dia,
+            minutos: o.minutos,
+        })),
     };
 }
