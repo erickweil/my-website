@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { Distribuicao, Id, Oferta, Professor } from "../modelo/modelo";
-import { aulasDaTurma, contarTempos, criarOferta, juntarOfertas, manterDocentes, ofertasDaTurma, separarTurma } from "../modelo/operacoes";
+import { aulasDaTurma, contarTempos, criarOferta, juntarOfertas, manterDocentes, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
 import { Ajuda, CampoNumero, Cabecalho, RotuloMovel, Selecao, Vazio, rotuloDoProfessor } from "../componentes/comuns";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 import { novoProfessor } from "./TelaProfessores";
@@ -59,7 +59,6 @@ export function TelaAulas({
     };
 
     const conjuntas = ofertas.filter((o) => o.participacoes.length > 1);
-    const outrasTurmas = (o: Oferta) => o.participacoes.filter((x) => x.turmaId !== turma.id).map((x) => nomeDaTurma(x.turmaId)).join(", ");
 
     return (
         <div>
@@ -89,22 +88,22 @@ export function TelaAulas({
             <div className="rounded-2xl border border-border">
                 <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
                     <span>Disciplina</span>
-                    <span>Sigla</span>
                     <span>Professores</span>
                     <span className="text-center">Aulas/sem.</span>
-                    <span>Distribuição</span>
+                    <span title="Aulas seguidas por bloco (2 = aulas duplas). 0 = sem agrupamento.">Agrupar</span>
                     <span />
                 </div>
                 {ofertas.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma disciplina nesta turma.</p>}
                 {ofertas.map((o) => (
                     <div key={o.id} className={cn(COLUNAS, "grid border-t border-border py-2 first:border-t-0 md:first:border-t")}>
                         <div className="col-span-5 md:col-span-1">
-                            <Input aria-label="Disciplina" className="h-8" placeholder="Nome da disciplina" value={o.nome} onChange={(e) => mudarOferta(o.id, { nome: e.target.value }, true)} />
-                            {o.participacoes.length > 1 && (
-                                <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                                    <Link2 className="size-3" /> em conjunto com {outrasTurmas(o)}
-                                </p>
-                            )}
+                            <Input
+                                aria-label="Disciplina"
+                                className="h-8"
+                                placeholder="Nome da disciplina"
+                                value={nomeNaTurma(o, turma.id)}
+                                onChange={(e) => mudarProjeto((p) => ({ ...p, ofertas: p.ofertas.map((x) => (x.id === o.id ? renomearNaTurma(x, turma.id, e.target.value) : x)) }), true)}
+                            />
                         </div>
                         <div className="col-span-1 text-right md:order-last">
                             <Button size="icon-sm" variant="ghost" title="Remover disciplina da turma" className="text-destructive hover:text-destructive" onClick={() => remover(o)}>
@@ -124,16 +123,12 @@ export function TelaAulas({
                                 }}
                             />
                         </div>
-                        <div className="col-span-3 md:order-2 md:col-span-1">
-                            <RotuloMovel>Sigla</RotuloMovel>
-                            <Input aria-label="Sigla" className="h-8" placeholder="opcional" value={o.sigla} onChange={(e) => mudarOferta(o.id, { sigla: e.target.value }, true)} />
-                        </div>
-                        <div className="col-span-3 md:order-4 md:col-span-1">
-                            <RotuloMovel>Aulas por semana</RotuloMovel>
+                        <div className="col-span-2 md:order-4 md:col-span-1">
+                            <RotuloMovel>Aulas/sem.</RotuloMovel>
                             <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={o.aulasSemana} onChange={(n) => mudarOferta(o.id, { aulasSemana: n })} />
                         </div>
-                        <div className="col-span-6 md:order-5 md:col-span-1">
-                            <RotuloMovel>Distribuição</RotuloMovel>
+                        <div className="col-span-4 md:order-5 md:col-span-1">
+                            <RotuloMovel>Agrupar</RotuloMovel>
                             <CampoDistribuicao valor={o.distribuicao} onChange={(distribuicao) => mudarOferta(o.id, { distribuicao })} />
                         </div>
                     </div>
@@ -159,13 +154,17 @@ export function TelaAulas({
                     {conjuntas.map((o) => (
                         <div key={o.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-border px-3 py-2 text-sm">
                             <Link2 className="size-4 text-muted-foreground" />
-                            <span className="font-medium">{o.nome || "(sem nome)"}</span>
-                            <span className="text-muted-foreground">com</span>
+                            <span>
+                                <span className="font-medium">{nomeNaTurma(o, turma.id) || "(sem nome)"}</span>
+                                <span className="text-muted-foreground"> ({turma.nome})</span>
+                            </span>
                             {o.participacoes.filter((x) => x.turmaId !== turma.id).map((x) => (
-                                <span key={x.turmaId} className="inline-flex items-center gap-1 rounded-2xl bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
-                                    {nomeDaTurma(x.turmaId)}
-                                    <button type="button" title="Separar: a turma volta a ter esta disciplina sozinha" className="opacity-60 hover:opacity-100" onClick={() => mudarProjeto((p) => separarTurma(p, o.id, x.turmaId))}>
-                                        <X className="size-3" />
+                                <span key={x.turmaId} className="inline-flex items-center gap-1.5">
+                                    <span className="text-muted-foreground">+</span>
+                                    <span className="font-medium">{nomeNaTurma(o, x.turmaId) || "(sem nome)"}</span>
+                                    <span className="text-muted-foreground">({nomeDaTurma(x.turmaId)})</span>
+                                    <button type="button" title="Separar: a turma volta a ter esta disciplina sozinha" className="text-muted-foreground hover:text-destructive" onClick={() => mudarProjeto((p) => separarTurma(p, o.id, x.turmaId))}>
+                                        <X className="size-3.5" />
                                     </button>
                                 </span>
                             ))}
@@ -173,9 +172,10 @@ export function TelaAulas({
                     ))}
                     <FormularioDeJuncao
                         daTurma={ofertas}
+                        turmaId={turma.id}
                         deOutras={projeto.ofertas
                             .filter((c) => !c.participacoes.some((x) => x.turmaId === turma.id))
-                            .map((c) => ({ oferta: c, turmas: c.participacoes.map((x) => nomeDaTurma(x.turmaId)).join(" + ") }))}
+                            .map((c) => ({ oferta: c, rotulo: c.participacoes.map((x) => `${nomeDaTurma(x.turmaId)}: ${nomeNaTurma(c, x.turmaId) || "(sem nome)"}`).join(" + ") }))}
                         onJuntar={juntar}
                     />
                     {erro && <p className="text-sm text-destructive">{erro}</p>}
@@ -186,36 +186,35 @@ export function TelaAulas({
 }
 
 /** Colunas da tabela de aulas no computador; no celular, 6 colunas em que os campos se empilham. */
-const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 md:grid-cols-[minmax(9rem,1fr)_6rem_minmax(10rem,15rem)_5rem_11rem_2rem]";
+const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 md:grid-cols-[minmax(9rem,1fr)_minmax(10rem,16rem)_5rem_12rem_2rem]";
 
-/** Distribuição das aulas na semana, com os nomes do dia a dia. */
+/**
+ * Agrupamento das aulas: quantas aulas seguidas formam um bloco (0 = sem agrupamento) e se dois
+ * blocos podem ficar encostados no mesmo dia.
+ */
 function CampoDistribuicao({ valor, onChange }: { valor: Distribuicao; onChange: (d: Distribuicao) => void }) {
-    const tamanho = valor.tipo === "blocos" ? valor.tamanho : 0;
-    const tamanhos = [...new Set([2, 3, 4, tamanho])].filter((n) => n > 0).sort((a, b) => a - b);
     return (
-        <div className="space-y-1">
-            <Selecao
-                aria-label="Distribuição"
-                className="h-8 w-full"
-                value={tamanho}
-                onChange={(e) => {
-                    const n = Number(e.target.value);
-                    onChange(n === 0 ? { tipo: "livre" } : { tipo: "blocos", tamanho: n, emendar: valor.tipo === "blocos" && valor.emendar });
-                }}
+        <div className="flex items-center gap-2">
+            <CampoNumero
+                aria-label="Agrupar"
+                title="Aulas seguidas por bloco (2 = aulas duplas). 0 = sem agrupamento."
+                className="h-8 w-16 shrink-0"
+                max={12}
+                valor={valor.tipo === "blocos" ? valor.tamanho : 0}
+                // Bloco de 1 aula é o mesmo que não agrupar
+                onChange={(n) => onChange(n < 2 ? { tipo: "livre" } : { tipo: "blocos", tamanho: n, emendar: valor.tipo === "blocos" && valor.emendar })}
+            />
+            <label
+                className={cn("flex items-center gap-1.5 text-xs", valor.tipo === "blocos" ? "text-muted-foreground" : "text-muted-foreground/50")}
+                title="Permite dois blocos seguidos no mesmo dia (por exemplo, 4 aulas seguidas de uma disciplina de aulas duplas)."
             >
-                <option value={0}>Livre</option>
-                {tamanhos.map((n) => (
-                    <option key={n} value={n}>
-                        {n === 2 ? "Aulas duplas" : `Blocos de ${n} aulas`}
-                    </option>
-                ))}
-            </Selecao>
-            {valor.tipo === "blocos" && (
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Permite dois blocos seguidos no mesmo dia (por exemplo, 4 aulas seguidas de uma disciplina de aulas duplas).">
-                    <Checkbox checked={valor.emendar} onCheckedChange={(v) => onChange({ ...valor, emendar: v === true })} />
-                    pode emendar blocos
-                </label>
-            )}
+                <Checkbox
+                    disabled={valor.tipo !== "blocos"}
+                    checked={valor.tipo === "blocos" && valor.emendar}
+                    onCheckedChange={(v) => valor.tipo === "blocos" && onChange({ ...valor, emendar: v === true })}
+                />
+                emendar blocos
+            </label>
         </div>
     );
 }
@@ -283,9 +282,10 @@ function SeletorProfessores({
 /** Escolhe uma disciplina desta turma e uma de outra, para serem dadas juntas. */
 function FormularioDeJuncao({
     daTurma,
+    turmaId,
     deOutras,
     onJuntar,
-}: { daTurma: Oferta[]; deOutras: { oferta: Oferta; turmas: string }[]; onJuntar: (ficaId: Id, saiId: Id) => void }) {
+}: { daTurma: Oferta[]; turmaId: Id; deOutras: { oferta: Oferta; rotulo: string }[]; onJuntar: (ficaId: Id, saiId: Id) => void }) {
     const [fica, setFica] = useState("");
     const [sai, setSai] = useState("");
     if (daTurma.length === 0 || deOutras.length === 0) {
@@ -296,14 +296,14 @@ function FormularioDeJuncao({
             <Selecao aria-label="Disciplina desta turma" className="h-8 max-w-full" value={fica} onChange={(e) => setFica(e.target.value)}>
                 <option value="">Disciplina desta turma…</option>
                 {daTurma.map((o) => (
-                    <option key={o.id} value={o.id}>{o.nome || "(sem nome)"} ({o.aulasSemana} aulas)</option>
+                    <option key={o.id} value={o.id}>{nomeNaTurma(o, turmaId) || "(sem nome)"} ({o.aulasSemana} aulas)</option>
                 ))}
             </Selecao>
             <span className="text-muted-foreground">com</span>
             <Selecao aria-label="Disciplina de outra turma" className="h-8 max-w-full" value={sai} onChange={(e) => setSai(e.target.value)}>
                 <option value="">Disciplina de outra turma…</option>
-                {deOutras.map(({ oferta, turmas }) => (
-                    <option key={oferta.id} value={oferta.id}>{turmas}: {oferta.nome || "(sem nome)"} ({oferta.aulasSemana} aulas)</option>
+                {deOutras.map(({ oferta, rotulo }) => (
+                    <option key={oferta.id} value={oferta.id}>{rotulo} ({oferta.aulasSemana} aulas)</option>
                 ))}
             </Selecao>
             <Button

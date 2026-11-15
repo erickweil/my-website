@@ -9,11 +9,10 @@ import type { Contexto } from "../useAreaDeTrabalho";
 export const novoProfessor = (existentes: Professor[], nome = ""): Professor => ({
     id: novoId(),
     nome,
-    sigla: "",
     cor: PALETA_CORES[existentes.length % PALETA_CORES.length],
 });
 
-const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 md:grid-cols-[2.5rem_1fr_8rem_minmax(8rem,14rem)_2rem]";
+const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 md:grid-cols-[2.5rem_1fr_minmax(8rem,16rem)_2rem]";
 
 export function TelaProfessores({ area, mudarArea }: Contexto) {
     const { professores } = area.cadastros;
@@ -34,7 +33,7 @@ export function TelaProfessores({ area, mudarArea }: Contexto) {
                         <Plus /> Professor
                     </Button>
                 }
-                ajuda="O cadastro vale para todos os projetos. A disponibilidade de cada professor é definida dentro do projeto, em Docentes, porque muda a cada período letivo. A sigla é o que aparece no horário quando o espaço é pequeno."
+                ajuda="O cadastro vale para todos os projetos. A disponibilidade de cada professor é definida dentro do projeto, em Docentes, porque muda a cada período letivo."
             />
 
             {professores.length === 0 ? (
@@ -44,7 +43,6 @@ export function TelaProfessores({ area, mudarArea }: Contexto) {
                     <div className={COLUNAS + " hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid"}>
                         <span>Cor</span>
                         <span>Nome</span>
-                        <span>Sigla</span>
                         <span>Aulas por semana</span>
                         <span />
                     </div>
@@ -76,8 +74,7 @@ export function TelaProfessores({ area, mudarArea }: Contexto) {
                                         <Trash2 />
                                     </Button>
                                 </div>
-                                <Input aria-label="Sigla" className="col-span-2 h-8 md:col-span-1" placeholder="sigla" value={p.sigla} onChange={(e) => mudar(p.id, { sigla: e.target.value })} />
-                                <span className="col-span-4 text-xs text-muted-foreground md:col-span-1">
+                                <span className="col-span-6 text-xs text-muted-foreground md:col-span-1">
                                     {cargas.length === 0 ? "sem aulas" : cargas.map((c) => `${c.aulas} em ${c.nome}`).join(" · ")}
                                 </span>
                             </div>

@@ -232,7 +232,6 @@ const ofertaDoComponente = (c: Componente, turmaId: Id): Oferta => ({
     id: novoId(),
     participacoes: [{ turmaId, componenteId: c.id }],
     nome: c.nome,
-    sigla: c.sigla,
     aulasSemana: c.aulasSemana,
     distribuicao: { ...c.distribuicao },
     ambienteId: null,
@@ -286,7 +285,6 @@ export function criarOferta(projeto: ProjetoHorario, turmaId: Id, componente?: C
             id: novoId(),
             participacoes: [{ turmaId, componenteId: null }],
             nome: "",
-            sigla: "",
             aulasSemana: 2,
             distribuicao: { tipo: "livre" },
             ambienteId: null,
@@ -329,9 +327,11 @@ export function juntarOfertas(projeto: ProjetoHorario, ficaId: Id, saiId: Id): {
     if (fica.aulasSemana !== sai.aulasSemana || !mesmaDistribuicao(fica.distribuicao, sai.distribuicao)) {
         return { erro: "Para juntar, as duas ofertas precisam ter o mesmo número de aulas e a mesma distribuição." };
     }
+    // Cada turma continua chamando a disciplina pelo nome que tinha
+    const comNome = (o: Oferta) => o.participacoes.map((p) => ({ ...p, nome: p.nome ?? o.nome }));
     const junta: Oferta = {
         ...fica,
-        participacoes: [...fica.participacoes, ...sai.participacoes],
+        participacoes: [...comNome(fica), ...comNome(sai)],
         professorIds: [...new Set([...fica.professorIds, ...sai.professorIds])],
     };
     return {
@@ -347,10 +347,26 @@ export function separarTurma(projeto: ProjetoHorario, ofertaId: Id, turmaId: Id)
     const oferta = projeto.ofertas.find((o) => o.id === ofertaId);
     const participacao = oferta?.participacoes.find((p) => p.turmaId === turmaId);
     if (!oferta || !participacao || oferta.participacoes.length < 2) return projeto;
-    const separada: Oferta = { ...oferta, id: novoId(), participacoes: [participacao], professorIds: [...oferta.professorIds] };
-    const resto: Oferta = { ...oferta, participacoes: oferta.participacoes.filter((p) => p !== participacao) };
+    const sozinha = (o: Oferta): Oferta =>
+        o.participacoes.length > 1 ? o : { ...o, nome: o.participacoes[0].nome ?? o.nome, participacoes: [{ ...o.participacoes[0], nome: undefined }] };
+    const separada = sozinha({ ...oferta, id: novoId(), participacoes: [participacao], professorIds: [...oferta.professorIds] });
+    const resto = sozinha({ ...oferta, participacoes: oferta.participacoes.filter((p) => p !== participacao) });
     return { ...projeto, ofertas: projeto.ofertas.flatMap((o) => (o.id === ofertaId ? [resto, separada] : [o])) };
 }
+
+/** Nome da disciplina para uma turma (numa aula conjunta cada turma pode ter o seu). */
+export const nomeNaTurma = (oferta: Oferta, turmaId: Id) =>
+    oferta.participacoes.find((p) => p.turmaId === turmaId)?.nome ?? oferta.nome;
+
+/** Renomeia a disciplina para uma turma: numa aula conjunta, só para ela. */
+export const renomearNaTurma = (oferta: Oferta, turmaId: Id, nome: string): Oferta =>
+    oferta.participacoes.length > 1
+        ? { ...oferta, participacoes: oferta.participacoes.map((p) => (p.turmaId === turmaId ? { ...p, nome } : p)) }
+        : { ...oferta, nome };
+
+/** Em quantas turmas diferentes o professor dá aula no projeto. */
+export const turmasDoProfessor = (projeto: ProjetoHorario, professorId: Id) =>
+    new Set(projeto.ofertas.filter((o) => o.professorIds.includes(professorId)).flatMap((o) => o.participacoes.map((p) => p.turmaId))).size;
 
 /** Ambiente em que a oferta acontece: o dela, ou o padrão da primeira turma. */
 export function ambienteDaOferta(projeto: ProjetoHorario, oferta: Oferta): Id | null {
@@ -376,10 +392,9 @@ export function buscarComponente(cursos: Curso[], componenteId: Id): Componente 
 }
 
 /** Campos em que a oferta difere do componente de onde veio (vazio = igual à matriz). */
-export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("nome" | "sigla" | "aulasSemana" | "distribuicao")[] {
+export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("nome" | "aulasSemana" | "distribuicao")[] {
     const dif: ReturnType<typeof diferencasDaMatriz> = [];
     if (oferta.nome !== componente.nome) dif.push("nome");
-    if (oferta.sigla !== componente.sigla) dif.push("sigla");
     if (oferta.aulasSemana !== componente.aulasSemana) dif.push("aulasSemana");
     if (!mesmaDistribuicao(oferta.distribuicao, componente.distribuicao)) dif.push("distribuicao");
     return dif;
@@ -389,7 +404,6 @@ export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("no
 export const atualizarPelaMatriz = (oferta: Oferta, componente: Componente): Oferta => ({
     ...oferta,
     nome: componente.nome,
-    sigla: componente.sigla,
     aulasSemana: componente.aulasSemana,
     distribuicao: { ...componente.distribuicao },
 });

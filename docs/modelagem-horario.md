@@ -81,7 +81,6 @@ interface Periodo {
 interface Componente {
   id: Id;
   nome: string;
-  sigla: string;                // o que cabe na célula do horário
   aulasSemana: number;          // o que o solver usa
   cargaHoraria?: number;        // horas totais do PPC; só informativo
   distribuicao: Distribuicao;
@@ -131,7 +130,6 @@ Sem categorias. Sala e laboratório são ambientes iguais; o que muda é quem os
 interface Professor {
   id: Id;
   nome: string;
-  sigla: string;
   cor: string;
 }
 ```
@@ -210,9 +208,9 @@ dependência, curso FIC, e para quem quer usar o gerador sem cadastrar curso nen
 ```ts
 interface Oferta {
   id: Id;
-  participacoes: { turmaId: Id; componenteId: Id | null }[]; // mais de uma = turmas juntas
+  // mais de uma = turmas juntas; numa aula conjunta cada turma pode ter o seu nome da disciplina
+  participacoes: { turmaId: Id; componenteId: Id | null; nome?: string }[];
   nome: string;                  // copiado do componente; editável
-  sigla: string;
   aulasSemana: number;
   distribuicao: Distribuicao;
   ambienteId: Id | null;         // null = o ambiente padrão da turma
@@ -370,3 +368,5 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 | Armazenamento | `localStorage`, só no front end |
 | Endereço | A mesma página (`/toy/gerador-horario`), substituindo a atual |
 | Compatibilidade com o formato antigo | Não é necessária |
+| Sigla de disciplina e de professor | Não existe: o horário mostra o nome, quebrando a linha |
+| Disciplinas com o mesmo nome | Permitido, em turmas diferentes ou na mesma: a identidade é o id |

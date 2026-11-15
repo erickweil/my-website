@@ -18,6 +18,9 @@ import {
     gerarFaixas,
     horariosCheios,
     juntarOfertas,
+    nomeNaTurma,
+    renomearNaTurma,
+    turmasDoProfessor,
     manterDocentes,
     novoProjeto,
     numeroDeTempos,
@@ -43,11 +46,11 @@ const curso = (): Curso => ({
             id: "ads-1",
             numero: 1,
             componentes: [
-                { id: "alg", nome: "Algoritmos", sigla: "ALG", aulasSemana: 4, distribuicao: { tipo: "blocos", tamanho: 2, emendar: false } },
-                { id: "mat", nome: "Matemática", sigla: "MAT", aulasSemana: 2, distribuicao: { tipo: "livre" } },
+                { id: "alg", nome: "Algoritmos", aulasSemana: 4, distribuicao: { tipo: "blocos", tamanho: 2, emendar: false } },
+                { id: "mat", nome: "Matemática", aulasSemana: 2, distribuicao: { tipo: "livre" } },
             ],
         },
-        { id: "ads-2", numero: 2, componentes: [{ id: "bd", nome: "Banco de Dados", sigla: "BD", aulasSemana: 4, distribuicao: { tipo: "livre" } }] },
+        { id: "ads-2", numero: 2, componentes: [{ id: "bd", nome: "Banco de Dados", aulasSemana: 4, distribuicao: { tipo: "livre" } }] },
     ],
 });
 
@@ -86,7 +89,7 @@ test("turma de um período nasce com as ofertas da matriz, que são cópias", ()
     assert.equal(contarTempos(r.turma.horarios), 15, "3 tempos da manhã em 5 dias");
 
     const ofertas = ofertasDaTurma(r.projeto, r.turma.id);
-    assert.deepEqual(ofertas.map((o) => [o.sigla, o.aulasSemana, o.participacoes[0].componenteId]), [["ALG", 4, "alg"], ["MAT", 2, "mat"]]);
+    assert.deepEqual(ofertas.map((o) => [o.nome, o.aulasSemana, o.participacoes[0].componenteId]), [["Algoritmos", 4, "alg"], ["Matemática", 2, "mat"]]);
     assert.equal(aulasDaTurma(r.projeto, r.turma.id), 6);
 
     // Alterar a oferta não toca a matriz, e a diferença aparece
@@ -97,7 +100,7 @@ test("turma de um período nasce com as ofertas da matriz, que são cópias", ()
     assert.equal(alg.aulasSemana, 4);
 
     // Tirar uma oferta da turma: o componente aparece como não ofertado
-    const semMat = { ...r.projeto, ofertas: r.projeto.ofertas.filter((o) => o.sigla !== "MAT") };
+    const semMat = { ...r.projeto, ofertas: r.projeto.ofertas.filter((o) => o.nome !== "Matemática") };
     assert.deepEqual(componentesNaoOfertados(semMat, r.turma, [c]).map((x) => x.id), ["mat"]);
 
     assert.throws(() => criarTurmaDePeriodo(r.projeto, c, "nao-existe", { nome: "X" }));
@@ -119,7 +122,7 @@ test("duplicar curso dá ids novos e mantém o conteúdo", () => {
     assert.equal(copia.nome, "ADS — matriz 2028");
     assert.notEqual(copia.id, c.id);
     assert.notEqual(copia.periodos[0].componentes[0].id, "alg");
-    assert.deepEqual(copia.periodos.map((p) => p.componentes.map((x) => x.sigla)), [["ALG", "MAT"], ["BD"]]);
+    assert.deepEqual(copia.periodos.map((p) => p.componentes.map((x) => x.nome)), [["Algoritmos", "Matemática"], ["Banco de Dados"]]);
     copia.periodos[0].componentes[0].distribuicao = { tipo: "livre" };
     assert.equal(c.periodos[0].componentes[0].distribuicao.tipo, "blocos", "a cópia não divide objetos com o original");
 });
@@ -131,11 +134,15 @@ test("juntar, separar e remover turma", () => {
     const oa = criarOferta(b.projeto, a.turma.id);
     const ob = criarOferta(oa.projeto, b.turma.id);
     p = ob.projeto;
-    p.ofertas = p.ofertas.map((o) => ({ ...o, professorIds: [o.id === oa.oferta.id ? "p1" : "p2"] }));
+    p.ofertas = p.ofertas.map((o) => (o.id === oa.oferta.id ? { ...o, nome: "Projeto A", professorIds: ["p1"] } : { ...o, nome: "Projeto B", professorIds: ["p2"] }));
 
     const junta = juntarOfertas(p, oa.oferta.id, ob.oferta.id);
     assert.ok("projeto" in junta);
     const [conjunta] = junta.projeto.ofertas;
+    // Cada turma continua com o nome que dava à disciplina, e pode mudar o seu sem mexer no da outra
+    assert.deepEqual([a, b].map((t) => nomeNaTurma(conjunta, t.turma.id)), ["Projeto A", "Projeto B"]);
+    const renomeada = renomearNaTurma(conjunta, b.turma.id, "Projeto Integrador");
+    assert.deepEqual([a, b].map((t) => nomeNaTurma(renomeada, t.turma.id)), ["Projeto A", "Projeto Integrador"]);
     assert.equal(junta.projeto.ofertas.length, 1);
     assert.deepEqual(conjunta.participacoes.map((x) => x.turmaId), [a.turma.id, b.turma.id]);
     assert.deepEqual(conjunta.professorIds, ["p1", "p2"]);
@@ -151,6 +158,9 @@ test("juntar, separar e remover turma", () => {
 
     const separado = separarTurma(junta.projeto, conjunta.id, b.turma.id);
     assert.deepEqual(separado.ofertas.map((o) => o.participacoes.map((x) => x.turmaId)), [[a.turma.id], [b.turma.id]]);
+    assert.deepEqual(separado.ofertas.map((o) => [o.nome, o.participacoes[0].nome]), [["Projeto A", undefined], ["Projeto B", undefined]], "separadas, cada uma volta a ter o seu nome");
+    assert.equal(turmasDoProfessor(junta.projeto, "p1"), 2, "na aula conjunta o professor atende as duas turmas");
+    assert.equal(turmasDoProfessor(p, "p1"), 1);
 
     // Remover a turma A: a oferta conjunta fica só com B; a oferta só de A some, e o docente dela também
     const semA = removerTurma(manterDocentes(junta.projeto), a.turma.id);
@@ -327,4 +337,37 @@ test("trocar os dias do quadro", () => {
     assert.deepEqual(novo.quadro.dias, ["seg", "ter", "sab"], "na ordem da semana");
     assert.deepEqual(Object.keys(novo.turmas[0].horarios), ["seg", "ter"], "a turma não ganha o sábado e perde qua-sex");
     assert.equal(contarTempos(novo.docentes[0].disponibilidade), 15, "o docente fica disponível no sábado");
+});
+
+test("disciplinas com o mesmo nome, em turmas diferentes ou na mesma, não se confundem", () => {
+    let p = projetoDoisTurnos();
+    const a = criarTurmaAvulsa(p, { nome: "1A" });
+    const b = criarTurmaAvulsa(a.projeto, { nome: "1B" });
+    p = b.projeto;
+    const ids: string[] = [];
+    // "Matemática" na 1A (prof. p1), "Matemática" na 1B (prof. p2) e uma segunda "Matemática" na 1B (prof. p3)
+    for (const [turmaId, professorId] of [[a.turma.id, "p1"], [b.turma.id, "p2"], [b.turma.id, "p3"]]) {
+        const r = criarOferta(p, turmaId);
+        ids.push(r.oferta.id);
+        p = { ...r.projeto, ofertas: r.projeto.ofertas.map((o) => (o.id === r.oferta.id ? { ...o, nome: "Matemática", professorIds: [professorId] } : o)) };
+    }
+    p = manterDocentes(p);
+
+    const { formulario } = paraSolver(p);
+    const nomes = formulario.disciplinas.map((d) => d.nome);
+    assert.equal(new Set(nomes).size, 3, "cada uma é uma disciplina distinta para o solver");
+    assert.deepEqual(formulario.disciplinas.map((d) => d.turma), [a.turma.id, b.turma.id, b.turma.id]);
+    // Cada professor fica só com a sua
+    assert.deepEqual(formulario.professores.map((x) => [x.nome, x.disciplinas]), [["p1", [nomes[0]]], ["p2", [nomes[1]]], ["p3", [nomes[2]]]]);
+
+    // E o resultado volta para a oferta certa
+    const celula = (descricao: string | null) => ({ descricao, violacao: null });
+    const horario = doSolver(p, {
+        solucao: [
+            { turma: a.turma.id, horario: [{ dia: "seg", tempos: [celula(nomes[0])] }] },
+            { turma: b.turma.id, horario: [{ dia: "seg", tempos: [celula(nomes[2])] }] },
+        ],
+        alguma_violacao: false, mensagem: null, iter: 1, depth: 0, terminou: true,
+    });
+    assert.deepEqual(horario.alocacoes.map((x) => x.ofertaId), [ids[0], ids[2]]);
 });

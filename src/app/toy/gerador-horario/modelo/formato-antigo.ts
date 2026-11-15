@@ -44,7 +44,6 @@ export function projetoDoFormatoAntigo(
     const professores: Professor[] = f.professores.map((p, i) => ({
         id: novoId(),
         nome: p.nome,
-        sigla: "",
         cor: PALETA_CORES[i % PALETA_CORES.length],
     }));
 
@@ -57,7 +56,6 @@ export function projetoDoFormatoAntigo(
         const oferta = {
             ...r.oferta,
             nome: d.nome,
-            sigla: "",
             aulasSemana: d.aulas || 0,
             distribuicao: agrupar > 1 ? { tipo: "blocos" as const, tamanho: agrupar, emendar: !d.dividir } : { tipo: "livre" as const },
             professorIds: f.professores.flatMap((p, i) => (p.disciplinas.includes(d.nome) ? [professores[i].id] : [])),

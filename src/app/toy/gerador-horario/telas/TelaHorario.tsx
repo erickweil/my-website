@@ -7,7 +7,7 @@ import { raceWorkers } from "@/lib/workerRace";
 import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP, type HorarioWorkerTaskValue, type SolverHorario } from "../horario-regras";
 import type { Dia, HorarioGerado, Id, Oferta, Professor, ProjetoHorario, Turma } from "../modelo/modelo";
-import { aulasDaTurma, aulasDoProfessor, contarTempos, fimDaFaixa, limitarAoQuadro, ofertasDaTurma } from "../modelo/operacoes";
+import { aulasDaTurma, aulasDoProfessor, contarTempos, fimDaFaixa, limitarAoQuadro, nomeNaTurma, ofertasDaTurma } from "../modelo/operacoes";
 import { doSolver, paraSolver } from "../modelo/para-solver";
 import { Ajuda, Cabecalho, Selecao, Vazio, corDoTexto, rotuloDoProfessor } from "../componentes/comuns";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
@@ -116,9 +116,7 @@ export function TelaHorario({ area, projeto, salvarHorario }: ContextoDoProjeto)
                         {parcial ? `${parcial.alocacoes.length} de ${totalDeAulas} aulas alocadas…` : "Preparando…"}
                     </span>
                 )}
-                <details className="ml-auto text-sm">
-                    <summary className="cursor-pointer text-muted-foreground">Opções avançadas</summary>
-                    <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
                         <label className="flex items-center gap-2">
                             Método
                             <Ajuda>
@@ -136,7 +134,6 @@ export function TelaHorario({ area, projeto, salvarHorario }: ContextoDoProjeto)
                             </label>
                         )}
                     </div>
-                </details>
             </div>
 
             {erro && (
@@ -265,13 +262,13 @@ function QuadroDaTurma({
                                         return (
                                             <td
                                                 key={d}
-                                                title={problema ?? (oferta ? `${oferta.nome} — ${profs.map((p) => p?.nome).join(", ")}` : undefined)}
+                                                title={problema ?? (oferta ? `${nomeNaTurma(oferta, turma.id)} — ${profs.map((p) => p?.nome).join(", ")}` : undefined)}
                                                 className={cn("relative h-12 border-l border-border px-0.5 py-0.5 text-center text-[0.65rem] leading-tight hyphens-auto sm:px-1 sm:text-xs", !temAula && "bg-muted/40", problema && "outline-2 -outline-offset-2 outline-destructive")}
                                                 style={oferta && cor ? { backgroundColor: cor, color: corDoTexto(cor) } : undefined}
                                             >
                                                 {oferta ? (
                                                     <>
-                                                        <p className="line-clamp-2 font-medium break-words text-balance">{oferta.sigla || oferta.nome || "(sem nome)"}</p>
+                                                        <p className="line-clamp-3 font-medium break-words text-balance sm:line-clamp-2">{nomeNaTurma(oferta, turma.id) || "(sem nome)"}</p>
                                                         <p className="hidden truncate opacity-80 sm:block">{profs.map(rotuloDoProfessor).join(", ")}</p>
                                                     </>
                                                 ) : temAula ? (

@@ -18,7 +18,7 @@ export interface ContextoDoProjeto extends Contexto {
     projeto: ProjetoHorario;
     /**
      * Altera o projeto aberto. Por padrão a alteração deixa o horário gerado desatualizado;
-     * `cosmetica` é para o que não muda o horário (nomes, siglas, cores).
+     * `cosmetica` é para o que não muda o horário (nomes, cores).
      */
     mudarProjeto: (fn: (projeto: ProjetoHorario) => ProjetoHorario, cosmetica?: boolean) => void;
     salvarHorario: (horario: HorarioGerado | null) => void;

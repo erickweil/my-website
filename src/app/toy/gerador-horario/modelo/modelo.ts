@@ -46,8 +46,6 @@ const distribuicao = z.discriminatedUnion("tipo", [
 const componente = z.object({
     id,
     nome: z.string(),
-    /** O que cabe na célula do horário. */
-    sigla: z.string(),
     aulasSemana: inteiro.min(0),
     /** Horas totais do PPC; só informativo. */
     cargaHoraria: z.number().min(0).optional(),
@@ -74,7 +72,6 @@ const curso = z.object({
 const professor = z.object({
     id,
     nome: z.string(),
-    sigla: z.string(),
     /** Cor das aulas dele no horário, "#rrggbb". */
     cor: z.string(),
 });
@@ -124,10 +121,12 @@ const turma = z.object({
  */
 const oferta = z.object({
     id,
-    /** Mais de uma participação = turmas juntas na mesma aula. */
-    participacoes: z.array(z.object({ turmaId: id, componenteId: id.nullable() })).min(1),
+    /**
+     * Mais de uma participação = turmas juntas na mesma aula. Numa aula conjunta cada turma pode
+     * chamar a disciplina pelo seu nome (`nome`); sem ele vale o nome da oferta.
+     */
+    participacoes: z.array(z.object({ turmaId: id, componenteId: id.nullable(), nome: z.string().optional() })).min(1),
     nome: z.string(),
-    sigla: z.string(),
     aulasSemana: inteiro.min(0),
     distribuicao,
     /** null = o ambiente padrão da turma (da primeira, se houver várias). */

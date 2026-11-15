@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { DocenteNoProjeto, Id } from "../modelo/modelo";
-import { aulasDoProfessor, contarTempos, limitarAoQuadro } from "../modelo/operacoes";
-import { Cabecalho, ItemDaLista, ListaLateral, Vazio } from "../componentes/comuns";
+import { aulasDoProfessor, contarTempos, limitarAoQuadro, turmasDoProfessor } from "../modelo/operacoes";
+import { Cabecalho, ItemDaLista, ListaLateral, Vazio, plural } from "../componentes/comuns";
 import { GradeTempos, LegendaDaGrade, pintarHorarios, type EstadoDaGrade } from "../componentes/GradeTempos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
 const ESTADOS: Record<string, EstadoDaGrade> = {
     pode: { rotulo: "Disponível", classe: "bg-emerald-500/70 hover:bg-emerald-500" },
-    evitar: { rotulo: "Evitar", classe: "bg-amber-400/80 hover:bg-amber-400" },
+    evitar: { rotulo: "Evitar", classe: "bg-red-500/75 hover:bg-red-500" },
     nao: { rotulo: "Indisponível", classe: "bg-muted/50 hover:bg-muted" },
 };
 
@@ -18,6 +18,10 @@ export function TelaDocentes({ area, projeto, mudarProjeto }: ContextoDoProjeto)
     const docentes = [...projeto.docentes].sort((a, b) => nomeDe(a.professorId).localeCompare(nomeDe(b.professorId)));
     const docente = docentes.find((d) => d.professorId === selecionado) ?? docentes[0];
     const disponiveis = (d: DocenteNoProjeto) => contarTempos(limitarAoQuadro(d.disponibilidade, projeto.quadro));
+
+    /** "10 aulas · 3 turmas" */
+    const resumo = (d: DocenteNoProjeto) =>
+        `${plural(aulasDoProfessor(projeto, d.professorId), "aula", "aulas")} · ${plural(turmasDoProfessor(projeto, d.professorId), "turma", "turmas")}`;
 
     const pintar = (celulas: Parameters<typeof pintarHorarios>[1], estado: string) =>
         mudarProjeto((p) => ({
@@ -46,15 +50,14 @@ export function TelaDocentes({ area, projeto, mudarProjeto }: ContextoDoProjeto)
                 <div className="grid gap-6 md:grid-cols-[16rem_1fr]">
                     <ListaLateral>
                         {docentes.map((d) => {
-                            const [aulas, tempos] = [aulasDoProfessor(projeto, d.professorId), disponiveis(d)];
                             return (
                                 <ItemDaLista
                                     key={d.professorId}
                                     ativo={d.professorId === docente.professorId}
                                     onClick={() => setSelecionado(d.professorId)}
                                     titulo={nomeDe(d.professorId)}
-                                    detalhe={`${aulas} de ${tempos}`}
-                                    alerta={aulas > tempos}
+                                    detalhe={resumo(d)}
+                                    alerta={aulasDoProfessor(projeto, d.professorId) > disponiveis(d)}
                                 />
                             );
                         })}
@@ -73,16 +76,12 @@ export function TelaDocentes({ area, projeto, mudarProjeto }: ContextoDoProjeto)
                             }
                             onPintar={pintar}
                         />
-                        {(() => {
-                            const [aulas, tempos] = [aulasDoProfessor(projeto, docente.professorId), disponiveis(docente)];
-                            return (
-                                <p className={"text-sm " + (aulas > tempos ? "text-destructive" : "text-muted-foreground")}>
-                                    {aulas} aulas por semana · {tempos} horários disponíveis
-                                    {aulas > tempos && " · não há horários suficientes para as aulas"}
-                                    {aulas === tempos && aulas > 0 && " · sem nenhuma folga"}
-                                </p>
-                            );
-                        })()}
+                        <p className="text-sm text-muted-foreground">
+                            {resumo(docente)}
+                            {aulasDoProfessor(projeto, docente.professorId) > disponiveis(docente) && (
+                                <span className="text-destructive"> · não há horários disponíveis suficientes para as aulas</span>
+                            )}
+                        </p>
                     </div>
                 </div>
             )}

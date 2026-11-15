@@ -111,7 +111,7 @@ export function ItemDaLista({
     );
 }
 
-export const rotuloDoProfessor = (p: Professor | undefined) => p?.sigla || p?.nome || "(sem nome)";
+export const rotuloDoProfessor = (p: Professor | undefined) => p?.nome || "(sem nome)";
 
 /** Preto ou branco, o que ler melhor sobre a cor. */
 export const corDoTexto = (hex: string) => {
