@@ -11,8 +11,8 @@ const ESTADOS: Record<string, EstadoDaGrade> = {
     nao: { rotulo: "Indisponível", classe: "bg-muted/50 hover:bg-muted" },
 };
 
-export function TelaDocentes({ area, projeto, mudarProjeto }: ContextoDoProjeto) {
-    const [selecionado, setSelecionado] = useState<Id | null>(null);
+export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: ContextoDoProjeto & { professorInicial?: Id | null }) {
+    const [selecionado, setSelecionado] = useState<Id | null>(professorInicial ?? null);
     const [pincel, setPincel] = useState("nao");
     const nomeDe = (id: Id) => area.cadastros.professores.find((p) => p.id === id)?.nome || "(sem nome)";
     const docentes = [...projeto.docentes].sort((a, b) => nomeDe(a.professorId).localeCompare(nomeDe(b.professorId)));

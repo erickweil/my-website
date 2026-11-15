@@ -63,7 +63,6 @@ const periodo = z.object({
 const curso = z.object({
     id,
     nome: z.string(),
-    sigla: z.string(),
     nivel: z.enum(["integrado", "subsequente", "superior", "outro"]),
     regime: z.enum(["anual", "semestral"]),
     periodos: z.array(periodo),

@@ -14,9 +14,9 @@
 | :--- | :--- | :--- | :--- |
 | 1 | Modelo, operações, armazenamento e adaptador para o solver (sem tela) | Não | **feita** |
 | 2 | Página nova com o que a atual faz: projetos, quadro de horários, professores, turmas, ofertas, gerar | Não | **feita** |
-| 3 | Cursos e matriz curricular; turma a partir de um período; ambientes | Não | |
-| 4 | Verificações antes de gerar | Não | |
-| 5 | Tela do horário: por turma, professor e ambiente; problemas; imprimir e exportar | Pequeno | |
+| 3 | Cursos e matriz curricular; turma a partir de um período; ambientes | Não | **feita** |
+| 4 | Verificações antes de gerar | Não | **feita** |
+| 5 | Tela do horário: por turma, professor e ambiente; problemas; imprimir e exportar | Pequeno | **feita** |
 | 6 | O Rust lê o modelo novo; o adaptador e o formato antigo são removidos | Sim | |
 | 7 | Regras novas no solver: quebras, fixar aulas, preferências | Sim | |
 

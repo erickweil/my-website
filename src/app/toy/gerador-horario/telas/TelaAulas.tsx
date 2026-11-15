@@ -5,9 +5,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import type { Distribuicao, Id, Oferta, Professor } from "../modelo/modelo";
-import { aulasDaTurma, contarTempos, criarOferta, juntarOfertas, manterDocentes, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
+import type { Componente, Curso, Id, Oferta, Professor } from "../modelo/modelo";
+import { atualizarPelaMatriz, aulasDaTurma, alunosDaOferta, buscarComponente, componentesNaoOfertados, contarTempos, criarOferta, diferencasDaMatriz, juntarOfertas, manterDocentes, nomeDoPeriodo, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
 import { Ajuda, CampoNumero, Cabecalho, RotuloMovel, Selecao, Vazio, rotuloDoProfessor } from "../componentes/comuns";
+import { CampoDistribuicao } from "../componentes/CampoDistribuicao";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 import { novoProfessor } from "./TelaProfessores";
 import { ResumoDaTurma } from "./TelaTurmas";
@@ -59,6 +60,12 @@ export function TelaAulas({
     };
 
     const conjuntas = ofertas.filter((o) => o.participacoes.length > 1);
+    const { cursos, ambientes } = area.cadastros;
+    const comAmbiente = ambientes.length > 0;
+    const ambienteDaTurma = ambientes.find((a) => a.id === turma.ambienteId);
+    const naoOfertadas = componentesNaoOfertados(projeto, turma, cursos);
+    const incluir = (c?: Componente) => mudarProjeto((p) => criarOferta(p, turma.id, c).projeto);
+    const CAMPOS = { nome: "nome", aulasSemana: "aulas", distribuicao: "agrupamento" };
 
     return (
         <div>
@@ -86,16 +93,23 @@ export function TelaAulas({
             </div>
 
             <div className="rounded-2xl border border-border">
-                <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
+                <div className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
                     <span>Disciplina</span>
                     <span>Professores</span>
                     <span className="text-center">Aulas/sem.</span>
                     <span title="Aulas seguidas por bloco (2 = aulas duplas). 0 = sem agrupamento.">Agrupar</span>
+                    {comAmbiente && <span>Ambiente</span>}
                     <span />
                 </div>
                 {ofertas.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma disciplina nesta turma.</p>}
-                {ofertas.map((o) => (
-                    <div key={o.id} className={cn(COLUNAS, "grid border-t border-border py-2 first:border-t-0 md:first:border-t")}>
+                {ofertas.map((o) => {
+                    const componenteId = o.participacoes.find((x) => x.turmaId === turma.id)?.componenteId;
+                    const componente = componenteId ? buscarComponente(cursos, componenteId) : undefined;
+                    const diferencas = componente ? diferencasDaMatriz({ ...o, nome: nomeNaTurma(o, turma.id) }, componente) : [];
+                    const ambiente = ambientes.find((a) => a.id === (o.ambienteId ?? turma.ambienteId));
+                    const alunos = alunosDaOferta(projeto, o);
+                    return (
+                    <div key={o.id} className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "grid border-t border-border py-2 first:border-t-0 md:first:border-t")}>
                         <div className="col-span-5 md:col-span-1">
                             <Input
                                 aria-label="Disciplina"
@@ -104,6 +118,19 @@ export function TelaAulas({
                                 value={nomeNaTurma(o, turma.id)}
                                 onChange={(e) => mudarProjeto((p) => ({ ...p, ofertas: p.ofertas.map((x) => (x.id === o.id ? renomearNaTurma(x, turma.id, e.target.value) : x)) }), true)}
                             />
+                            {componente && diferencas.length > 0 && (
+                                <p className="mt-0.5 text-xs text-amber-600 dark:text-amber-400">
+                                    Diferente da matriz ({diferencas.map((d) => CAMPOS[d]).join(", ")}) ·{" "}
+                                    <button
+                                        type="button"
+                                        className="underline"
+                                        title={`Na matriz: ${componente.nome}, ${componente.aulasSemana} aulas`}
+                                        onClick={() => mudarProjeto((p) => ({ ...p, ofertas: p.ofertas.map((x) => (x.id === o.id ? renomearNaTurma(atualizarPelaMatriz(x, componente), turma.id, componente.nome) : x)) }))}
+                                    >
+                                        voltar ao da matriz
+                                    </button>
+                                </p>
+                            )}
                         </div>
                         <div className="col-span-1 text-right md:order-last">
                             <Button size="icon-sm" variant="ghost" title="Remover disciplina da turma" className="text-destructive hover:text-destructive" onClick={() => remover(o)}>
@@ -131,14 +158,45 @@ export function TelaAulas({
                             <RotuloMovel>Agrupar</RotuloMovel>
                             <CampoDistribuicao valor={o.distribuicao} onChange={(distribuicao) => mudarOferta(o.id, { distribuicao })} />
                         </div>
+                        {comAmbiente && (
+                            <div className="col-span-6 md:order-6 md:col-span-1">
+                                <RotuloMovel>Ambiente</RotuloMovel>
+                                <Selecao
+                                    aria-label="Ambiente"
+                                    className={cn("h-8 w-full", ambiente && alunos > ambiente.capacidade && "border-destructive text-destructive")}
+                                    title={ambiente && alunos > ambiente.capacidade ? `${ambiente.nome} comporta ${ambiente.capacidade} alunos e a aula tem ${alunos}` : undefined}
+                                    value={o.ambienteId ?? ""}
+                                    onChange={(e) => mudarOferta(o.id, { ambienteId: e.target.value || null })}
+                                >
+                                    <option value="">{ambienteDaTurma ? `Da turma (${ambienteDaTurma.nome})` : "Da turma (nenhum)"}</option>
+                                    {ambientes.map((a) => (
+                                        <option key={a.id} value={a.id}>{a.nome || "(sem nome)"} ({a.capacidade})</option>
+                                    ))}
+                                </Selecao>
+                            </div>
+                        )}
                     </div>
-                ))}
+                    );
+                })}
             </div>
 
             <div className="mt-3 space-y-3">
-                <Button variant="outline" onClick={() => mudarProjeto((p) => criarOferta(p, turma.id).projeto)}>
-                    <Plus /> Disciplina
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" onClick={() => incluir()}>
+                        <Plus /> Disciplina
+                    </Button>
+                    {cursos.length > 0 && <SeletorDaMatriz cursos={cursos} cursoInicial={turma.origem?.cursoId} onEscolher={incluir} />}
+                </div>
+                {naoOfertadas.length > 0 && (
+                    <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                        Da matriz, sem oferta nesta turma:
+                        {naoOfertadas.map((c) => (
+                            <button key={c.id} type="button" title="Incluir na turma" className="inline-flex items-center gap-1 rounded-2xl border border-dashed border-border px-2 py-0.5 text-xs hover:text-foreground" onClick={() => incluir(c)}>
+                                <Plus className="size-3" /> {c.nome || "(sem nome)"}
+                            </button>
+                        ))}
+                    </p>
+                )}
                 <ResumoDaTurma aulas={aulasDaTurma(projeto, turma.id)} tempos={contarTempos(turma.horarios)} />
             </div>
 
@@ -187,35 +245,52 @@ export function TelaAulas({
 
 /** Colunas da tabela de aulas no computador; no celular, 6 colunas em que os campos se empilham. */
 const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 md:grid-cols-[minmax(9rem,1fr)_minmax(10rem,16rem)_5rem_12rem_2rem]";
+/** Com ambientes cadastrados, a tabela ganha a coluna do ambiente. */
+const COM_AMBIENTE = "md:grid-cols-[minmax(8rem,1fr)_minmax(9rem,14rem)_5rem_12rem_11rem_2rem]";
 
-/**
- * Agrupamento das aulas: quantas aulas seguidas formam um bloco (0 = sem agrupamento) e se dois
- * blocos podem ficar encostados no mesmo dia.
- */
-function CampoDistribuicao({ valor, onChange }: { valor: Distribuicao; onChange: (d: Distribuicao) => void }) {
+/** "Da matriz…": inclui na turma uma disciplina de qualquer período de qualquer curso (oferta especial). */
+function SeletorDaMatriz({ cursos, cursoInicial, onEscolher }: { cursos: Curso[]; cursoInicial?: Id; onEscolher: (c: Componente) => void }) {
+    const [aberto, setAberto] = useState(false);
+    const [cursoId, setCursoId] = useState(cursoInicial ?? "");
+    const curso = cursos.find((c) => c.id === cursoId) ?? cursos[0];
     return (
-        <div className="flex items-center gap-2">
-            <CampoNumero
-                aria-label="Agrupar"
-                title="Aulas seguidas por bloco (2 = aulas duplas). 0 = sem agrupamento."
-                className="h-8 w-16 shrink-0"
-                max={12}
-                valor={valor.tipo === "blocos" ? valor.tamanho : 0}
-                // Bloco de 1 aula é o mesmo que não agrupar
-                onChange={(n) => onChange(n < 2 ? { tipo: "livre" } : { tipo: "blocos", tamanho: n, emendar: valor.tipo === "blocos" && valor.emendar })}
-            />
-            <label
-                className={cn("flex items-center gap-1.5 text-xs", valor.tipo === "blocos" ? "text-muted-foreground" : "text-muted-foreground/50")}
-                title="Permite dois blocos seguidos no mesmo dia (por exemplo, 4 aulas seguidas de uma disciplina de aulas duplas)."
+        <Popover open={aberto} onOpenChange={setAberto}>
+            <PopoverTrigger
+                type="button"
+                title="Incluir uma disciplina de outro período ou de outro curso"
+                className="inline-flex h-9 items-center gap-1.5 rounded-4xl border border-border px-3 text-sm font-medium hover:bg-muted"
             >
-                <Checkbox
-                    disabled={valor.tipo !== "blocos"}
-                    checked={valor.tipo === "blocos" && valor.emendar}
-                    onCheckedChange={(v) => valor.tipo === "blocos" && onChange({ ...valor, emendar: v === true })}
-                />
-                emendar blocos
-            </label>
-        </div>
+                <Plus className="size-4" /> Da matriz…
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 gap-2 p-3">
+                <Selecao aria-label="Curso" className="w-full" value={curso.id} onChange={(e) => setCursoId(e.target.value)}>
+                    {cursos.map((c) => (
+                        <option key={c.id} value={c.id}>{c.nome || "(sem nome)"}</option>
+                    ))}
+                </Selecao>
+                <div className="max-h-64 overflow-y-auto">
+                    {curso.periodos.map((p) => (
+                        <div key={p.id}>
+                            <p className="px-2 pt-2 pb-1 text-xs font-medium text-muted-foreground">{nomeDoPeriodo(curso, p)}</p>
+                            {p.componentes.map((c) => (
+                                <button
+                                    key={c.id}
+                                    type="button"
+                                    className="flex w-full items-center justify-between gap-2 rounded-xl px-2 py-1.5 text-left text-sm hover:bg-muted"
+                                    onClick={() => {
+                                        setAberto(false);
+                                        onEscolher(c);
+                                    }}
+                                >
+                                    <span className="truncate">{c.nome || "(sem nome)"}</span>
+                                    <span className="shrink-0 text-xs text-muted-foreground">{c.aulasSemana} aulas</span>
+                                </button>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            </PopoverContent>
+        </Popover>
     );
 }
 

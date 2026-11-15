@@ -9,6 +9,7 @@ import {
     type AreaDeTrabalho,
     type Componente,
     type Curso,
+    type Periodo,
     type Dia,
     type DocenteNoProjeto,
     type Faixa,
@@ -492,3 +493,53 @@ export function alternarTempo(horarios: HorariosPorDia, dia: Dia, tempo: number)
     const novos = atuais.includes(tempo) ? atuais.filter((t) => t !== tempo) : [...atuais, tempo].sort((a, b) => a - b);
     return { ...horarios, [dia]: novos };
 }
+
+// ── Cadastros ────────────────────────────────────────────────────────────────────────────────
+
+/** "1º ano" ou "1º semestre", conforme o regime do curso. */
+export const nomeDoPeriodo = (curso: Curso, periodo: Periodo) => `${periodo.numero}º ${curso.regime === "anual" ? "ano" : "semestre"}`;
+
+export const novoCurso = (nome: string): Curso => ({
+    id: novoId(),
+    nome,
+    nivel: "superior",
+    regime: "semestral",
+    periodos: [{ id: novoId(), numero: 1, componentes: [] }],
+});
+
+export const novoComponente = (): Componente => ({ id: novoId(), nome: "", aulasSemana: 2, distribuicao: { tipo: "livre" } });
+
+/** Acrescenta ao curso o período seguinte ao último. */
+export const adicionarPeriodo = (curso: Curso): Curso => ({
+    ...curso,
+    periodos: [...curso.periodos, { id: novoId(), numero: Math.max(0, ...curso.periodos.map((p) => p.numero)) + 1, componentes: [] }],
+});
+
+/** Tira o curso do cadastro. As turmas que vinham dele continuam existindo, como turmas avulsas. */
+export function removerCurso(area: AreaDeTrabalho, cursoId: Id): AreaDeTrabalho {
+    return {
+        ...area,
+        cadastros: { ...area.cadastros, cursos: area.cadastros.cursos.filter((c) => c.id !== cursoId) },
+        projetos: area.projetos.map((p) => ({
+            ...p,
+            turmas: p.turmas.map((t) => (t.origem?.cursoId === cursoId ? { ...t, origem: null } : t)),
+        })),
+    };
+}
+
+/** Tira o ambiente do cadastro, das turmas e das ofertas que o usavam. */
+export function removerAmbiente(area: AreaDeTrabalho, ambienteId: Id): AreaDeTrabalho {
+    return {
+        ...area,
+        cadastros: { ...area.cadastros, ambientes: area.cadastros.ambientes.filter((a) => a.id !== ambienteId) },
+        projetos: area.projetos.map((p) => ({
+            ...p,
+            turmas: p.turmas.map((t) => (t.ambienteId === ambienteId ? { ...t, ambienteId: null } : t)),
+            ofertas: p.ofertas.map((o) => (o.ambienteId === ambienteId ? { ...o, ambienteId: null } : o)),
+            revisao: p.revisao + 1,
+        })),
+    };
+}
+
+/** Os turnos que têm aula no quadro, na ordem do dia. */
+export const turnosDoQuadro = (quadro: QuadroHorarios): Turno[] => [...new Set(aulasDoQuadro(quadro).map((f) => f.turno))];

@@ -38,7 +38,6 @@ import { lerInstanciaAntiga, projetoDaInstanciaAntiga } from "./testes/instancia
 const curso = (): Curso => ({
     id: "ads",
     nome: "Análise e Desenvolvimento de Sistemas",
-    sigla: "ADS",
     nivel: "superior",
     regime: "semestral",
     periodos: [
