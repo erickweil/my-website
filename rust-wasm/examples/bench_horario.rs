@@ -28,7 +28,7 @@ use rust_wasm::{
         ga::{GAConfig, GeneticAlgorithm},
         problems::GAProblem,
     },
-    horario::{config_ga_horario, DiaSemana, FomularioHorario, HorarioRegrasPencilmark, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
+    horario::{config_ga_horario, DiaSemana, HorarioRegrasPencilmark, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
     pencilmark::ExecucaoPencilmark,
 };
 
@@ -91,7 +91,7 @@ fn config_do_worker(size: usize, pop_mult: usize) -> GAConfig {
     GAConfig { population_size: size * pop_mult, ..config_ga_horario(size) }
 }
 
-/// Converte `{ turma: { dia: [disciplina por tempo] } }` no quadro linearizado.
+/// Converte `{ turma: { dia: [aula por tempo] } }` no quadro linearizado.
 fn carregar_solucao(regras: &RegrasHorario, caminho: &Path) -> QuadroHorario {
     let texto = fs::read_to_string(caminho).expect("erro ao ler solução de referência");
     let sol: HashMap<String, HashMap<String, Vec<Option<String>>>> =
@@ -106,8 +106,8 @@ fn carregar_solucao(regras: &RegrasHorario, caminho: &Path) -> QuadroHorario {
                 .unwrap_or_else(|d| panic!("dia '{d}' inválido na solução de referência"));
             for (tempo, disc) in tempos.iter().enumerate() {
                 let Some(nome_disc) = disc else { continue };
-                let disc = regras.disciplinas.iter().find(|d| &d.nome == nome_disc)
-                    .unwrap_or_else(|| panic!("disciplina '{nome_disc}' da solução não existe na instância"));
+                let disc = regras.disciplinas.iter().find(|d| &d.nome == nome_disc && d.turma_id == turma.id)
+                    .unwrap_or_else(|| panic!("aula '{nome_disc}' da solução não existe na turma '{nome_turma}'"));
                 quadro[regras.to_quadro_index(turma.id, dia, tempo)] = disc.id as i32 + 1;
             }
         }
@@ -120,18 +120,8 @@ fn main() {
 
     let texto = fs::read_to_string(&op.instancia)
         .unwrap_or_else(|e| uso(&format!("não foi possível ler '{}': {e}", op.instancia)));
-    // Aceita tanto o formulário puro quanto o arquivo do botão "Exportar JSON" da UI,
-    // que tem o formato { "formData": {...}, "config": {...} }.
-    let mut json: serde_json::Value = serde_json::from_str(&texto)
-        .unwrap_or_else(|e| uso(&format!("JSON inválido em '{}': {e}", op.instancia)));
-    if let Some(form) = json.get_mut("formData") {
-        json = form.take();
-    }
-    let formulario: FomularioHorario = serde_json::from_value(json)
-        .unwrap_or_else(|e| uso(&format!("formulário inválido em '{}': {e}", op.instancia)));
-
-    let regras = RegrasHorario::new(formulario.clone())
-        .unwrap_or_else(|e| uso(&format!("formulário inválido em '{}': {e}", op.instancia)));
+    let regras = RegrasHorario::from_json(&texto)
+        .unwrap_or_else(|e| uso(&format!("entrada inválida em '{}': {e}", op.instancia)));
     let size = regras.turmas.len() * QUANTOS_DIAS * regras.n_tempos;
     let slots_ativos = regras.get_quadro_vazio().iter().filter(|&&v| v == 0).count();
     let cfg = config_do_worker(size, op.pop_mult);
@@ -164,7 +154,7 @@ fn main() {
     }
 
     if op.solver == "pencilmark" {
-        bench_pencilmark(&op, &formulario, slots_ativos);
+        bench_pencilmark(&op, &regras, slots_ativos);
         return;
     }
 
@@ -182,7 +172,7 @@ fn main() {
         let seed = op.seed + run as u64;
         fastrand::seed(seed);
 
-        let mut ga = GeneticAlgorithm::new(RegrasHorario::new(formulario.clone()).unwrap(), cfg.clone());
+        let mut ga = GeneticAlgorithm::new(regras.clone(), cfg.clone());
         let inicio = Instant::now();
         let mut melhor = f64::NEG_INFINITY;
         let mut ms_otimo = None;
@@ -236,7 +226,7 @@ fn main() {
     }
 }
 
-fn bench_pencilmark(op: &Opcoes, formulario: &FomularioHorario, slots_ativos: usize) {
+fn bench_pencilmark(op: &Opcoes, regras: &RegrasHorario, slots_ativos: usize) {
     println!("base_iter={}", op.base_iter.map_or("none (sem reinícios)".to_string(), |b| b.to_string()));
     println!();
     println!("{:>3} {:>6} {:>10} {:>12} {:>14} {:>12} {:>10}", "run", "seed", "resolveu", "iterações", "preenchidos", "ms", "iter/s");
@@ -246,7 +236,7 @@ fn bench_pencilmark(op: &Opcoes, formulario: &FomularioHorario, slots_ativos: us
         let seed = op.seed + run as u64;
         fastrand::seed(seed);
 
-        let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(formulario.clone()).unwrap());
+        let regras = HorarioRegrasPencilmark::new(regras.clone());
         let (quadro, n_possibs) = (regras.quadro_vazio(), regras.n_possibs());
         let inativos = quadro.iter().filter(|&&v| v != 0).count();
         let mut exec = ExecucaoPencilmark::new(regras, quadro, n_possibs, 1, op.base_iter);

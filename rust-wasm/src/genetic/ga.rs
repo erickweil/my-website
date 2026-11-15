@@ -804,7 +804,7 @@ fn reproduzir<P: GAProblem>(
 mod tests {
     use super::*;
     use crate::genetic::problems::{OneMaxGAProblem, TSPGAProblem};
-    use crate::horario::{FomularioHorario, RegrasHorario};
+    use crate::horario::RegrasHorario;
 
     fn config(pop: usize, genes: usize) -> GAConfig {
         GAConfig {
@@ -879,9 +879,7 @@ mod tests {
     #[test]
     fn horario_paralelo_igual_ao_sequencial() {
         let criar = || {
-            let caminho = format!("{}/tests/instancias/pequena.json", env!("CARGO_MANIFEST_DIR"));
-            let f: FomularioHorario = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
-            RegrasHorario::new(f).unwrap()
+            RegrasHorario::de_arquivo(&format!("{}/tests/instancias/pequena.json", env!("CARGO_MANIFEST_DIR")))
         };
         let tamanho = criar().tamanho_quadro();
         assert_paralelo_igual_ao_sequencial(criar, config(tamanho * 2, tamanho), 150);
@@ -912,9 +910,7 @@ mod tests {
     #[test]
     fn ilhas_horario_paralelo_igual_ao_sequencial() {
         let criar = || {
-            let caminho = format!("{}/tests/instancias/pequena.json", env!("CARGO_MANIFEST_DIR"));
-            let f: FomularioHorario = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
-            RegrasHorario::new(f).unwrap()
+            RegrasHorario::de_arquivo(&format!("{}/tests/instancias/pequena.json", env!("CARGO_MANIFEST_DIR")))
         };
         let tamanho = criar().tamanho_quadro();
         assert_paralelo_igual_ao_sequencial(criar, config_ilhas(tamanho, tamanho, 4, 20, 0.1, false), 150);

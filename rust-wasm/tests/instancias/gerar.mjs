@@ -16,6 +16,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { paraEntrada } from "./formato.mjs";
 
 const DIR = dirname(fileURLToPath(import.meta.url));
 const DIAS = ["seg", "ter", "qua", "qui", "sex"];
@@ -200,11 +201,18 @@ const instancias = {
     inviavel: tornarInviavel(gerar({ turmas: 3, tempos: 5, seed: 1, cargaMax: 20, dispExtra: 0.3, unidas: true })),
 };
 
-for (const [nome, { formulario: inst, solucao }] of Object.entries(instancias)) {
+for (const [nome, { formulario, solucao }] of Object.entries(instancias)) {
     const arquivo = join(DIR, `${nome}.json`);
-    writeFileSync(arquivo, JSON.stringify(inst, null, 2) + "\n");
+    const { entrada, aulaDaDisciplina } = paraEntrada(formulario);
+    writeFileSync(arquivo, JSON.stringify(entrada, null, 2) + "\n");
     // Inviável não tem solução de referência (por construção, não existe nenhuma)
-    if (solucao) writeFileSync(join(DIR, `${nome}.solucao.json`), JSON.stringify(solucao, null, 2) + "\n");
-    const aulas = inst.disciplinas.reduce((s, d) => s + d.aulas, 0);
-    console.log(`${nome.padEnd(9)} turmas=${inst.turmas.length} disciplinas=${inst.disciplinas.length} professores=${inst.professores.length} aulas=${aulas} -> ${arquivo}`);
+    if (solucao) {
+        // { "<turma>": { "<dia>": ["<aula do tempo 1>", ...] } }
+        const comAulas = Object.fromEntries(Object.entries(solucao).map(([turma, dias]) => [
+            turma, Object.fromEntries(Object.entries(dias).map(([dia, tempos]) => [dia, tempos.map((d) => (d === null ? null : aulaDaDisciplina.get(d)))])),
+        ]));
+        writeFileSync(join(DIR, `${nome}.solucao.json`), JSON.stringify(comAulas, null, 2) + "\n");
+    }
+    const aulas = entrada.aulas.reduce((s, a) => s + a.aulasSemana * a.turmas.length, 0);
+    console.log(`${nome.padEnd(9)} turmas=${entrada.turmas.length} aulas=${entrada.aulas.length} recursos=${entrada.recursos.length} aulas/semana=${aulas} -> ${arquivo}`);
 }

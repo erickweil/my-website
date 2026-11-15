@@ -8,14 +8,14 @@
 //! - `get_resultado()`: o [`ResultadoHorario`] atual, pronto para a página.
 //!
 //! A lógica fica nos métodos sem `wasm_bindgen` (que recebem [`RegrasHorario`] e devolvem
-//! [`ErroFormulario`]), para poder ser testada fora do navegador.
+//! [`ErroEntrada`]), para poder ser testada fora do navegador.
 
 use wasm_bindgen::prelude::*;
 
 use crate::{
     genetic::ga::{GAConfig, GeneticAlgorithm},
     horario::{
-        config_ga_horario, validar, ErroFormulario, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario, MSG_IMPOSSIVEL,
+        config_ga_horario, validar, ErroEntrada, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario, MSG_IMPOSSIVEL,
         ResultadoHorario, Validacao,
     },
     pencilmark::{BuscaExaustiva, ExecucaoPencilmark},
@@ -24,7 +24,11 @@ use crate::{
 /// Limite de gerações do GA (o worker em TS rodava 1000 blocos de 500 gerações).
 pub const MAX_GERACOES_GA: usize = 500_000;
 
-fn erro_js(e: ErroFormulario) -> JsError {
+/// Com um horário já válido, o GA continua para atender às regras de qualidade (horários a evitar)
+/// e para depois deste número de gerações sem melhora.
+pub const GERACOES_SEM_MELHORA_NA_QUALIDADE: usize = 1_000;
+
+fn erro_js(e: ErroEntrada) -> JsError {
     JsError::new(&e.to_string())
 }
 
@@ -162,6 +166,8 @@ pub struct HorarioGARunner {
     validador: HorarioRegrasPencilmark,
     melhor: Option<(QuadroHorario, Validacao)>,
     melhor_fitness: Option<f64>,
+    /// O melhor quadro não quebra nenhuma regra obrigatória.
+    valido: bool,
     terminou: bool,
     versao: u32,
 }
@@ -177,6 +183,7 @@ impl HorarioGARunner {
             validador,
             melhor: None,
             melhor_fitness: None,
+            valido: false,
             terminou: false,
             versao: 0,
         }
@@ -201,8 +208,12 @@ impl HorarioGARunner {
         Ok(Self::de_regras(RegrasHorario::from_js(formulario).map_err(erro_js)?, ilhas))
     }
 
-    /// Roda `geracoes` gerações. Retorna true quando terminou: o melhor quadro não tem nenhuma
-    /// violação ou atingiu [`MAX_GERACOES_GA`].
+    /// Roda `geracoes` gerações. Retorna true quando terminou:
+    /// - o melhor quadro é válido e atende a todas as regras de qualidade (fitness 0); ou
+    /// - é válido e a qualidade não melhora há [`GERACOES_SEM_MELHORA_NA_QUALIDADE`] gerações; ou
+    /// - atingiu [`MAX_GERACOES_GA`].
+    ///
+    /// Antes de terminar, um quadro válido já é entregue como progresso (ver [`Self::valido`]).
     pub fn run(&mut self, geracoes: u32) -> bool {
         if self.terminou {
             return true;
@@ -216,11 +227,12 @@ impl HorarioGARunner {
             // Melhorou: valida o novo melhor quadro (com as regras do Pencilmark)
             self.melhor_fitness = info.best_fitness;
             let v = validar(&mut self.validador, &genes);
-            self.terminou = !v.alguma();
+            self.valido = !v.alguma();
             self.melhor = Some((genes, v));
             self.versao += 1;
         }
-        if info.generation >= MAX_GERACOES_GA {
+        let qualidade_parada = self.melhor_fitness == Some(0.0) || info.stagnated_for >= GERACOES_SEM_MELHORA_NA_QUALIDADE;
+        if (self.valido && qualidade_parada) || info.generation >= MAX_GERACOES_GA {
             self.terminou = true;
         }
         self.terminou
@@ -228,6 +240,17 @@ impl HorarioGARunner {
 
     pub fn versao(&self) -> u32 {
         self.versao
+    }
+
+    /// true quando o melhor quadro já não quebra nenhuma regra obrigatória (o GA pode continuar
+    /// rodando para melhorar a qualidade).
+    pub fn valido(&self) -> bool {
+        self.valido
+    }
+
+    /// Aulas do melhor quadro em horário que algum professor pediu para evitar.
+    pub fn aulas_a_evitar(&self) -> usize {
+        self.melhor.as_ref().map_or(0, |(q, _)| self.ga.problem.aulas_a_evitar(q))
     }
 
     pub fn get_resultado(&self) -> Result<JsValue, JsError> {
@@ -238,17 +261,15 @@ impl HorarioGARunner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::horario::{FomularioHorario, MSG_SEM_SOLUCAO};
+    use crate::horario::{DiaSemana, EntradaHorario, MSG_SEM_SOLUCAO};
     use wasm_bindgen_test::*;
 
+    fn caminho(nome: &str) -> String {
+        format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR"))
+    }
+
     fn carregar(nome: &str) -> RegrasHorario {
-        let caminho = format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR"));
-        let mut json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
-        if let Some(f) = json.get_mut("formData") {
-            json = f.take();
-        }
-        let f: FomularioHorario = serde_json::from_value(json).unwrap();
-        RegrasHorario::new(f).unwrap()
+        RegrasHorario::de_arquivo(&caminho(nome))
     }
 
     #[wasm_bindgen_test(unsupported = test)]
@@ -263,14 +284,15 @@ mod tests {
                 versoes += 1;
                 // Progresso: quadro parcial, sem validação completa
                 let p = r.resultado();
-                assert!(!p.terminou && p.solucao.is_some());
+                assert!(!p.terminou && p.alocacoes.is_some());
             }
         }
         assert!(versoes > 0, "deveria ter reportado progresso");
         let fim = r.resultado();
         assert!(fim.terminou);
         assert!(!fim.alguma_violacao, "{:?}", fim.mensagem);
-        assert_eq!(fim.solucao.unwrap().len(), 3);
+        assert_eq!(fim.alocacoes.unwrap().len(), 56, "60 aulas das turmas; as 4 da aula em conjunto saem uma vez");
+        assert!(fim.problemas.is_empty());
     }
 
     #[wasm_bindgen_test(unsupported = test)]
@@ -294,11 +316,10 @@ mod tests {
     #[wasm_bindgen_test(unsupported = test)]
     fn pencilmark_prova_que_o_quadro_e_impossivel() {
         let impossivel = || {
-            let caminho = format!("{}/tests/instancias/faculdade-anonimizado.json", env!("CARGO_MANIFEST_DIR"));
-            let mut f: FomularioHorario = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
+            let mut f: EntradaHorario = serde_json::from_str(&std::fs::read_to_string(caminho("faculdade-anonimizado")).unwrap()).unwrap();
             // "Professor D" tem 16 aulas e 16 horários: tira um
-            let prof = f.professores.iter_mut().find(|p| p.nome == "Professor D").unwrap();
-            prof.horarios.get_mut("ter").unwrap().pop();
+            let prof = f.recursos.iter_mut().find(|p| p.id == "Professor D").unwrap();
+            prof.disponibilidade.get_mut("ter").unwrap().pop();
             RegrasHorario::new(f).unwrap()
         };
         for threads in [0, 1] {
@@ -320,7 +341,7 @@ mod tests {
             let res = r.resultado();
             assert!(res.terminou && res.alguma_violacao);
             assert_eq!(res.mensagem, Some(MSG_IMPOSSIVEL));
-            assert!(res.solucao.is_some(), "mostra o quadro parcial mais preenchido");
+            assert!(res.alocacoes.is_some_and(|a| !a.is_empty()), "mostra o quadro parcial mais preenchido");
         }
 
         // Com reinícios a busca não é exaustiva: nunca afirma que é impossível
@@ -376,8 +397,75 @@ mod tests {
         assert_eq!(r.ga.config.population_size, tamanho * 4, "população por ilha é a padrão");
         assert!(r.versao() > 0, "deveria ter um melhor quadro");
         let res = r.resultado();
-        assert_eq!(res.solucao.as_ref().map(Vec::len), Some(3), "3 turmas");
+        assert!(res.alocacoes.is_some());
         // Com alguma violação ainda não terminou; sem violação, terminou
         assert_eq!(res.terminou, !res.alguma_violacao);
+    }
+
+    /// Um professor com horários a evitar: a busca exata ignora (e continua resolvendo); o GA entrega
+    /// um horário válido e segue até não sobrar aula em horário a evitar.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn evitar_e_regra_de_qualidade_so_do_ga() {
+        // Turma com 4 tempos na segunda e na terça; P dá 4 aulas e prefere não dar aula na terça
+        let entrada = r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4], "ter": [1, 2, 3, 4] } }],
+            "aulas": [
+                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 4 },
+                { "id": "B", "turmas": ["T"], "recursos": ["Q"], "aulasSemana": 4 }
+            ],
+            "recursos": [
+                { "id": "P", "disponibilidade": { "seg": [1, 2, 3, 4], "ter": [1, 2, 3, 4] }, "evitar": { "ter": [1, 2, 3, 4] } },
+                { "id": "Q", "disponibilidade": { "seg": [1, 2, 3, 4], "ter": [1, 2, 3, 4] } }
+            ]
+        }"#;
+        let regras = || RegrasHorario::from_json(entrada).unwrap();
+
+        // Qualquer quadro válido tem fitness acima de menos a menor penalidade obrigatória
+        let r = regras();
+        let mut estado = crate::genetic::problems::GAProblem::initial_state(&r);
+        let mut pior = r.get_quadro_vazio();
+        for (tempo, d) in [2, 2, 2, 2].into_iter().enumerate() { pior[r.to_quadro_index(0, DiaSemana::Segunda, tempo)] = d; }
+        for (tempo, d) in [1, 1, 1, 1].into_iter().enumerate() { pior[r.to_quadro_index(0, DiaSemana::Terca, tempo)] = d; }
+        assert_eq!(r.aulas_a_evitar(&pior), 4);
+        let f = r.fitness_rapido(&mut estado, &pior);
+        assert!(f < 0.0 && f > -20.0, "as 4 aulas a evitar valem menos que uma violação obrigatória: {f}");
+
+        fastrand::seed(5);
+        let mut pm = HorarioPencilmarkRunner::de_regras(regras(), None);
+        while !pm.run(1_000) {}
+        assert!(!pm.resultado().alguma_violacao, "a busca exata ignora os horários a evitar");
+
+        fastrand::seed(5);
+        let mut ga = HorarioGARunner::de_regras(regras(), 0);
+        let mut blocos = 0;
+        while !ga.run(50) {
+            blocos += 1;
+            assert!(blocos < 2_000, "o GA deveria terminar");
+        }
+        assert!(ga.valido() && !ga.resultado().alguma_violacao);
+        assert_eq!(ga.aulas_a_evitar(), 0, "há horário válido sem nenhuma aula na terça para P");
+        assert_eq!(ga.melhor_fitness, Some(0.0));
+    }
+
+    /// Quando não dá para atender a todos os pedidos, o GA não fica rodando para sempre: para com
+    /// um horário válido depois de um tempo sem melhorar.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn ga_para_com_horario_valido_quando_a_qualidade_nao_fecha() {
+        // P dá as 4 aulas da turma e quer evitar a segunda inteira: 2 aulas caem lá de qualquer jeito
+        let regras = RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2], "ter": [1, 2] } }],
+            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 4 }],
+            "recursos": [{ "id": "P", "disponibilidade": { "seg": [1, 2], "ter": [1, 2] }, "evitar": { "seg": [1, 2] } }]
+        }"#).unwrap();
+        fastrand::seed(6);
+        let mut ga = HorarioGARunner::de_regras(regras, 0);
+        let mut geracoes = 0;
+        while !ga.run(100) {
+            geracoes += 100;
+            assert!(ga.valido(), "o primeiro quadro já é válido");
+            assert!(geracoes <= GERACOES_SEM_MELHORA_NA_QUALIDADE + 200, "deveria ter parado por falta de melhora");
+        }
+        assert!(!ga.resultado().alguma_violacao);
+        assert_eq!(ga.aulas_a_evitar(), 2);
     }
 }

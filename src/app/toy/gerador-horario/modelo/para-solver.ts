@@ -1,65 +1,22 @@
 /**
- * Ponte entre o modelo e o solver em Rust/WASM.
- *
- * O Rust ainda lê o formulário antigo (`FormularioHorario`: disciplinas por turma, ligadas por
- * nome). Este módulo gera esse formulário a partir do projeto e traduz o resultado de volta em
- * alocações por oferta. Quando o Rust ler o modelo novo (Etapa 6 de docs/plano-frontend-horario.md)
- * os nomes internos somem e isto vira uma projeção direta.
+ * Ponte entre o modelo e o solver em Rust/WASM: monta a entrada do solver a partir do projeto e
+ * traz o resultado de volta como horário do projeto. Os ids do projeto vão e voltam como estão.
  */
 
-import type { FormularioHorario, ResultadoHorario } from "../horario-regras.ts";
-import type { Dia, HorarioGerado, Id, Oferta, ProjetoHorario } from "./modelo.ts";
+import type { EntradaDoSolver, ResultadoDoSolver } from "../horario-regras.ts";
+import type { HorarioGerado, Id, Oferta, ProjetoHorario } from "./modelo.ts";
 import { ambienteDaOferta, horariosCheios, limitarAoQuadro } from "./operacoes.ts";
 
-/** Nome interno da "disciplina" do solver: uma por (oferta, turma). */
-const nomeDaDisciplina = (ofertaId: Id, turmaId: Id) => `${ofertaId}|${turmaId}`;
-const ofertaDoNome = (nome: string) => nome.split("|")[0];
-const PREFIXO_AMBIENTE = "ambiente:";
-
-export interface EntradaDoSolver {
-    formulario: FormularioHorario;
-    /** Os dias do quadro, para o worker filtrar o resultado. */
-    diasAtivos: Dia[];
-}
-
-/** Só as ofertas que geram aula: com alguma aula por semana. */
-const ofertasComAula = (projeto: ProjetoHorario) => projeto.ofertas.filter((o) => o.aulasSemana > 0);
-
 /**
- * Formulário do solver para o projeto.
+ * A entrada do solver para o projeto.
  *
- * - Cada turma vira uma turma do solver, com o id como nome.
- * - Cada participação de cada oferta vira uma disciplina; as de uma oferta conjunta são "unidas".
- * - Professores e ambientes viram recursos de ocupação única (os "professores" do solver). Numa
- *   oferta conjunta eles ficam ligados só à primeira participação: as participações são forçadas
- *   ao mesmo horário, e ligar o recurso a todas faria o solver ver um choque dele consigo mesmo.
- * - Só entram os ambientes disputados por mais de uma turma; os outros não restringem nada.
+ * - Cada oferta com aulas vira uma aula, com as turmas que participam.
+ * - Os recursos de uma aula são os professores dela e, se disputado, o ambiente. Só entram os
+ *   ambientes usados por mais de uma turma: os outros não restringem nada.
+ * - Disponibilidades e horários limitados aos dias e tempos do quadro.
  */
 export function paraSolver(projeto: ProjetoHorario): EntradaDoSolver {
-    const ofertas = ofertasComAula(projeto);
-    const primeira = (o: Oferta) => nomeDaDisciplina(o.id, o.participacoes[0].turmaId);
-
-    const disciplinas: FormularioHorario["disciplinas"] = ofertas.flatMap((o) =>
-        o.participacoes.map((p) => ({
-            nome: nomeDaDisciplina(o.id, p.turmaId),
-            turma: p.turmaId,
-            aulas: o.aulasSemana,
-            agrupar: o.distribuicao.tipo === "blocos" ? o.distribuicao.tamanho : 0,
-            dividir: o.distribuicao.tipo === "blocos" && !o.distribuicao.emendar,
-        })),
-    );
-
-    const disciplinas_unidas: FormularioHorario["disciplinas_unidas"] = ofertas
-        .filter((o) => o.participacoes.length > 1)
-        .map((o) => ({ grupo: o.id, disciplinas: o.participacoes.map((p) => nomeDaDisciplina(o.id, p.turmaId)) }));
-
-    const professores: FormularioHorario["professores"] = projeto.docentes
-        .map((d) => ({
-            nome: d.professorId,
-            disciplinas: ofertas.filter((o) => o.professorIds.includes(d.professorId)).map(primeira),
-            horarios: limitarAoQuadro(d.disponibilidade, projeto.quadro),
-        }))
-        .filter((p) => p.disciplinas.length > 0);
+    const ofertas = projeto.ofertas.filter((o) => o.aulasSemana > 0);
 
     // Ambientes: agrupa as ofertas por ambiente e fica com os usados por mais de uma turma
     const porAmbiente = new Map<Id, Oferta[]>();
@@ -67,63 +24,54 @@ export function paraSolver(projeto: ProjetoHorario): EntradaDoSolver {
         const ambienteId = ambienteDaOferta(projeto, o);
         if (ambienteId) porAmbiente.set(ambienteId, [...(porAmbiente.get(ambienteId) ?? []), o]);
     }
-    for (const [ambienteId, usadoPor] of porAmbiente) {
-        const turmas = new Set(usadoPor.flatMap((o) => o.participacoes.map((p) => p.turmaId)));
-        if (turmas.size > 1) {
-            professores.push({
-                nome: PREFIXO_AMBIENTE + ambienteId,
-                disciplinas: usadoPor.map(primeira),
-                horarios: horariosCheios(projeto.quadro),
-            });
-        }
-    }
+    const disputados = new Set(
+        [...porAmbiente].filter(([, usadoPor]) => new Set(usadoPor.flatMap((o) => o.participacoes.map((p) => p.turmaId))).size > 1).map(([id]) => id),
+    );
+    const ambienteDisputado = (o: Oferta) => {
+        const id = ambienteDaOferta(projeto, o);
+        return id && disputados.has(id) ? [id] : [];
+    };
 
+    const comAula = new Set(ofertas.flatMap((o) => o.professorIds));
     return {
-        formulario: {
-            turmas: projeto.turmas.map((t) => ({ nome: t.id, horarios: limitarAoQuadro(t.horarios, projeto.quadro) })),
-            disciplinas,
-            disciplinas_unidas,
-            professores,
-        },
-        diasAtivos: [...projeto.quadro.dias],
+        turmas: projeto.turmas.map((t) => ({ id: t.id, horarios: limitarAoQuadro(t.horarios, projeto.quadro) })),
+        aulas: ofertas.map((o) => ({
+            id: o.id,
+            turmas: o.participacoes.map((p) => p.turmaId),
+            recursos: [...o.professorIds, ...ambienteDisputado(o)],
+            aulasSemana: o.aulasSemana,
+            bloco: o.distribuicao.tipo === "blocos" ? o.distribuicao.tamanho : 0,
+            emendar: o.distribuicao.tipo === "blocos" && o.distribuicao.emendar,
+        })),
+        recursos: [
+            ...projeto.docentes
+                .filter((d) => comAula.has(d.professorId))
+                .map((d) => ({
+                    id: d.professorId,
+                    disponibilidade: limitarAoQuadro(d.disponibilidade, projeto.quadro),
+                    evitar: limitarAoQuadro(d.evitar, projeto.quadro),
+                })),
+            ...[...disputados].map((id) => ({ id, disponibilidade: horariosCheios(projeto.quadro), evitar: {} })),
+        ],
     };
 }
 
-/**
- * Resultado do solver como horário do projeto. As aulas ficam por oferta (uma oferta conjunta
- * aparece uma vez por horário, não uma por turma); células vazias ou com violação viram problemas.
- */
-export function doSolver(projeto: ProjetoHorario, resultado: ResultadoHorario): HorarioGerado {
-    const alocacoes: HorarioGerado["alocacoes"] = [];
-    const problemas: HorarioGerado["problemas"] = [];
-    const vistas = new Set<string>();
-
-    for (const quadroDaTurma of resultado.solucao ?? []) {
-        const turmaId = quadroDaTurma.turma;
-        for (const { dia, tempos } of quadroDaTurma.horario) {
-            tempos.forEach(({ descricao, violacao }, i) => {
-                const tempo = i + 1;
-                // "???" é célula que o solver não conseguiu preencher
-                const ofertaId = descricao && descricao !== "???" ? ofertaDoNome(descricao) : undefined;
-                if (ofertaId) {
-                    const chave = `${ofertaId}|${dia}|${tempo}`;
-                    if (!vistas.has(chave)) {
-                        vistas.add(chave);
-                        alocacoes.push({ ofertaId, dia, tempo, fixada: false });
-                    }
-                }
-                if (violacao) problemas.push({ mensagem: violacao, ofertaId, turmaId, dia, tempo });
-            });
-        }
-    }
-    if (resultado.mensagem && (resultado.alguma_violacao || !resultado.solucao)) {
+/** Resultado do solver como horário do projeto. */
+export function doSolver(projeto: ProjetoHorario, resultado: ResultadoDoSolver): HorarioGerado {
+    const problemas: HorarioGerado["problemas"] = resultado.problemas.map((p) => ({
+        mensagem: p.mensagem,
+        ofertaId: p.aula ?? undefined,
+        turmaId: p.turma,
+        dia: p.dia,
+        tempo: p.tempo,
+    }));
+    if (resultado.mensagem && (resultado.alguma_violacao || !resultado.alocacoes)) {
         problemas.unshift({ mensagem: resultado.mensagem });
     }
-
     return {
         revisao: projeto.revisao,
-        completo: resultado.solucao !== null && !resultado.alguma_violacao,
-        alocacoes,
+        completo: resultado.alocacoes !== null && !resultado.alguma_violacao,
+        alocacoes: (resultado.alocacoes ?? []).map((a) => ({ ofertaId: a.aula, dia: a.dia, tempo: a.tempo, fixada: false })),
         problemas,
     };
 }

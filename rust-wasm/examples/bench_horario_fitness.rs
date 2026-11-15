@@ -9,21 +9,15 @@
 //! Uso: cargo run --release --example bench_horario_fitness -- <instancia> [--sementes N] [--orcamento M]
 //!      [--ilhas N] [--variantes nome=professor:unidas:agrupar:movAgrupar:movProfessor[:conflito],...]   (mov = 0 ou 1)
 
-use std::{env, fs, time::Instant};
+use std::{env, time::Instant};
 
 use rust_wasm::{
     genetic::{ga::GeneticAlgorithm, problems::GAProblem},
-    horario::{config_ga_horario, FomularioHorario, PesosFitness, RegrasHorario},
+    horario::{config_ga_horario, PesosFitness, RegrasHorario},
 };
 
 fn carregar(nome: &str) -> RegrasHorario {
-    let caminho = if nome.ends_with(".json") { nome.to_string() } else { format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR")) };
-    let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(caminho).unwrap()).unwrap();
-    if let Some(f) = json.get_mut("formData") {
-        json = f.take();
-    }
-    let f: FomularioHorario = serde_json::from_value(json).unwrap();
-    RegrasHorario::new(f).unwrap()
+    RegrasHorario::de_arquivo(nome)
 }
 
 fn mediana(v: &mut [f64]) -> f64 {

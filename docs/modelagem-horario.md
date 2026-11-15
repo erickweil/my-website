@@ -297,31 +297,22 @@ interface AreaDeTrabalho {
 
 ## 6. Do modelo para o solver
 
-Enquanto o Rust não lê o modelo novo (Etapa 6 do plano), o adaptador `paraSolver(projeto)` gera o
-`FormularioHorario` atual:
+`paraSolver(projeto)` monta a entrada que o Rust lê (`EntradaHorario`), com os ids do projeto:
 
-| Solver (hoje) | Vem de |
+| Entrada do solver | Vem de |
 | :--- | :--- |
-| `turmas[].nome` | `Turma.id` (nome interno; garante unicidade) |
-| `turmas[].horarios` | `Turma.horarios`, limitado aos dias e tempos do quadro |
-| `disciplinas[]` | uma por participação de cada oferta, com nome interno `ofertaId\|turmaId` |
-| `aulas`, `agrupar`, `dividir` | `Oferta.aulasSemana` e `Oferta.distribuicao` (tabela do §3.2) |
-| `disciplinas_unidas[]` | um grupo por oferta com mais de uma participação |
-| `professores[]` | um por docente, com a disponibilidade dele |
-| `professores[]` (recurso) | **um por ambiente compartilhado**, disponível sempre |
+| `turmas[]` | as turmas, com os horários limitados ao quadro |
+| `aulas[]` | uma por oferta com aulas: turmas que participam, aulas por semana, bloco e emendar |
+| `aulas[].recursos` | os professores da oferta e, se disputado, o ambiente |
+| `recursos[]` | um por docente (disponibilidade e horários a evitar) e um por ambiente disputado |
 
-Dois detalhes que saem do comportamento atual do solver:
+- **Ambiente é um recurso de ocupação única**, igual a um professor: duas aulas não caem nele ao
+  mesmo tempo. Só entram os ambientes usados por mais de uma turma (os outros não restringem).
+- **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. "Evitar" é
+  regra de qualidade: só o algoritmo genético a considera, com peso menor que qualquer obrigatória.
 
-- **Ambiente entra como recurso de ocupação única**, igual a um professor. Com isso o solver já
-  evita duas aulas no mesmo ambiente ao mesmo tempo, sem mudar o Rust. Só entram os ambientes
-  usados por mais de uma turma (os outros não geram restrição).
-- **Numa oferta com várias turmas, professores e ambiente ficam ligados só à primeira
-  participação.** As participações são forçadas ao mesmo horário, então basta; ligar o mesmo
-  professor às duas faria o solver ver um choque dele consigo mesmo.
-
-**O que o solver ignora por enquanto:** capacidade e número de alunos, horas e duração das aulas,
-intervalos e turnos, e `evitar`. Consequência prática: um bloco de aulas ainda pode atravessar o
-intervalo ou o almoço.
+**O que o solver ignora:** capacidade e número de alunos (conferidos na tela), horas e duração
+das aulas, intervalos e turnos.
 
 ---
 
@@ -335,8 +326,7 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 - **Bloco que não cabe:** bloco de N aulas maior que o maior trecho sem quebra forte nos tempos da turma.
 - **Matriz:** componentes do período sem oferta na turma, e ofertas diferentes da matriz.
 - **Quadro:** faixas fora de ordem ou sobrepostas.
-- **Depois de gerar:** blocos que atravessaram intervalo, e aulas em horários que o professor
-  pediu para evitar.
+- **Depois de gerar:** aulas em horários que o professor pediu para evitar.
 
 ---
 

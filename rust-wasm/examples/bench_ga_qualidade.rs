@@ -12,24 +12,18 @@
 //!      [--ilhas N] [--variantes classico,classico-x,ilhas:EPOCA:MIGRACAO:elite|normal,...]
 //! Problemas: onemax, tsp100, tsp500, horario-pequena, horario-faculdade, horario-media
 
-use std::{env, fs, time::Instant};
+use std::{env, time::Instant};
 
 use rust_wasm::{
     genetic::{
         ga::{GAConfig, GeneticAlgorithm},
         problems::{GAProblem, OneMaxGAProblem, TSPGAProblem},
     },
-    horario::{config_ga_horario, FomularioHorario, RegrasHorario},
+    horario::{config_ga_horario, RegrasHorario},
 };
 
 fn carregar_horario(nome: &str) -> RegrasHorario {
-    let caminho = format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR"));
-    let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(caminho).unwrap()).unwrap();
-    if let Some(f) = json.get_mut("formData") {
-        json = f.take();
-    }
-    let f: FomularioHorario = serde_json::from_value(json).unwrap();
-    RegrasHorario::new(f).unwrap()
+    RegrasHorario::de_arquivo(nome)
 }
 
 #[derive(Clone, Debug)]

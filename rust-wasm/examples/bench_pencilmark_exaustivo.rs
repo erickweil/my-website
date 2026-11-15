@@ -9,10 +9,10 @@
 //!      cargo run --release --example bench_pencilmark_exaustivo -- horario inst.json [--limite-s N] [--todas]
 //! O número de threads vem de RAYON_NUM_THREADS.
 
-use std::{env, fs, time::Instant};
+use std::{env, time::Instant};
 
 use rust_wasm::{
-    horario::{FomularioHorario, HorarioRegrasPencilmark, RegrasHorario},
+    horario::{HorarioRegrasPencilmark, RegrasHorario},
     pencilmark::{BuscaExaustiva, Possib, RegrasQuadro, NOS_POR_FATIA},
 };
 
@@ -77,12 +77,7 @@ fn main() {
             rodar(&format!("{n} rainhas"), busca, limite_s);
         }
         Some("horario") => {
-            let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&args[2]).unwrap()).unwrap();
-            if let Some(f) = json.get_mut("formData") {
-                json = f.take();
-            }
-            let f: FomularioHorario = serde_json::from_value(json).unwrap();
-            let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(f).unwrap());
+            let regras = HorarioRegrasPencilmark::new(RegrasHorario::de_arquivo(&args[2]));
             let (quadro, n) = (regras.quadro_vazio(), regras.n_possibs());
             let mut busca = BuscaExaustiva::new(regras, quadro, n, if tem("--todas") { usize::MAX } else { 1 });
             busca.nos_por_fatia = fatia;

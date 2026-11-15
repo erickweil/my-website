@@ -1,5 +1,16 @@
 use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario}, random::{random_bool, random_range, random_range_except}};
 
+/// # Regras obrigatórias e regras de qualidade
+///
+/// As regras OBRIGATÓRIAS (professor disponível e sem choque, aulas em conjunto, blocos) são as
+/// mesmas da busca exata (Pencilmark): um horário só é válido se não quebra nenhuma.
+///
+/// As regras de QUALIDADE não invalidam o horário, só dizem qual horário válido é melhor. Elas
+/// existem apenas aqui, no algoritmo genético; a busca exata as ignora. Hoje há uma: aula num
+/// horário que o professor pediu para evitar. Para uma regra de qualidade nunca ser trocada por
+/// uma obrigatória, todas as penalidades de qualidade somadas valem menos que a menor penalidade
+/// obrigatória (ver `TabelasFitness::peso_evitar`).
+///
 /// Pesos de cada regra no fitness (pontos descontados por unidade de violação) e como as violações
 /// são medidas. O fitness é 0 exatamente quando o quadro não viola nenhuma regra, com quaisquer
 /// pesos positivos: os pesos e as medidas só mudam o "relevo" que guia a busca.
@@ -76,6 +87,11 @@ struct TabelasFitness {
     slots: usize,
     /// Por professor e horário: 1 = disponível, 0 = não trabalha (cópia de `Professor::horarios`).
     disponibilidade: Vec<i32>,
+    /// Por professor e horário: 1 = disponível, mas a evitar (regra de qualidade).
+    evitar: Vec<i32>,
+    /// Penalidade por aula em horário a evitar: a menor penalidade obrigatória dividida pelo número
+    /// de (aula, professor) do quadro mais um, para a soma nunca alcançar uma regra obrigatória.
+    peso_evitar: f64,
     /// Células em que a turma tem aula: (índice no quadro, horário = tempo * 7 + dia).
     ativas: Vec<(u32, u32)>,
     /// Células em que a turma não tem aula (devem valer -1).
@@ -139,9 +155,17 @@ impl TabelasFitness {
         }
         restos_de.push(n_restos);
 
+        let pares: i32 = r.disciplinas.iter().map(|d| d.aulas.max(0) * d.professores.len() as i32).sum();
+        let menor_obrigatoria = r.pesos.professor.min(r.pesos.conflito).min(r.pesos.unidas).min(r.pesos.agrupar);
+
         Self {
             slots,
             disponibilidade: r.professores.iter().flat_map(|p| p.horarios.slots.iter().copied()).collect(),
+            // Só conta onde o professor está disponível: fora disso já é regra obrigatória
+            evitar: r.professores.iter()
+                .flat_map(|p| p.evitar.slots.iter().zip(&p.horarios.slots).map(|(&e, &h)| (e != 0 && h != 0) as i32))
+                .collect(),
+            peso_evitar: menor_obrigatoria / (pares + 1) as f64,
             ativas,
             inativas,
             linhas,
@@ -444,8 +468,23 @@ impl RegrasHorario {
         fitness
     }
 
-    /// Fitness do quadro: 0 quando não há violação, negativo proporcional às violações (ver
-    /// [`PesosFitness`]). Faz uma passada pelas células ativas para a ocupação dos professores,
+    /// Quantas aulas do quadro estão em horário que algum professor pediu para evitar (regra de
+    /// qualidade). Conta uma vez por professor da aula.
+    pub fn aulas_a_evitar(&self, quadro: &[i32]) -> usize {
+        let mut n = 0;
+        for (i, &v) in quadro.iter().enumerate() {
+            let Some(d) = (v > 0).then(|| self.disciplinas.get((v - 1) as usize)).flatten() else { continue };
+            let (_, dia, tempo) = self.from_quadro_index(i);
+            n += d.professores.iter()
+                .filter(|&&p| self.professores[p].evitar.get(dia, tempo) != 0 && self.professores[p].horarios.get(dia, tempo) != 0)
+                .count();
+        }
+        n
+    }
+
+    /// Fitness do quadro: 0 quando não quebra nenhuma regra, obrigatória ou de qualidade; negativo
+    /// proporcional às violações (ver [`PesosFitness`]). Um quadro VÁLIDO (sem violação obrigatória)
+    /// tem fitness entre 0 e menos a menor penalidade obrigatória, exclusive. Faz uma passada pelas células ativas para a ocupação dos professores,
     /// outra para as penalidades de professor e de disciplinas unidas, e uma pelos dias com aula
     /// para os blocos.
     pub fn fitness_rapido(&self, state: &mut HorarioGAState, quadro: &[i32]) -> f64 {
@@ -460,6 +499,8 @@ impl RegrasHorario {
         // (`u_professor`); todas menos a primeira, onde ele trabalha (`u_conflito`).
         let mut u_professor = 0i32;
         let mut u_conflito = 0i32;
+        // Regra de qualidade: aulas em horário que o professor pediu para evitar
+        let mut u_evitar = 0u32;
         ocupacao.copy_from_slice(&t.disponibilidade);
         for &(i, horario) in &t.ativas {
             let d = quadro[i as usize] - 1;
@@ -468,6 +509,7 @@ impl RegrasHorario {
             for &p in &t.professores[ini as usize..fim as usize] {
                 let k = p as usize * t.slots + horario as usize;
                 ocupacao[k] -= 1;
+                u_evitar += t.evitar[k] as u32;
                 if pesos.professor_por_movimentos && ocupacao[k] < 0 {
                     if t.disponibilidade[k] == 0 { u_professor += 1 } else { u_conflito += 1 }
                 }
@@ -569,6 +611,7 @@ impl RegrasHorario {
         }
 
         -(estrutura as f64 * 1000.0
+            + u_evitar as f64 * t.peso_evitar
             + u_professor as f64 * pesos.professor
             + u_conflito as f64 * pesos.conflito
             + u_unidas as f64 * pesos.unidas
@@ -597,45 +640,24 @@ pub fn config_ga_horario(tamanho: usize) -> GAConfig {
 mod tests {
     use super::*;
     use crate::genetic::ga::{GAConfig, GeneticAlgorithm};
-    use crate::horario::horario_regras::{
-        FomularioHorario, FomularioHorarioDisciplina, FomularioHorarioProfessor, FomularioHorarioTurma,
-    };
-    use std::collections::HashMap;
     use wasm_bindgen_test::*;
-
-    fn horarios(dias: &[(&str, &[i32])]) -> HashMap<String, Vec<i32>> {
-        dias.iter().map(|(d, t)| (d.to_string(), t.to_vec())).collect()
-    }
 
     /// Instância com POUCOS slots ativos (3 de 21 por turma, ~14%), para que o sorteio
     /// de índice ativo falhe com frequência e o caminho de "nenhum índice encontrado" seja exercitado.
     fn regras_esparsas() -> RegrasHorario {
-        let disc = |nome: &str, turma: &str, aulas: i32| FomularioHorarioDisciplina {
-            nome: nome.into(), turma: turma.into(), aulas, agrupar: 0, dividir: false,
-        };
-        RegrasHorario::new(FomularioHorario {
-            turmas: vec![
-                FomularioHorarioTurma { nome: "A".into(), horarios: horarios(&[("seg", &[1, 2, 3])]) },
-                FomularioHorarioTurma { nome: "B".into(), horarios: horarios(&[("seg", &[1, 2, 3])]) },
+        RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "A", "horarios": { "seg": [1, 2, 3] } }, { "id": "B", "horarios": { "seg": [1, 2, 3] } }],
+            "aulas": [
+                { "id": "Mat A", "turmas": ["A"], "recursos": ["P1"], "aulasSemana": 2 },
+                { "id": "Port A", "turmas": ["A"], "recursos": ["P2"], "aulasSemana": 1 },
+                { "id": "Mat B", "turmas": ["B"], "recursos": ["P1"], "aulasSemana": 1 },
+                { "id": "Port B", "turmas": ["B"], "recursos": ["P2"], "aulasSemana": 2 }
             ],
-            disciplinas: vec![
-                disc("Mat A", "A", 2), disc("Port A", "A", 1),
-                disc("Mat B", "B", 1), disc("Port B", "B", 2),
-            ],
-            disciplinas_unidas: vec![],
-            professores: vec![
-                FomularioHorarioProfessor {
-                    nome: "P1".into(),
-                    disciplinas: vec!["Mat A".into(), "Mat B".into()],
-                    horarios: horarios(&[("seg", &[1, 2, 3])]),
-                },
-                FomularioHorarioProfessor {
-                    nome: "P2".into(),
-                    disciplinas: vec!["Port A".into(), "Port B".into()],
-                    horarios: horarios(&[("seg", &[1, 2, 3])]),
-                },
-            ],
-        }).unwrap()
+            "recursos": [
+                { "id": "P1", "disponibilidade": { "seg": [1, 2, 3] } },
+                { "id": "P2", "disponibilidade": { "seg": [1, 2, 3] } }
+            ]
+        }"#).unwrap()
     }
 
     /// Verifica a invariante: slots inativos (-1) continuam nos mesmos lugares e o
@@ -688,12 +710,7 @@ mod tests {
     }
 
     fn carregar(nome: &str) -> RegrasHorario {
-        let caminho = format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR"));
-        let mut json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(caminho).unwrap()).unwrap();
-        if let Some(f) = json.get_mut("formData") {
-            json = f.take();
-        }
-        RegrasHorario::new(serde_json::from_value(json).unwrap()).unwrap()
+        RegrasHorario::de_arquivo(&format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR")))
     }
 
     /// Quadros variados: aleatórios, e cada vez mais evoluídos (inclui quadros quase certos).
@@ -801,19 +818,15 @@ mod tests {
         let caso = |g: i32, dividir: bool, dia: &str| -> (f64, f64) {
             let aulas_a = dia.matches('A').count() as i32;
             let tempos: Vec<i32> = (1..=dia.len() as i32).collect();
-            let h = |t: &[i32]| HashMap::from([("seg".to_string(), t.to_vec())]);
-            let mut disciplinas = vec![FomularioHorarioDisciplina { nome: "A".into(), turma: "T".into(), aulas: aulas_a, agrupar: g, dividir }];
             // Cada "." é uma disciplina diferente de 1 aula, sem agrupamento
-            let soltas = dia.matches('.').count();
-            for i in 0..soltas {
-                disciplinas.push(FomularioHorarioDisciplina { nome: format!("x{i}"), turma: "T".into(), aulas: 1, agrupar: 0, dividir: false });
+            let mut aulas = vec![format!(r#"{{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": {aulas_a}, "bloco": {g}, "emendar": {} }}"#, !dividir)];
+            for i in 0..dia.matches('.').count() {
+                aulas.push(format!(r#"{{ "id": "x{i}", "turmas": ["T"], "recursos": [], "aulasSemana": 1 }}"#));
             }
-            let regras = RegrasHorario::new(FomularioHorario {
-                turmas: vec![FomularioHorarioTurma { nome: "T".into(), horarios: h(&tempos) }],
-                disciplinas,
-                disciplinas_unidas: vec![],
-                professores: vec![],
-            }).unwrap();
+            let regras = RegrasHorario::from_json(&format!(
+                r#"{{ "turmas": [{{ "id": "T", "horarios": {{ "seg": {tempos:?} }} }}], "aulas": [{}], "recursos": [] }}"#,
+                aulas.join(", "),
+            )).unwrap();
             let mut quadro = regras.get_quadro_vazio();
             let mut solta = 2;
             for (t, c) in dia.chars().enumerate() {

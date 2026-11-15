@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { raceWorkers } from "@/lib/workerRace";
 import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP, type HorarioWorkerTaskValue, type SolverHorario } from "../horario-regras";
-import { detalharProblema, diagnosticar, observarHorario, type Pendencia } from "../modelo/diagnostico";
+import { aulasAEvitar, detalharProblema, diagnosticar, observarHorario, type Pendencia } from "../modelo/diagnostico";
 import type { Dia, HorarioGerado, Id, Oferta, Professor, ProjetoHorario } from "../modelo/modelo";
 import { ambienteDaOferta, aulasDoQuadro, fimDaFaixa, nomeNaTurma } from "../modelo/operacoes";
 import { doSolver, paraSolver } from "../modelo/para-solver";
@@ -121,13 +121,13 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
         setErro(null);
         setParcial(null);
         setGerando(true);
-        const { formulario, diasAtivos } = paraSolver(projeto);
+        const entrada = paraSolver(projeto);
         const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
             n: 1,
             createWorker: () => new Worker(new URL("../horario-wasm.worker.ts", import.meta.url)),
-            initMessage: () => ({ action: "solucionarQuadroHorario", solver, formData: formulario, diasAtivos, ilhas }),
+            initMessage: () => ({ action: "solucionarQuadroHorario", solver, entrada, ilhas }),
             onMessage: (_, msg) => {
-                if (msg.value?.solucao) setParcial(doSolver(projeto, msg.value));
+                if (msg.value?.alocacoes) setParcial(doSolver(projeto, msg.value));
             },
         });
         interromper.current = abort;
@@ -210,15 +210,26 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                     {gerando && (
                         <span className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="size-4 animate-spin" />
-                            {parcial ? `${parcial.alocacoes.length} de ${totalDeAulas} aulas alocadas…` : "Preparando…"}
+                            {!parcial
+                                ? "Preparando…"
+                                : parcial.completo
+                                  ? `Horário válido. Melhorando as preferências: ${plural(aulasAEvitar(projeto, parcial), "aula", "aulas")} em horários a evitar…`
+                                  : `${parcial.alocacoes.length} de ${totalDeAulas} aulas alocadas…`}
                         </span>
                     )}
                     <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
                         <label className="flex items-center gap-2">
                             Método
                             <Ajuda>
-                                A busca exata acha um horário sem erros ou prova que não existe. O algoritmo genético devolve o melhor
-                                horário que encontrar, mesmo com erros.
+                                <p>
+                                    <strong>Busca exata:</strong> acha um horário que cumpre todas as regras obrigatórias, ou prova que não
+                                    existe. Ignora as preferências (horários que os professores pediram para evitar).
+                                </p>
+                                <p>
+                                    <strong>Algoritmo genético:</strong> para quadros grandes, que a busca exata não resolve. Devolve o melhor
+                                    horário que encontrar, mesmo com erros, e depois de chegar a um horário válido continua tentando atender
+                                    às preferências. Pode ser interrompido a qualquer momento.
+                                </p>
                             </Ajuda>
                             <Selecao className="h-8" value={solver} disabled={gerando} onChange={(e) => setSolver(e.target.value as SolverHorario)}>
                                 <option value="pencilmark">Busca exata (padrão)</option>

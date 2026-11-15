@@ -17,8 +17,8 @@
 | 3 | Cursos e matriz curricular; turma a partir de um período; ambientes | Não | **feita** |
 | 4 | Verificações antes de gerar | Não | **feita** |
 | 5 | Tela do horário: por turma, professor e ambiente; problemas; imprimir e exportar | Pequeno | **feita** |
-| 6 | O Rust lê o modelo novo; o adaptador e o formato antigo são removidos | Sim | |
-| 7 | Regras novas no solver: quebras, fixar aulas, preferências | Sim | |
+| 6 | O Rust lê o modelo novo; o adaptador e o formato antigo são removidos | Sim | **feita** |
+| 7 | Regras de qualidade só no genético ("evitar"); quebras e fixar aulas adiados | Sim | **feita** (parte) |
 
 As etapas 2 a 5 são sequenciais. A 6 pode ser feita a qualquer momento depois da 2.
 
@@ -104,19 +104,31 @@ marca de diferença; duas turmas dividindo um laboratório não recebem aula nel
 
 ## Etapa 6 — Um só modelo
 
-- O Rust recebe o problema por ids: turmas, ofertas (com várias turmas), recursos (professores e
-  ambientes) e tempos. Sai `FomularioHorario` e a busca por nome.
-- O resultado volta como alocações por oferta.
-- `paraSolver` vira uma projeção direta do projeto; some o truque dos nomes internos.
-- As instâncias de `rust-wasm/tests/instancias/`, o `gerar.mjs` e os exemplos de benchmark são
-  convertidos.
+- O Rust recebe o problema por ids (`EntradaHorario`): turmas, aulas (com uma ou mais turmas) e
+  recursos (professores e ambientes, com disponibilidade e horários a evitar).
+- O resultado volta como aulas alocadas e problemas por célula, com os ids do projeto.
+- `paraSolver` é uma projeção direta do projeto; saíram o formulário antigo, a busca por nome e os
+  nomes internos.
+- As instâncias de `rust-wasm/tests/instancias/` estão no formato novo (`gerar.mjs` converte com
+  `formato.mjs`), e os exemplos de benchmark leem com `RegrasHorario::de_arquivo`.
+- Por dentro, uma aula em conjunto continua virando uma disciplina por turma, unidas no mesmo
+  horário. O núcleo da busca não mudou.
 
-**Validação:** `cargo test` e os benchmarks com os mesmos números de antes nas mesmas instâncias.
+**Validação:** `cargo test` (60 testes); a solução de referência das instâncias continua com
+fitness 0; Pencilmark e GA resolvem o quadro real nos mesmos tempos de antes.
 
-## Etapa 7 — Regras novas no solver
+## Etapa 7 — Regras de qualidade no genético
 
-Depende da busca local (`plano-solver-local-search.md`) para as regras com peso.
+Decisão de 15/11/2026: a busca exata (Pencilmark) fica só com as regras OBRIGATÓRIAS; as regras
+que só afetam a qualidade do horário existem apenas no algoritmo genético, como peso.
 
-- Bloco não atravessa troca de turno (rígida) e evita intervalo (com peso).
-- Fixar aulas e gerar o resto; trocar aulas à mão com validação imediata.
-- Preferências "evitar" com peso; máximo de aulas por dia; janelas do professor.
+- **Feito:** "evitar" (horário em que o professor pode, mas prefere não ter aula) é penalidade no
+  fitness do GA. Todas as penalidades de qualidade somadas valem menos que a menor penalidade
+  obrigatória, então uma regra obrigatória nunca é trocada por preferência.
+- **Feito:** o GA entrega o horário assim que ele fica válido e continua melhorando a qualidade;
+  para quando zera as penalidades ou fica 1000 gerações sem melhorar.
+- **Adiado:** bloco atravessando intervalo ou troca de turno (não é regra por enquanto).
+- **Fora:** fixar aulas (o horário é sempre gerado do zero) e o genético partir do resultado da
+  busca exata (ele é para os quadros grandes, que a busca exata não resolve).
+- **Próximas regras de qualidade possíveis**, quando houver o dado no cadastro: janelas do
+  professor, máximo de aulas por dia.

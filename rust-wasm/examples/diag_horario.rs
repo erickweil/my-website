@@ -5,20 +5,15 @@
 //!
 //! Uso: cargo run --release --example diag_horario -- <instancia.json> [--sementes N] [--orcamento M]
 
-use std::{collections::BTreeMap, env, fs};
+use std::{collections::BTreeMap, env};
 
 use rust_wasm::{
     genetic::ga::GeneticAlgorithm,
-    horario::{config_ga_horario, DiaSemana, FomularioHorario, RegrasHorario},
+    horario::{config_ga_horario, DiaSemana, RegrasHorario},
 };
 
 fn carregar(caminho: &str) -> RegrasHorario {
-    let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(caminho).unwrap()).unwrap();
-    if let Some(f) = json.get_mut("formData") {
-        json = f.take();
-    }
-    let f: FomularioHorario = serde_json::from_value(json).unwrap();
-    RegrasHorario::new(f).unwrap()
+    RegrasHorario::de_arquivo(caminho)
 }
 
 #[derive(Default, Debug)]

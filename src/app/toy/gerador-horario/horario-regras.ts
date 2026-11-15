@@ -1,9 +1,8 @@
 /**
- * Tipos e constantes da página do gerador de horários.
- *
- * As regras, a leitura do formulário, a validação e os solvers ficam em Rust
- * (rust-wasm/src/horario/). Aqui só ficam o formato do formulário que a página edita e o formato
- * do resultado que ela renderiza, que é o que o Rust devolve.
+ * O que a página troca com o solver em Rust/WASM (rust-wasm/src/horario/): a entrada
+ * (`EntradaHorario` em horario_regras.rs) e o resultado (`ResultadoHorario` em
+ * horario_resultado.rs). As regras, a validação e os solvers ficam todos em Rust; a página monta a
+ * entrada a partir do projeto (modelo/para-solver.ts).
  */
 
 export const TODOS_OS_DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
@@ -18,51 +17,49 @@ export const DIAS_SEMANA_MAP: Record<HorarioDia, string> = {
   sex: "Sexta",
   sab: "Sábado",
 };
+
+/** Tempos marcados por dia; o tempo é o número da aula no dia, a partir de 1. */
 export type HorariosPorDia = Partial<Record<HorarioDia, number[]>>;
 
-/** Formulário editado na página e enviado como está para o Rust (`FomularioHorario`). */
-export interface FormularioHorario {
+/** O problema entregue ao solver. Tudo se referencia por id. */
+export interface EntradaDoSolver {
     turmas: {
-        nome: string;
+        id: string;
+        /** Em quais tempos a turma tem aula. */
         horarios: HorariosPorDia;
     }[];
-    disciplinas: {
-        nome: string;
-        turma: string;
-        aulas: number;
-        agrupar: number;
-        dividir: boolean;
+    /** Uma disciplina sendo dada: para quais turmas, usando quais recursos, quantas vezes por semana. */
+    aulas: {
+        id: string;
+        /** Mais de uma = turmas juntas, sempre no mesmo horário. */
+        turmas: string[];
+        /** Professores e ambiente: cada um só pode estar numa aula por horário. */
+        recursos: string[];
+        aulasSemana: number;
+        /** Aulas seguidas por bloco; 0 = sem agrupamento. */
+        bloco: number;
+        /** Com `bloco`: dois blocos podem ficar encostados no mesmo dia. */
+        emendar: boolean;
     }[];
-    disciplinas_unidas: {
-        grupo: string;
-        disciplinas: string[];
+    /** Professores e ambientes. */
+    recursos: {
+        id: string;
+        /** Regra obrigatória: nunca tem aula fora destes tempos. */
+        disponibilidade: HorariosPorDia;
+        /** Regra de qualidade (só o algoritmo genético considera): tempos em que é melhor não ter aula. */
+        evitar: HorariosPorDia;
     }[];
-    professores: {
-        nome: string;
-        disciplinas: string[];
-        horarios: HorariosPorDia;
-    }[];
-}
-
-/** Quadro de uma turma (`TurmaResultado` em horario_resultado.rs). */
-export interface TurmaHorarioResult {
-    turma: string;
-    horario: Array<{
-        dia: HorarioDia;
-        tempos: Array<{
-            descricao: string | null; // nome da disciplina, "???" para não resolvido, null para sem aula
-            violacao: string | null; // descrição da violação, se houver
-        }>;
-    }>;
 }
 
 export type SolverHorario = "pencilmark" | "genetic";
 
-/** Resultado de um solver (`ResultadoHorario` em horario_resultado.rs). */
-export interface ResultadoHorario {
-    /** Quadro para mostrar; null quando o solver não chegou a nenhum quadro. */
-    solucao: TurmaHorarioResult[] | null;
-    /** true se o quadro tem alguma violação ou célula não resolvida. */
+/** Resultado de um solver, no progresso e no fim. */
+export interface ResultadoDoSolver {
+    /** As aulas do quadro; null quando o solver não chegou a nenhum quadro. */
+    alocacoes: { aula: string; dia: HorarioDia; tempo: number }[] | null;
+    /** Células que quebram uma regra obrigatória, ou que ficaram vazias. */
+    problemas: { turma: string; dia: HorarioDia; tempo: number; aula: string | null; mensagem: string }[];
+    /** true se o quadro quebra alguma regra obrigatória ou tem célula não resolvida. */
     alguma_violacao: boolean;
     /** Mensagem para o usuário quando há violação ou não há solução. */
     mensagem: string | null;
@@ -74,7 +71,7 @@ export interface ResultadoHorario {
 }
 
 /** O que o worker manda para a página, no progresso e no fim. */
-export type HorarioWorkerTaskValue = ResultadoHorario & {
+export type HorarioWorkerTaskValue = ResultadoDoSolver & {
     /** Só no GA: tempo médio por geração no último bloco. */
     msPorGeracao?: number;
     /** Só no GA: número de ilhas em uso (0 = uma população só). */

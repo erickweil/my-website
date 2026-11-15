@@ -3,8 +3,8 @@
  *
  * - `diagnosticar`: o que impede ou ameaça um horário completo, antes de gerar. Cada pendência diz
  *   em que tela se corrige.
- * - `observarHorario`: o que vale conferir num horário já gerado e que o solver ainda não leva em
- *   conta (horários a evitar, blocos atravessando intervalo).
+ * - `observarHorario`: como um horário já gerado se sai nas regras de qualidade (horários a evitar),
+ *   que a busca exata ignora e o algoritmo genético tenta atender.
  * - `detalharProblema`: quem está em choque numa célula que o solver marcou com problema.
  */
 
@@ -20,7 +20,6 @@ import {
     limitarAoQuadro,
     nomeNaTurma,
     numeroDeTempos,
-    quebraDepoisDe,
 } from "./operacoes.ts";
 
 export interface Pendencia {
@@ -33,7 +32,6 @@ export interface Pendencia {
     professorId?: Id;
 }
 
-const NOME_DO_DIA: Record<Dia, string> = { dom: "domingo", seg: "segunda", ter: "terça", qua: "quarta", qui: "quinta", sex: "sexta", sab: "sábado" };
 
 const nome = (x: { nome: string } | undefined) => x?.nome || "(sem nome)";
 
@@ -157,29 +155,31 @@ export function diagnosticar(projeto: ProjetoHorario, cadastros: Cadastros): Pen
     return lista.sort((a, b) => Number(b.gravidade === "erro") - Number(a.gravidade === "erro"));
 }
 
-/** O que conferir num horário gerado e que o solver ainda não leva em conta. */
+/** Aulas em horário que algum professor pediu para evitar (uma por professor da aula). */
+export function aulasAEvitar(projeto: ProjetoHorario, horario: HorarioGerado): number {
+    let n = 0;
+    for (const a of horario.alocacoes) {
+        const oferta = projeto.ofertas.find((o) => o.id === a.ofertaId);
+        for (const d of projeto.docentes) {
+            if (oferta?.professorIds.includes(d.professorId) && d.evitar[a.dia]?.includes(a.tempo) && d.disponibilidade[a.dia]?.includes(a.tempo)) n++;
+        }
+    }
+    return n;
+}
+
+/** Como o horário se sai nas regras de qualidade: quem ficou com aula em horário a evitar. */
 export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, horario: HorarioGerado): string[] {
     const lista: string[] = [];
     const oferta = (id: Id) => projeto.ofertas.find((o) => o.id === id);
-    const turmas = (o: Oferta) => o.participacoes.map((p) => nome(projeto.turmas.find((t) => t.id === p.turmaId))).join(" + ");
 
     // Aulas em horário que o professor pediu para evitar
     for (const d of projeto.docentes) {
-        const n = horario.alocacoes.filter((a) => d.evitar[a.dia]?.includes(a.tempo) && oferta(a.ofertaId)?.professorIds.includes(d.professorId)).length;
+        const n = horario.alocacoes.filter(
+            (a) => d.evitar[a.dia]?.includes(a.tempo) && d.disponibilidade[a.dia]?.includes(a.tempo) && oferta(a.ofertaId)?.professorIds.includes(d.professorId),
+        ).length;
         if (n > 0) lista.push(`${nome(cadastros.professores.find((p) => p.id === d.professorId))} tem ${n === 1 ? "1 aula" : `${n} aulas`} em horários que pediu para evitar.`);
     }
 
-    // Blocos que atravessam intervalo ou troca de turno
-    for (const o of projeto.ofertas) {
-        if (o.distribuicao.tipo !== "blocos") continue;
-        for (const dia of projeto.quadro.dias) {
-            const tempos = new Set(horario.alocacoes.filter((a) => a.ofertaId === o.id && a.dia === dia).map((a) => a.tempo));
-            for (const t of tempos) {
-                const quebra = tempos.has(t + 1) ? quebraDepoisDe(projeto.quadro, t) : null;
-                if (quebra) lista.push(`${nomeNaTurma(o, o.participacoes[0].turmaId) || "(sem nome)"} (${turmas(o)}), ${NOME_DO_DIA[dia]}: o bloco atravessa ${quebra === "turno" ? "a troca de turno" : "o intervalo"} depois da ${t}ª aula.`);
-            }
-        }
-    }
     return lista;
 }
 

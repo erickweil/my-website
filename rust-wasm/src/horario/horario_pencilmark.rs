@@ -263,19 +263,11 @@ impl RegrasQuadro for HorarioRegrasPencilmark {
 mod tests {
     use super::*;
     use crate::genetic::problems::GAProblem;
-    use crate::horario::{FomularioHorario, FomularioHorarioDisciplina, FomularioHorarioProfessor, FomularioHorarioTurma};
     use crate::pencilmark::{solucionar_quadro, ExecucaoPencilmark};
-    use std::collections::HashMap;
     use wasm_bindgen_test::*;
 
     fn carregar(nome: &str) -> RegrasHorario {
-        let caminho = format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR"));
-        let texto = std::fs::read_to_string(&caminho).unwrap_or_else(|e| panic!("{caminho}: {e}"));
-        let mut json: serde_json::Value = serde_json::from_str(&texto).unwrap();
-        if let Some(f) = json.get_mut("formData") {
-            json = f.take();
-        }
-        RegrasHorario::new(serde_json::from_value(json).unwrap()).unwrap()
+        RegrasHorario::de_arquivo(&format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR")))
     }
 
     /// Checagem cruzada entre as duas implementações de regras em Rust: toda solução completa do
@@ -332,18 +324,14 @@ mod tests {
     /// Sem reinícios, a busca precisa esgotar e terminar sem solução.
     #[wasm_bindgen_test(unsupported = test)]
     fn instancia_inviavel_termina_sem_solucao() {
-        let h = |t: &[i32]| HashMap::from([("seg".to_string(), t.to_vec())]);
-        let disc = |nome: &str| FomularioHorarioDisciplina { nome: nome.into(), turma: "T".into(), aulas: 1, agrupar: 0, dividir: false };
-        let regras = HorarioRegrasPencilmark::new(RegrasHorario::new(FomularioHorario {
-            turmas: vec![FomularioHorarioTurma { nome: "T".into(), horarios: h(&[1, 2]) }],
-            disciplinas: vec![disc("A"), disc("B")],
-            disciplinas_unidas: vec![],
-            professores: vec![FomularioHorarioProfessor {
-                nome: "P".into(),
-                disciplinas: vec!["A".into(), "B".into()],
-                horarios: h(&[1]),
-            }],
-        }).unwrap());
+        let regras = HorarioRegrasPencilmark::new(RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2] } }],
+            "aulas": [
+                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 1 },
+                { "id": "B", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 1 }
+            ],
+            "recursos": [{ "id": "P", "disponibilidade": { "seg": [1] } }]
+        }"#).unwrap());
         let (quadro, n) = (regras.quadro_vazio(), regras.n_possibs());
         let mut exec = ExecucaoPencilmark::new(regras, quadro.clone(), n, 1, None);
         assert!(exec.executar(u64::MAX));

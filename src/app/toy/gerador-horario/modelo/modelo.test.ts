@@ -33,7 +33,7 @@ import {
     trocarFaixas,
 } from "./operacoes.ts";
 import { doSolver, paraSolver } from "./para-solver.ts";
-import { lerInstanciaAntiga, projetoDaInstanciaAntiga } from "./testes/instancia-antiga.ts";
+import { lerInstanciaDoSolver, projetoDaFaculdade } from "./testes/instancia-antiga.ts";
 
 const curso = (): Curso => ({
     id: "ads",
@@ -182,17 +182,19 @@ test("docentes do projeto acompanham as ofertas e nascem disponíveis", () => {
     assert.deepEqual(p.docentes.map((d) => contarTempos(d.disponibilidade)), [1, 25]);
 });
 
-test("paraSolver: oferta conjunta vira disciplinas unidas, com os recursos só na primeira", () => {
+test("paraSolver: aulas por id, com as turmas, os professores e o ambiente disputado", () => {
     let p = projetoDoisTurnos();
     const a = criarTurmaAvulsa(p, { nome: "A", ambienteId: "sala-a" });
     const b = criarTurmaAvulsa(a.projeto, { nome: "B", ambienteId: "sala-b" });
     const oa = criarOferta(b.projeto, a.turma.id);
     const ob = criarOferta(oa.projeto, b.turma.id);
     const lab = criarOferta(ob.projeto, b.turma.id);
-    p = lab.projeto;
+    const semAula = criarOferta(lab.projeto, b.turma.id);
+    p = semAula.projeto;
     p.ofertas = p.ofertas.map((o) => ({
         ...o,
         professorIds: ["p1"],
+        aulasSemana: o.id === semAula.oferta.id ? 0 : o.aulasSemana,
         distribuicao: o.id === lab.oferta.id ? { tipo: "blocos", tamanho: 2, emendar: true } : o.distribuicao,
         // A oferta de laboratório da turma B usa a sala da turma A
         ambienteId: o.id === lab.oferta.id ? "sala-a" : null,
@@ -201,62 +203,56 @@ test("paraSolver: oferta conjunta vira disciplinas unidas, com os recursos só n
     assert.ok("projeto" in junta);
     p = manterDocentes(junta.projeto);
     p.docentes[0].disponibilidade = { seg: [1, 2, 99], dom: [1] };
+    p.docentes[0].evitar = { seg: [2], sab: [1] };
 
-    const { formulario, diasAtivos } = paraSolver(p);
-    const conjunta = oa.oferta.id;
-    const [dA, dB, dLab] = [`${conjunta}|${a.turma.id}`, `${conjunta}|${b.turma.id}`, `${lab.oferta.id}|${b.turma.id}`];
-
-    assert.deepEqual(diasAtivos, ["seg", "ter", "qua", "qui", "sex"]);
-    assert.deepEqual(formulario.turmas.map((t) => t.nome), [a.turma.id, b.turma.id]);
-    assert.deepEqual(formulario.disciplinas, [
-        { nome: dA, turma: a.turma.id, aulas: 2, agrupar: 0, dividir: false },
-        { nome: dB, turma: b.turma.id, aulas: 2, agrupar: 0, dividir: false },
-        { nome: dLab, turma: b.turma.id, aulas: 2, agrupar: 2, dividir: false },
-    ]);
-    assert.deepEqual(formulario.disciplinas_unidas, [{ grupo: conjunta, disciplinas: [dA, dB] }]);
-    assert.deepEqual(formulario.professores, [
-        // Disponibilidade limitada ao quadro: sem domingo e sem o tempo 99
-        { nome: "p1", disciplinas: [dA, dLab], horarios: { seg: [1, 2] } },
-        // "sala-a" é disputada pelas turmas A e B; "sala-b" não é usada por ninguém mais e não entra
-        { nome: "ambiente:sala-a", disciplinas: [dA, dLab], horarios: horariosCheios(p.quadro) },
-    ]);
+    assert.deepEqual(paraSolver(p), {
+        turmas: [
+            { id: a.turma.id, horarios: horariosCheios(p.quadro) },
+            { id: b.turma.id, horarios: horariosCheios(p.quadro) },
+        ],
+        aulas: [
+            // A aula em conjunto é uma só, com as duas turmas; a de zero aulas não entra
+            { id: oa.oferta.id, turmas: [a.turma.id, b.turma.id], recursos: ["p1", "sala-a"], aulasSemana: 2, bloco: 0, emendar: false },
+            { id: lab.oferta.id, turmas: [b.turma.id], recursos: ["p1", "sala-a"], aulasSemana: 2, bloco: 2, emendar: true },
+        ],
+        recursos: [
+            // Limitados ao quadro: sem domingo, sem sábado e sem o tempo 99
+            { id: "p1", disponibilidade: { seg: [1, 2] }, evitar: { seg: [2] } },
+            // "sala-a" é disputada pelas turmas A e B; "sala-b" não é usada por mais ninguém e não entra
+            { id: "sala-a", disponibilidade: horariosCheios(p.quadro), evitar: {} },
+        ],
+    });
 });
 
-test("paraSolver: o quadro real de faculdade dá o mesmo problema do formato antigo", () => {
-    const antigo = lerInstanciaAntiga("faculdade-anonimizado");
-    const { projeto } = projetoDaInstanciaAntiga(antigo);
-    const { formulario } = paraSolver(projeto);
+test("paraSolver: o quadro real, importado do formato antigo, dá a instância que o Rust testa", () => {
+    const { projeto, professores } = projetoDaFaculdade();
+    const entrada = paraSolver(projeto);
+    const doRust = lerInstanciaDoSolver("faculdade-anonimizado");
 
-    assert.equal(formulario.turmas.length, antigo.turmas.length);
-    assert.equal(formulario.disciplinas.length, antigo.disciplinas.length);
-    assert.equal(formulario.disciplinas_unidas.length, 1);
-    assert.equal(formulario.professores.length, antigo.professores.length, "sem ambientes, só os professores");
-    const soma = (ds: { aulas: number }[]) => ds.reduce((s, d) => s + d.aulas, 0);
-    assert.equal(soma(formulario.disciplinas), soma(antigo.disciplinas));
-    // Toda referência por nome existe (o Rust recusa o formulário se não existir)
-    const nomes = new Set(formulario.disciplinas.map((d) => d.nome));
-    const turmas = new Set(formulario.turmas.map((t) => t.nome));
-    assert.ok(formulario.disciplinas.every((d) => turmas.has(d.turma)));
-    assert.ok(formulario.professores.every((p) => p.disciplinas.every((d) => nomes.has(d))));
-    assert.ok(formulario.disciplinas_unidas.every((g) => g.disciplinas.every((d) => nomes.has(d))));
+    // Os ids mudam (aqui são sorteados; lá são os nomes): compara pelo nome e pela posição
+    const turma = (id: string) => projeto.turmas.find((t) => t.id === id)!.nome;
+    const recurso = (id: string) => professores.find((x) => x.id === id)!.nome;
+    assert.deepEqual(entrada.turmas.map((t) => ({ id: turma(t.id), horarios: t.horarios })), doRust.turmas);
+    // No formato antigo a aula em conjunto ficava na posição da última disciplina do grupo; aqui, na da primeira
+    const forma = (aulas: typeof doRust.aulas, nome: (id: string) => string, deTurma: (id: string) => string) =>
+        aulas.map((x) => JSON.stringify([x.turmas.map(deTurma), x.recursos.map(nome).sort(), x.aulasSemana, x.bloco ?? 0, x.emendar ?? false])).sort();
+    assert.deepEqual(forma(entrada.aulas, recurso, turma), forma(doRust.aulas, (x) => x, (x) => x));
+    assert.equal(entrada.aulas.length, 19, "20 disciplinas antigas, duas delas numa aula em conjunto");
+    // Os docentes saem na ordem em que aparecem nas aulas, e dia sem horário não é listado
+    const recursos = (lista: { id: string; disponibilidade: object }[], nome: (id: string) => string) =>
+        lista
+            .map((x) => [nome(x.id), Object.entries(x.disponibilidade).filter(([, t]) => (t as number[]).length > 0).sort()] as const)
+            .sort((x, y) => x[0].localeCompare(y[0]));
+    assert.deepEqual(recursos(entrada.recursos, recurso), recursos(doRust.recursos, (x) => x));
 });
 
-test("doSolver: alocações por oferta, sem repetir a conjunta, e problemas", () => {
-    let p = projetoDoisTurnos();
-    const a = criarTurmaAvulsa(p, { nome: "A" });
-    const b = criarTurmaAvulsa(a.projeto, { nome: "B" });
-    const oa = criarOferta(b.projeto, a.turma.id);
-    const ob = criarOferta(oa.projeto, b.turma.id);
-    const junta = juntarOfertas(ob.projeto, oa.oferta.id, ob.oferta.id);
-    assert.ok("projeto" in junta);
-    p = { ...junta.projeto, revisao: 7 };
-    const id = oa.oferta.id;
-
-    const celula = (descricao: string | null, violacao: string | null = null) => ({ descricao, violacao });
+test("doSolver: alocações e problemas voltam com os ids do projeto", () => {
+    const p = { ...projetoDoisTurnos(), revisao: 7 };
     const horario = doSolver(p, {
-        solucao: [
-            { turma: a.turma.id, horario: [{ dia: "seg", tempos: [celula(`${id}|${a.turma.id}`), celula("???", "Incompleto"), celula(null)] }] },
-            { turma: b.turma.id, horario: [{ dia: "seg", tempos: [celula(`${id}|${b.turma.id}`), celula(null), celula(null)] }] },
+        alocacoes: [{ aula: "oferta-1", dia: "seg", tempo: 1 }],
+        problemas: [
+            { turma: "turma-a", dia: "seg", tempo: 2, aula: null, mensagem: "Este espaço não deveria estar vazio" },
+            { turma: "turma-a", dia: "ter", tempo: 1, aula: "oferta-1", mensagem: "Professor ocupado" },
         ],
         alguma_violacao: true,
         mensagem: "Não foi possível completar",
@@ -264,13 +260,22 @@ test("doSolver: alocações por oferta, sem repetir a conjunta, e problemas", ()
         depth: 0,
         terminou: true,
     });
-    assert.equal(horario.revisao, 7);
-    assert.equal(horario.completo, false);
-    assert.deepEqual(horario.alocacoes, [{ ofertaId: id, dia: "seg", tempo: 1, fixada: false }]);
-    assert.deepEqual(horario.problemas, [
-        { mensagem: "Não foi possível completar" },
-        { mensagem: "Incompleto", ofertaId: undefined, turmaId: a.turma.id, dia: "seg", tempo: 2 },
-    ]);
+    assert.deepEqual(horario, {
+        revisao: 7,
+        completo: false,
+        alocacoes: [{ ofertaId: "oferta-1", dia: "seg", tempo: 1, fixada: false }],
+        problemas: [
+            { mensagem: "Não foi possível completar" },
+            { mensagem: "Este espaço não deveria estar vazio", ofertaId: undefined, turmaId: "turma-a", dia: "seg", tempo: 2 },
+            { mensagem: "Professor ocupado", ofertaId: "oferta-1", turmaId: "turma-a", dia: "ter", tempo: 1 },
+        ],
+    });
+
+    const base = { problemas: [], mensagem: null, iter: 1, depth: 0, terminou: true };
+    assert.equal(doSolver(p, { ...base, alocacoes: [], alguma_violacao: false }).completo, true);
+    // Sem quadro nenhum: incompleto, com a mensagem do solver
+    const semQuadro = doSolver(p, { ...base, alocacoes: null, alguma_violacao: true, mensagem: "Sem solução" });
+    assert.deepEqual([semQuadro.completo, semQuadro.alocacoes, semQuadro.problemas], [false, [], [{ mensagem: "Sem solução" }]]);
 });
 
 test("armazenamento: grava, lê e recusa conteúdo inválido sem apagar", () => {
@@ -352,21 +357,11 @@ test("disciplinas com o mesmo nome, em turmas diferentes ou na mesma, não se co
     }
     p = manterDocentes(p);
 
-    const { formulario } = paraSolver(p);
-    const nomes = formulario.disciplinas.map((d) => d.nome);
-    assert.equal(new Set(nomes).size, 3, "cada uma é uma disciplina distinta para o solver");
-    assert.deepEqual(formulario.disciplinas.map((d) => d.turma), [a.turma.id, b.turma.id, b.turma.id]);
-    // Cada professor fica só com a sua
-    assert.deepEqual(formulario.professores.map((x) => [x.nome, x.disciplinas]), [["p1", [nomes[0]]], ["p2", [nomes[1]]], ["p3", [nomes[2]]]]);
-
-    // E o resultado volta para a oferta certa
-    const celula = (descricao: string | null) => ({ descricao, violacao: null });
-    const horario = doSolver(p, {
-        solucao: [
-            { turma: a.turma.id, horario: [{ dia: "seg", tempos: [celula(nomes[0])] }] },
-            { turma: b.turma.id, horario: [{ dia: "seg", tempos: [celula(nomes[2])] }] },
-        ],
-        alguma_violacao: false, mensagem: null, iter: 1, depth: 0, terminou: true,
-    });
-    assert.deepEqual(horario.alocacoes.map((x) => x.ofertaId), [ids[0], ids[2]]);
+    const entrada = paraSolver(p);
+    // Três aulas distintas, cada uma com a sua turma e o seu professor
+    assert.deepEqual(entrada.aulas.map((x) => [x.id, x.turmas, x.recursos]), [
+        [ids[0], [a.turma.id], ["p1"]],
+        [ids[1], [b.turma.id], ["p2"]],
+        [ids[2], [b.turma.id], ["p3"]],
+    ]);
 });

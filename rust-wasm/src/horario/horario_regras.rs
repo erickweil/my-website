@@ -1,7 +1,7 @@
 use std::{collections::HashMap};
 
 // Tipo a ser serializado-deserializado para comunicação com o frontend
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -62,123 +62,100 @@ impl TryFrom<&str> for DiaSemana {
     }
 }
 
-// ── Erros do formulário ──────────────────────────────────────────────────────────────────────
+// ── Erros da entrada ─────────────────────────────────────────────────────────────────────────
 
-/// Problemas no formulário recebido da UI. As mensagens (`Display`) são mostradas ao usuário.
+/// Problemas na entrada recebida da página. A página monta a entrada a partir do projeto e já a
+/// valida, então isto só aparece se houver um defeito lá; ainda assim a mensagem (`Display`) é
+/// mostrada ao usuário.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ErroFormulario {
-    /// O JSON não tem o formato esperado (campo faltando, tipo errado…).
+pub enum ErroEntrada {
+    /// O objeto não tem o formato esperado (campo faltando, tipo errado…).
     FormatoInvalido(String),
-    /// Nenhuma turma tem horário disponível, então não há tempos no quadro.
+    /// Nenhuma turma tem horário marcado, então não há tempos no quadro.
     SemTempos,
-    /// Chave de dia desconhecida nos horários de uma turma ou professor.
+    /// Chave de dia desconhecida nos horários de uma turma ou de um recurso.
     DiaInvalido { dia: String, dono: String },
-    TurmaNaoEncontrada { turma: String, disciplina: String },
-    DisciplinaNaoEncontradaProfessor { disciplina: String, professor: String },
-    DisciplinaNaoEncontradaGrupo { disciplina: String, grupo: String },
+    TurmaNaoEncontrada { turma: String, aula: String },
+    RecursoNaoEncontrado { recurso: String, aula: String },
+    AulaSemTurma { aula: String },
 }
 
-impl std::fmt::Display for ErroFormulario {
+impl std::fmt::Display for ErroEntrada {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::FormatoInvalido(msg) => write!(f, "Formulário inválido: {msg}"),
-            Self::SemTempos => write!(f, "Nenhuma turma tem horários disponíveis: marque ao menos um tempo em alguma turma."),
+            Self::FormatoInvalido(msg) => write!(f, "Dados inválidos: {msg}"),
+            Self::SemTempos => write!(f, "Nenhuma turma tem horários marcados: marque ao menos um horário em alguma turma."),
             Self::DiaInvalido { dia, dono } => write!(f, "Dia \"{dia}\" inválido nos horários de \"{dono}\""),
-            Self::TurmaNaoEncontrada { turma, disciplina } =>
-                write!(f, "Turma \"{turma}\" não encontrada para disciplina \"{disciplina}\""),
-            Self::DisciplinaNaoEncontradaProfessor { disciplina, professor } =>
-                write!(f, "Disciplina \"{disciplina}\" não encontrada para professor \"{professor}\""),
-            Self::DisciplinaNaoEncontradaGrupo { disciplina, grupo } =>
-                write!(f, "Disciplina \"{disciplina}\" não encontrada para disciplina unida \"{grupo}\""),
+            Self::TurmaNaoEncontrada { turma, aula } => write!(f, "A aula \"{aula}\" é de uma turma que não existe (\"{turma}\")"),
+            Self::RecursoNaoEncontrado { recurso, aula } =>
+                write!(f, "A aula \"{aula}\" usa um professor ou ambiente que não existe (\"{recurso}\")"),
+            Self::AulaSemTurma { aula } => write!(f, "A aula \"{aula}\" não tem nenhuma turma"),
         }
     }
 }
 
-impl std::error::Error for ErroFormulario {}
+impl std::error::Error for ErroEntrada {}
 
-/// Erro de desserialização com o caminho do campo (ex.: `disciplinas[3].aulas`).
-pub fn erro_de_formato(caminho: &str, msg: &str) -> ErroFormulario {
+/// Erro de desserialização com o caminho do campo (ex.: `aulas[3].aulasSemana`).
+pub fn erro_de_formato(caminho: &str, msg: &str) -> ErroEntrada {
     // O erro do serde_wasm_bindgen vira um `Error` do JS, cujo texto já começa com "Error: "
     let msg = msg.strip_prefix("Error: ").unwrap_or(msg);
     if caminho.is_empty() || caminho == "." {
-        ErroFormulario::FormatoInvalido(msg.to_string())
+        ErroEntrada::FormatoInvalido(msg.to_string())
     } else {
-        ErroFormulario::FormatoInvalido(format!("campo {caminho}: {msg}"))
+        ErroEntrada::FormatoInvalido(format!("campo {caminho}: {msg}"))
     }
 }
 
+/// Tempos marcados por dia (`"seg"`, `"ter"`…). O tempo é o número da aula no dia, a partir de 1.
 pub type HorariosPorDia = HashMap<String, Vec<i32>>;
 
+// ── Entrada do solver ────────────────────────────────────────────────────────────────────────
+// O problema como a página o entrega (`EntradaDoSolver` em horario-regras.ts): tudo se referencia
+// por id. Uma aula pode ter várias turmas (dada em conjunto) e vários recursos.
+
 #[derive(Deserialize, Debug, Clone)]
-pub struct FomularioHorarioTurma {
-    pub nome: String,
+pub struct EntradaTurma {
+    pub id: String,
+    /// Em quais tempos a turma tem aula.
     pub horarios: HorariosPorDia,
 }
 
+/// Uma disciplina sendo dada: para quais turmas, usando quais recursos, quantas vezes por semana.
 #[derive(Deserialize, Debug, Clone)]
-pub struct FomularioHorarioDisciplina {
-    pub nome: String,
-    pub turma: String,
-    /// Campo numérico da página: chega `NaN` se o usuário apagar o valor.
-    #[serde(deserialize_with = "inteiro_obrigatorio")]
-    pub aulas: i32,
-    // A página pode omitir estes campos ou mandá-los como `undefined` (o checkbox de "dividir" não
-    // tem valor inicial; "agrupar" vazio vira `NaN`). No TS antigo isso valia como 0/false.
-    #[serde(default, deserialize_with = "inteiro_ou_zero")]
-    pub agrupar: i32,
-    #[serde(default, deserialize_with = "nulo_vira_padrao")]
-    pub dividir: bool,
+#[serde(rename_all = "camelCase")]
+pub struct EntradaAula {
+    pub id: String,
+    /// Mais de uma = turmas juntas, sempre no mesmo horário.
+    pub turmas: Vec<String>,
+    /// Professores e ambiente: cada um só pode estar numa aula por horário.
+    pub recursos: Vec<String>,
+    pub aulas_semana: i32,
+    /// Aulas seguidas por bloco; 0 = sem agrupamento.
+    #[serde(default)]
+    pub bloco: i32,
+    /// Com `bloco`: dois blocos podem ficar encostados no mesmo dia.
+    #[serde(default)]
+    pub emendar: bool,
 }
 
-/// Aceita `null`/`undefined` como o valor padrão do tipo (`false`, lista vazia…).
-fn nulo_vira_padrao<'de, D: Deserializer<'de>, T: Deserialize<'de> + Default>(d: D) -> Result<T, D::Error> {
-    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
-}
-
-/// Número inteiro >= 0 vindo de um `<input type="number">`, que no JS é sempre um f64.
-fn inteiro_nao_negativo<E: serde::de::Error>(v: f64) -> Result<i32, E> {
-    if v.fract() != 0.0 || !(0.0..=i32::MAX as f64).contains(&v) {
-        return Err(E::custom(format!("{v} não é um número inteiro maior ou igual a zero")));
-    }
-    Ok(v as i32)
-}
-
-/// Inteiro >= 0; vazio (`null`, `undefined` ou `NaN`) vale 0.
-fn inteiro_ou_zero<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
-    match Option::<f64>::deserialize(d)? {
-        Some(v) if !v.is_nan() => inteiro_nao_negativo(v),
-        _ => Ok(0),
-    }
-}
-
-/// Inteiro >= 0 que precisa estar preenchido.
-fn inteiro_obrigatorio<'de, D: Deserializer<'de>>(d: D) -> Result<i32, D::Error> {
-    match Option::<f64>::deserialize(d)? {
-        Some(v) if !v.is_nan() => inteiro_nao_negativo(v),
-        _ => Err(serde::de::Error::custom("campo não preenchido")),
-    }
+/// Algo de ocupação única: um professor ou um ambiente.
+#[derive(Deserialize, Debug, Clone)]
+pub struct EntradaRecurso {
+    pub id: String,
+    /// REGRA OBRIGATÓRIA: o recurso nunca tem aula fora destes tempos.
+    pub disponibilidade: HorariosPorDia,
+    /// REGRA DE QUALIDADE: tempos disponíveis em que é melhor não ter aula. Só o algoritmo genético
+    /// leva em conta (ver `PesosFitness::evitar`); a busca exata ignora.
+    #[serde(default)]
+    pub evitar: HorariosPorDia,
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct FomularioHorarioDisciplinaUnida {
-    pub grupo: String,
-    pub disciplinas: Vec<String>,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct FomularioHorarioProfessor {
-    pub nome: String,
-    pub disciplinas: Vec<String>,
-    pub horarios: HorariosPorDia,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-pub struct FomularioHorario {
-    pub turmas: Vec<FomularioHorarioTurma>,
-    pub disciplinas: Vec<FomularioHorarioDisciplina>,
-    #[serde(default, deserialize_with = "nulo_vira_padrao")]
-    pub disciplinas_unidas: Vec<FomularioHorarioDisciplinaUnida>,
-    pub professores: Vec<FomularioHorarioProfessor>,
+pub struct EntradaHorario {
+    pub turmas: Vec<EntradaTurma>,
+    pub aulas: Vec<EntradaAula>,
+    pub recursos: Vec<EntradaRecurso>,
 }
 
 #[derive(Clone)]
@@ -196,14 +173,14 @@ impl Horario {
     }
 
     /// Monta a matriz de disponibilidade. `dono` (nome da turma ou professor) só entra na mensagem de erro.
-    pub fn from_formulario(tempos: HorariosPorDia, n_tempos: usize, dono: &str) -> Result<Self, ErroFormulario> {
+    pub fn from_formulario(tempos: &HorariosPorDia, n_tempos: usize, dono: &str) -> Result<Self, ErroEntrada> {
         // Inicia com array de 0 (indisponível)
         let mut horario = Self::new(n_tempos);
 
         for (dia_str, tempos_vec) in tempos {
             let dia = DiaSemana::try_from(dia_str.as_str())
-                .map_err(|dia| ErroFormulario::DiaInvalido { dia, dono: dono.to_string() })?;
-            for tempo in tempos_vec {
+                .map_err(|dia| ErroEntrada::DiaInvalido { dia, dono: dono.to_string() })?;
+            for &tempo in tempos_vec {
                 if tempo >= 1 && tempo as usize <= n_tempos {
                     let idx = (tempo - 1) as usize;
                     let slot_idx = idx * QUANTOS_DIAS + dia.to_index();
@@ -246,18 +223,27 @@ pub struct Turma {
     pub horarios: Horario,
 }
 
+/// Um recurso de ocupação única: professor ou ambiente (o nome vem de quando só havia professores).
 #[derive(Clone)]
 pub struct Professor {
     pub id: usize,
+    /// O id do recurso na entrada.
     pub nome: String,
     // 1 = disponível, 0 = ocupado
     pub horarios: Horario,
+    /// 1 = horário a evitar (regra de qualidade, só do algoritmo genético).
+    pub evitar: Horario,
 }
 
+/// Uma aula numa turma. Uma aula dada em conjunto vira uma disciplina por turma, "unidas" entre si
+/// (mesmo horário); os recursos ficam só na primeira, para não entrarem em choque consigo mesmos.
 #[derive(Clone)]
 pub struct Disciplina {
     pub id: usize,
+    /// O id da aula na entrada (repetido nas disciplinas de uma aula em conjunto).
     pub nome: String,
+    /// Índice da aula em `RegrasHorario::aulas`.
+    pub aula: usize,
 
     pub aulas: i32,
     pub agrupar: i32,
@@ -278,97 +264,99 @@ pub struct RegrasHorario {
     pub turmas: Vec<Turma>,
     pub disciplinas: Vec<Disciplina>,    
     pub professores: Vec<Professor>,
+    /// Ids das aulas da entrada, na ordem.
+    pub aulas: Vec<String>,
     pub n_tempos: usize,
     /// Pesos das regras no fitness do algoritmo genético (ver horario_genetic.rs).
     pub pesos: super::PesosFitness,
 }
 
 impl RegrasHorario {
-    /// Lê o formulário da UI. É a ÚNICA interpretação do formulário: os dois solvers, a validação e
-    /// a montagem do resultado partem daqui.
-    pub fn new(formulario: FomularioHorario) -> Result<Self, ErroFormulario> {
+    /// Monta as regras a partir da entrada. É a ÚNICA interpretação da entrada: os dois solvers, a
+    /// validação e a montagem do resultado partem daqui.
+    pub fn new(entrada: EntradaHorario) -> Result<Self, ErroEntrada> {
         // Número de tempos = maior tempo marcado em alguma turma
-        let n_tempos = formulario.turmas.iter()
+        let n_tempos = entrada.turmas.iter()
             .flat_map(|t| t.horarios.values().flatten())
             .copied()
             .max()
             .unwrap_or(0)
             .max(0) as usize;
         if n_tempos == 0 {
-            return Err(ErroFormulario::SemTempos);
+            return Err(ErroEntrada::SemTempos);
         }
 
         let mut turmas = Vec::new();
-        for (i, turma_form) in formulario.turmas.into_iter().enumerate() {
-            let horarios = Horario::from_formulario(turma_form.horarios, n_tempos, &turma_form.nome)?;
-            turmas.push(Turma { id: i, nome: turma_form.nome, horarios });
+        for (i, t) in entrada.turmas.into_iter().enumerate() {
+            let horarios = Horario::from_formulario(&t.horarios, n_tempos, &t.id)?;
+            turmas.push(Turma { id: i, nome: t.id, horarios });
         }
-
-        let mut disciplinas = Vec::new();
-        for (i, disc_form) in formulario.disciplinas.into_iter().enumerate() {
-            let turma_id = turmas.iter().position(|t| t.nome == disc_form.turma)
-                .ok_or_else(|| ErroFormulario::TurmaNaoEncontrada {
-                    turma: disc_form.turma.clone(),
-                    disciplina: disc_form.nome.clone(),
-                })?;
-
-            disciplinas.push(Disciplina {
-                id: i,
-                nome: disc_form.nome,
-                aulas: disc_form.aulas,
-                agrupar: disc_form.agrupar,
-                dividir: disc_form.dividir,
-                turma_id,
-                disciplinas_unidas: Vec::new(),
-                professores: Vec::new(),
-            });
-        }
-
-        // Com nomes repetidos vale a primeira disciplina, como no `find` do TS
-        let buscar_disciplina = |disciplinas: &[Disciplina], nome: &str| disciplinas.iter().position(|d| d.nome == nome);
+        let turma_por_id: HashMap<&str, usize> = turmas.iter().map(|t| (t.nome.as_str(), t.id)).collect();
 
         let mut professores = Vec::new();
-        for (i, prof_form) in formulario.professores.into_iter().enumerate() {
-            for disc_nome in &prof_form.disciplinas {
-                let disc_id = buscar_disciplina(&disciplinas, disc_nome)
-                    .ok_or_else(|| ErroFormulario::DisciplinaNaoEncontradaProfessor {
-                        disciplina: disc_nome.clone(),
-                        professor: prof_form.nome.clone(),
-                    })?;
-                disciplinas[disc_id].professores.push(i);
-            }
-
-            let horarios = Horario::from_formulario(prof_form.horarios, n_tempos, &prof_form.nome)?;
-            professores.push(Professor { id: i, nome: prof_form.nome, horarios });
+        for (i, r) in entrada.recursos.into_iter().enumerate() {
+            let horarios = Horario::from_formulario(&r.disponibilidade, n_tempos, &r.id)?;
+            let evitar = Horario::from_formulario(&r.evitar, n_tempos, &r.id)?;
+            professores.push(Professor { id: i, nome: r.id, horarios, evitar });
         }
+        let recurso_por_id: HashMap<&str, usize> = professores.iter().map(|p| (p.nome.as_str(), p.id)).collect();
 
-        for grupo in formulario.disciplinas_unidas {
-            let ids = grupo.disciplinas.iter()
-                .map(|nome| buscar_disciplina(&disciplinas, nome).ok_or_else(|| ErroFormulario::DisciplinaNaoEncontradaGrupo {
-                    disciplina: nome.clone(),
-                    grupo: grupo.grupo.clone(),
-                }))
+        let mut disciplinas: Vec<Disciplina> = Vec::new();
+        let mut aulas = Vec::new();
+        for (aula, a) in entrada.aulas.into_iter().enumerate() {
+            if a.turmas.is_empty() {
+                return Err(ErroEntrada::AulaSemTurma { aula: a.id });
+            }
+            let recursos = a.recursos.iter()
+                .map(|r| recurso_por_id.get(r.as_str()).copied()
+                    .ok_or_else(|| ErroEntrada::RecursoNaoEncontrado { recurso: r.clone(), aula: a.id.clone() }))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            // Cada disciplina do grupo fica unida a todas as outras (pelo nome, como no TS)
-            for (a, &disc_id) in ids.iter().enumerate() {
-                for (b, &unida_id) in ids.iter().enumerate() {
-                    if grupo.disciplinas[a] != grupo.disciplinas[b] {
-                        disciplinas[disc_id].disciplinas_unidas.push(unida_id);
-                    }
-                }
+            // Uma disciplina por turma, todas unidas entre si
+            let primeira = disciplinas.len();
+            let ids: Vec<usize> = (primeira..primeira + a.turmas.len()).collect();
+            for (k, turma) in a.turmas.iter().enumerate() {
+                let turma_id = *turma_por_id.get(turma.as_str())
+                    .ok_or_else(|| ErroEntrada::TurmaNaoEncontrada { turma: turma.clone(), aula: a.id.clone() })?;
+                disciplinas.push(Disciplina {
+                    id: primeira + k,
+                    nome: a.id.clone(),
+                    aula,
+                    aulas: a.aulas_semana.max(0),
+                    agrupar: if a.bloco >= 2 { a.bloco } else { 0 },
+                    dividir: a.bloco >= 2 && !a.emendar,
+                    turma_id,
+                    disciplinas_unidas: ids.iter().copied().filter(|&d| d != primeira + k).collect(),
+                    professores: if k == 0 { recursos.clone() } else { Vec::new() },
+                });
             }
+            aulas.push(a.id);
         }
 
-        Ok(Self { turmas, disciplinas, professores, n_tempos, pesos: Default::default() })
+        Ok(Self { turmas, disciplinas, professores, aulas, n_tempos, pesos: Default::default() })
     }
 
-    /// Lê o formulário vindo do JS (o objeto `FormularioHorario` da página).
-    pub fn from_js(formulario: wasm_bindgen::JsValue) -> Result<Self, ErroFormulario> {
-        let de = serde_wasm_bindgen::Deserializer::from(formulario);
-        let formulario: FomularioHorario = serde_path_to_error::deserialize(de)
+    /// Lê a entrada vinda do JS (o objeto `EntradaDoSolver` da página).
+    pub fn from_js(entrada: wasm_bindgen::JsValue) -> Result<Self, ErroEntrada> {
+        let de = serde_wasm_bindgen::Deserializer::from(entrada);
+        let entrada: EntradaHorario = serde_path_to_error::deserialize(de)
             .map_err(|e| erro_de_formato(&e.path().to_string(), &e.inner().to_string()))?;
-        Self::new(formulario)
+        Self::new(entrada)
+    }
+
+    /// Lê a entrada de um JSON (testes e benchmarks).
+    pub fn from_json(json: &str) -> Result<Self, ErroEntrada> {
+        let mut de = serde_json::Deserializer::from_str(json);
+        let entrada: EntradaHorario = serde_path_to_error::deserialize(&mut de)
+            .map_err(|e| erro_de_formato(&e.path().to_string(), &e.inner().to_string()))?;
+        Self::new(entrada)
+    }
+
+    /// Lê uma instância de um arquivo JSON. Para testes e benchmarks: encerra com a mensagem do
+    /// erro se o arquivo não puder ser lido ou não for uma entrada válida.
+    pub fn de_arquivo(caminho: &str) -> Self {
+        let texto = std::fs::read_to_string(caminho).unwrap_or_else(|e| panic!("não foi possível ler '{caminho}': {e}"));
+        Self::from_json(&texto).unwrap_or_else(|e| panic!("entrada inválida em '{caminho}': {e}"))
     }
 
     /// Número de células do quadro (turmas × dias × tempos).
@@ -413,99 +401,76 @@ impl RegrasHorario {
 mod tests {
     use super::*;
 
-    /// Trecho no formato exportado pela UI: disciplina sem `dividir`/`agrupar`, campos extras
-    /// (`id`, `checkAgrupar`) e sem `disciplinas_unidas`.
-    #[test]
-    fn aceita_formulario_com_campos_omitidos() {
-        let json = r#"{
-            "turmas": [{ "nome": "T", "horarios": { "seg": [1, 2] }, "id": "abc" }],
-            "disciplinas": [
-                { "nome": "A", "turma": "T", "aulas": 1, "agrupar": 2, "checkAgrupar": false },
-                { "nome": "B", "turma": "T", "aulas": 1 }
-            ],
-            "professores": [{ "nome": "P", "disciplinas": ["A", "B"], "horarios": { "seg": [1, 2] } }]
-        }"#;
-        let f: FomularioHorario = serde_json::from_str(json).expect("deveria aceitar campos omitidos");
-        assert!(!f.disciplinas[0].dividir);
-        assert_eq!(f.disciplinas[1].agrupar, 0);
-        assert!(f.disciplinas_unidas.is_empty());
-        let regras = RegrasHorario::new(f).unwrap();
-        assert_eq!(regras.n_tempos, 2);
-    }
-
-    fn formulario(json: &str) -> FomularioHorario {
-        serde_json::from_str(json).unwrap()
-    }
-
-    /// Formulário mínimo válido com um trecho trocado, para testar cada erro.
-    fn com(trocar: &str, por: &str) -> FomularioHorario {
+    /// Entrada mínima válida com um trecho trocado, para testar cada erro.
+    fn com(trocar: &str, por: &str) -> Result<RegrasHorario, ErroEntrada> {
         let base = r#"{
-            "turmas": [{ "nome": "T", "horarios": { "seg": [1, 2] } }],
-            "disciplinas": [{ "nome": "A", "turma": "T", "aulas": 1 }, { "nome": "B", "turma": "T", "aulas": 1 }],
-            "disciplinas_unidas": [{ "grupo": "G", "disciplinas": ["A", "B"] }],
-            "professores": [{ "nome": "P", "disciplinas": ["A", "B"], "horarios": { "seg": [1, 2] } }]
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2] } }, { "id": "U", "horarios": { "seg": [1, 2] } }],
+            "aulas": [
+                { "id": "a", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2, "bloco": 2 },
+                { "id": "b", "turmas": ["T", "U"], "recursos": ["P", "sala"], "aulasSemana": 1, "bloco": 2, "emendar": true }
+            ],
+            "recursos": [
+                { "id": "P", "disponibilidade": { "seg": [1, 2] }, "evitar": { "seg": [2] } },
+                { "id": "sala", "disponibilidade": { "seg": [1, 2] } }
+            ]
         }"#;
-        assert!(base.contains(trocar), "trecho '{trocar}' não está no formulário base");
-        formulario(&base.replacen(trocar, por, 1))
+        assert!(base.contains(trocar), "trecho '{trocar}' não está na entrada base");
+        RegrasHorario::from_json(&base.replacen(trocar, por, 1))
     }
 
     #[test]
-    fn erros_de_formulario_viram_result_com_mensagem() {
-        let casos: [(&str, &str, ErroFormulario, &str); 5] = [
-            (r#""turma": "T", "aulas": 1 }, { "nome": "B""#, r#""turma": "X", "aulas": 1 }, { "nome": "B""#,
-                ErroFormulario::TurmaNaoEncontrada { turma: "X".into(), disciplina: "A".into() },
-                r#"Turma "X" não encontrada para disciplina "A""#),
-            (r#""disciplinas": ["A", "B"], "horarios""#, r#""disciplinas": ["A", "Z"], "horarios""#,
-                ErroFormulario::DisciplinaNaoEncontradaProfessor { disciplina: "Z".into(), professor: "P".into() },
-                r#"Disciplina "Z" não encontrada para professor "P""#),
-            (r#""disciplinas": ["A", "B"] }"#, r#""disciplinas": ["A", "Y"] }"#,
-                ErroFormulario::DisciplinaNaoEncontradaGrupo { disciplina: "Y".into(), grupo: "G".into() },
-                r#"Disciplina "Y" não encontrada para disciplina unida "G""#),
-            (r#"{ "seg": [1, 2] } }],"#, r#"{ "segunda": [1, 2] } }],"#,
-                ErroFormulario::DiaInvalido { dia: "segunda".into(), dono: "T".into() },
+    fn aula_vira_uma_disciplina_por_turma() {
+        let r = com("", "").unwrap();
+        assert_eq!(r.n_tempos, 2);
+        assert_eq!(r.aulas, ["a", "b"]);
+        let d: Vec<_> = r.disciplinas.iter().map(|d| (d.aula, d.turma_id, d.aulas, d.agrupar, d.dividir)).collect();
+        assert_eq!(d, [(0, 0, 2, 2, true), (1, 0, 1, 2, false), (1, 1, 1, 2, false)]);
+        // A aula em conjunto: as duas disciplinas unidas, e os recursos só na primeira
+        assert_eq!(r.disciplinas[1].disciplinas_unidas, [2]);
+        assert_eq!(r.disciplinas[2].disciplinas_unidas, [1]);
+        assert_eq!(r.disciplinas[1].professores, [0, 1]);
+        assert!(r.disciplinas[2].professores.is_empty());
+        // Evitar é opcional e fica à parte da disponibilidade
+        assert_eq!(r.professores[0].evitar.get(DiaSemana::Segunda, 1), 1);
+        assert_eq!(r.professores[0].horarios.get(DiaSemana::Segunda, 1), 1);
+        assert_eq!(r.professores[1].evitar.get(DiaSemana::Segunda, 1), 0);
+    }
+
+    #[test]
+    fn erros_da_entrada_viram_result_com_mensagem() {
+        let casos: [(&str, &str, ErroEntrada, &str); 5] = [
+            (r#""turmas": ["T"], "recursos": ["P"]"#, r#""turmas": ["X"], "recursos": ["P"]"#,
+                ErroEntrada::TurmaNaoEncontrada { turma: "X".into(), aula: "a".into() },
+                r#"A aula "a" é de uma turma que não existe ("X")"#),
+            (r#""turmas": ["T"], "recursos": ["P"]"#, r#""turmas": ["T"], "recursos": ["Z"]"#,
+                ErroEntrada::RecursoNaoEncontrado { recurso: "Z".into(), aula: "a".into() },
+                r#"A aula "a" usa um professor ou ambiente que não existe ("Z")"#),
+            (r#""turmas": ["T"], "recursos": ["P"]"#, r#""turmas": [], "recursos": ["P"]"#,
+                ErroEntrada::AulaSemTurma { aula: "a".into() },
+                r#"A aula "a" não tem nenhuma turma"#),
+            (r#"{ "id": "T", "horarios": { "seg": [1, 2] } }"#, r#"{ "id": "T", "horarios": { "segunda": [1, 2] } }"#,
+                ErroEntrada::DiaInvalido { dia: "segunda".into(), dono: "T".into() },
                 r#"Dia "segunda" inválido nos horários de "T""#),
-            (r#"{ "seg": [1, 2] } }],"#, r#"{ "seg": [] } }],"#,
-                ErroFormulario::SemTempos,
-                "Nenhuma turma tem horários disponíveis: marque ao menos um tempo em alguma turma."),
+            (r#""evitar": { "seg": [2] }"#, r#""evitar": { "xyz": [2] }"#,
+                ErroEntrada::DiaInvalido { dia: "xyz".into(), dono: "P".into() },
+                r#"Dia "xyz" inválido nos horários de "P""#),
         ];
         for (trocar, por, esperado, msg) in casos {
-            let erro = RegrasHorario::new(com(trocar, por)).err().unwrap_or_else(|| panic!("deveria falhar: {por}"));
+            let erro = com(trocar, por).err().unwrap_or_else(|| panic!("deveria falhar: {por}"));
             assert_eq!(erro, esperado);
             assert_eq!(erro.to_string(), msg);
         }
+
+        // Campo com o tipo errado: a mensagem diz qual campo
+        let erro = com(r#""aulasSemana": 2"#, r#""aulasSemana": "duas""#).err().unwrap().to_string();
+        assert!(erro.starts_with(r#"Dados inválidos: campo aulas[0].aulasSemana: invalid type: string "duas", expected i32"#), "{erro}");
     }
 
     #[test]
-    fn dia_aceita_maiusculas_e_disciplinas_unidas_sao_simetricas() {
-        let regras = RegrasHorario::new(com(r#"{ "seg": [1, 2] } }],"#, r#"{ "SEG": [1, 2] } }],"#)).unwrap();
-        assert_eq!(regras.turmas[0].horarios.get(DiaSemana::Segunda, 1), 1);
-        assert_eq!(regras.disciplinas[0].disciplinas_unidas, vec![1]);
-        assert_eq!(regras.disciplinas[1].disciplinas_unidas, vec![0]);
-    }
-
-    /// Reproduz o que a página manda: `dividir`/`agrupar`/`disciplinas_unidas` como null (no JS,
-    /// `undefined` também chega como "unit" ao serde, igual ao null do JSON).
-    #[test]
-    fn campos_nulos_valem_o_padrao() {
-        let f = formulario(r#"{
-            "turmas": [{ "nome": "T", "horarios": { "seg": [1, 2] } }],
-            "disciplinas": [{ "nome": "A", "turma": "T", "aulas": 2.0, "agrupar": null, "dividir": null }],
-            "disciplinas_unidas": null,
-            "professores": [{ "nome": "P", "disciplinas": ["A"], "horarios": { "seg": [1, 2] } }]
-        }"#);
-        assert_eq!((f.disciplinas[0].aulas, f.disciplinas[0].agrupar, f.disciplinas[0].dividir), (2, 0, false));
-        assert!(f.disciplinas_unidas.is_empty());
-    }
-
-    #[test]
-    fn numeros_invalidos_dao_erro_com_o_campo() {
-        for (aulas, esperado) in [("null", "campo não preenchido"), ("1.5", "1.5 não é um número inteiro maior ou igual a zero"), ("-1", "-1 não é")] {
-            let json = format!(r#"{{"turmas": [], "professores": [], "disciplinas": [{{ "nome": "A", "turma": "T", "aulas": {aulas} }}]}}"#);
-            let mut de = serde_json::Deserializer::from_str(&json);
-            let e = serde_path_to_error::deserialize::<_, FomularioHorario>(&mut de).unwrap_err();
-            let erro = erro_de_formato(&e.path().to_string(), &e.inner().to_string()).to_string();
-            assert!(erro.starts_with("Formulário inválido: campo disciplinas[0].aulas: "), "{erro}");
-            assert!(erro.contains(esperado), "{erro}");
-        }
+    fn sem_tempos_e_dia_em_maiusculas() {
+        let vazia = r#"{ "turmas": [{ "id": "T", "horarios": { "seg": [] } }], "aulas": [], "recursos": [] }"#;
+        assert_eq!(RegrasHorario::from_json(vazia).err(), Some(ErroEntrada::SemTempos));
+        let r = com(r#"{ "id": "T", "horarios": { "seg": [1, 2] } }"#, r#"{ "id": "T", "horarios": { "SEG": [1, 2] } }"#).unwrap();
+        assert_eq!(r.turmas[0].horarios.get(DiaSemana::Segunda, 1), 1);
     }
 }

@@ -21,7 +21,8 @@ cargo run --release --example bench_horario -- tests/instancias/faculdade-anonim
 # opções: --seed N, --pop-mult N, --csv curva.csv, --solver ga|pencilmark, --base-iter N|none
 ```
 
-As instâncias em `tests/instancias/` são geradas por `node tests/instancias/gerar.mjs` (determinístico).
-Cada instância viável tem um `<nome>.solucao.json` com a solução usada para construí-la; o benchmark
-confere que ela tem fitness 0 antes de rodar. `inviavel.json` não admite solução por construção.
+As instâncias em `tests/instancias/` estão no formato da entrada do solver (`EntradaHorario`: turmas,
+aulas e recursos, ligados por id). As sintéticas são geradas por `node tests/instancias/gerar.mjs`
+(determinístico); cada instância viável tem um `<nome>.solucao.json` com a solução usada para construí-la,
+e o benchmark confere que ela tem fitness 0 antes de rodar. `inviavel.json` não admite solução por construção.
 `faculdade-anonimizado.json` é um quadro real com os nomes trocados (o original, `real*.json`, fica fora do git).

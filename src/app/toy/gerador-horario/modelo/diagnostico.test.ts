@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { detalharProblema, diagnosticar, observarHorario } from "./diagnostico.ts";
+import { aulasAEvitar, detalharProblema, diagnosticar, observarHorario } from "./diagnostico.ts";
 import { areaDeTrabalhoVazia, type Cadastros, type HorarioGerado, type ProjetoHorario } from "./modelo.ts";
 import { criarOferta, criarTurmaAvulsa, gerarFaixas, juntarOfertas, manterDocentes, novoProjeto } from "./operacoes.ts";
-import { lerInstanciaAntiga, projetoDaInstanciaAntiga } from "./testes/instancia-antiga.ts";
+import { projetoDaFaculdade } from "./testes/instancia-antiga.ts";
 
 const cadastros = (): Cadastros => ({
     ...areaDeTrabalhoVazia().cadastros,
@@ -36,7 +36,7 @@ const mensagens = (p: ProjetoHorario, c = cadastros()) => diagnosticar(p, c).map
 
 test("projeto que fecha não tem pendências; o quadro real também não tem erros", () => {
     assert.deepEqual(mensagens(projetoQueFecha().p), []);
-    const { projeto, professores } = projetoDaInstanciaAntiga(lerInstanciaAntiga("faculdade-anonimizado"));
+    const { projeto, professores } = projetoDaFaculdade();
     const erros = diagnosticar(projeto, { ...cadastros(), professores }).filter((x) => x.gravidade === "erro");
     assert.deepEqual(erros, []);
 });
@@ -98,7 +98,7 @@ test("ambiente: capacidade (somando as turmas juntas) e ocupação", () => {
     assert.ok(mensagens(lotado).includes("erro: Lab 1 recebe 16 aulas por semana, mas a semana só tem 8 horários."));
 });
 
-test("horário gerado: horários a evitar, bloco atravessando intervalo e quem está em choque", () => {
+test("horário gerado: horários a evitar e quem está em choque", () => {
     const { p, calculo, fisica } = projetoQueFecha();
     const projeto = { ...p, docentes: p.docentes.map((d) => (d.professorId === "ana" ? { ...d, evitar: { seg: [1] }, disponibilidade: { seg: [1, 2, 3], ter: [1, 2, 3, 4] } } : d)) };
     const aula = (ofertaId: string, dia: "seg" | "ter", tempo: number) => ({ ofertaId, dia, tempo, fixada: false });
@@ -109,10 +109,8 @@ test("horário gerado: horários a evitar, bloco atravessando intervalo e quem e
         alocacoes: [aula(calculo, "seg", 1), aula(calculo, "seg", 2), aula(calculo, "ter", 2), aula(calculo, "ter", 3), aula(fisica, "seg", 4)],
         problemas: [],
     };
-    assert.deepEqual(observarHorario(projeto, cadastros(), horario), [
-        "Ana tem 1 aula em horários que pediu para evitar.",
-        "Cálculo (A), terça: o bloco atravessa o intervalo depois da 2ª aula.",
-    ]);
+    assert.deepEqual(observarHorario(projeto, cadastros(), horario), ["Ana tem 1 aula em horários que pediu para evitar."]);
+    assert.equal(aulasAEvitar(projeto, horario), 1);
 
     // Ana em Física no mesmo horário de uma aula dela de Cálculo, num horário em que não está disponível
     const comChoque = { ...projeto, ofertas: projeto.ofertas.map((o) => (o.id === fisica ? { ...o, professorIds: ["ana"], ambienteId: "lab" } : { ...o, ambienteId: "lab" })) };

@@ -3,10 +3,10 @@
 /**
  * Web Worker que roda os solvers de horário em Rust/WASM (Pencilmark ou genético).
  *
- * O worker não interpreta o formulário: só repassa para o Rust, roda em blocos e encaminha o
- * resultado. Erros do formulário chegam aqui como `Error` com a mensagem pronta para o usuário.
+ * O worker não interpreta a entrada: só repassa para o Rust, roda em blocos e encaminha o
+ * resultado. Erros da entrada chegam aqui como `Error` com a mensagem pronta para o usuário.
  *
- *  - Recebe: { action: "solucionarQuadroHorario", solver, formData, diasAtivos, ilhas }
+ *  - Recebe: { action: "solucionarQuadroHorario", solver, entrada, ilhas }
  *  - Envia type="message" quando o melhor quadro muda
  *  - Envia type="success" ao terminar
  *  - Envia type="error" em caso de falha
@@ -14,7 +14,7 @@
 
 import { iniciarWasmComThreads } from "@/lib/wasmThreads";
 import { WorkerResponseMsg } from "@/lib/workerRace";
-import { FormularioHorario, HorarioDia, HorarioWorkerTaskValue, ResultadoHorario, SolverHorario } from "./horario-regras";
+import { EntradaDoSolver, HorarioWorkerTaskValue, ResultadoDoSolver, SolverHorario } from "./horario-regras";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -44,15 +44,6 @@ const postMsg = (msg: WorkerResponseMsg<HorarioWorkerTaskValue>) => {
     self.postMessage(msg);
 };
 
-/** O Rust devolve os 7 dias; a página mostra só os ativos. */
-const filtrarDias = (resultado: ResultadoHorario, diasAtivos: HorarioDia[]): ResultadoHorario => ({
-    ...resultado,
-    solucao: resultado.solucao?.map((turma) => ({
-        ...turma,
-        horario: turma.horario.filter((d) => diasAtivos.includes(d.dia)),
-    })) ?? null,
-});
-
 self.onmessage = async (message) => {
     const data = message.data;
 
@@ -62,8 +53,7 @@ self.onmessage = async (message) => {
         }
 
         const solver: SolverHorario = data.solver;
-        const formData: FormularioHorario = data.formData;
-        const diasAtivos: HorarioDia[] = data.diasAtivos;
+        const entrada: EntradaDoSolver = data.entrada;
         const usarIlhas: boolean = data.ilhas ?? true;
         const passos = PASSOS_POR_CHAMADA[solver];
         if (!passos) {
@@ -81,11 +71,11 @@ self.onmessage = async (message) => {
             await wasm.default();
         }
 
-        // Lança Error com a mensagem do Rust se o formulário for inválido
+        // Lança Error com a mensagem do Rust se a entrada for inválida
         const ilhas = solver === "genetic" && usarIlhas ? numeroDeIlhas() : 0;
         const runner = solver === "genetic"
-            ? new wasm.HorarioGARunner(formData, ilhas)
-            : new wasm.HorarioPencilmarkRunner(formData, undefined);
+            ? new wasm.HorarioGARunner(entrada, ilhas)
+            : new wasm.HorarioPencilmarkRunner(entrada, undefined);
 
         try {
             let versao = runner.versao();
@@ -112,15 +102,15 @@ self.onmessage = async (message) => {
                 // Só posta progresso quando o melhor quadro mudou
                 if (runner.versao() !== versao) {
                     versao = runner.versao();
-                    const resultado = runner.get_resultado() as ResultadoHorario;
+                    const resultado = runner.get_resultado() as ResultadoDoSolver;
                     const threads = runner instanceof wasm.HorarioPencilmarkRunner && runner.usando_threads()
                         ? navigator.hardwareConcurrency
                         : undefined;
-                    postMsg({ type: "message", value: { ...filtrarDias(resultado, diasAtivos), msPorGeracao, ilhas, threads } });
+                    postMsg({ type: "message", value: { ...resultado, msPorGeracao, ilhas, threads } });
                 }
             }
 
-            postMsg({ type: "success", value: filtrarDias(runner.get_resultado() as ResultadoHorario, diasAtivos) });
+            postMsg({ type: "success", value: runner.get_resultado() as ResultadoDoSolver });
         } finally {
             runner.free();
         }

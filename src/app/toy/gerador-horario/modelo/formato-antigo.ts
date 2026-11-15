@@ -1,25 +1,31 @@
 /**
- * Leitura do JSON da versão anterior do gerador (o `FormularioHorario` exportado pela página
+ * Leitura do JSON da versão anterior do gerador (o `FormularioAntigo` exportado pela página
  * antiga, com ou sem o envelope `{ formData, config }`). Vira um projeto de turmas avulsas, com os
- * professores para acrescentar ao cadastro. Também é como as instâncias de teste do solver
- * (rust-wasm/tests/instancias) entram no modelo novo.
+ * professores para acrescentar ao cadastro.
  */
 
-import type { FormularioHorario } from "../horario-regras.ts";
-import { DIAS, type Dia, type Id, type Professor, type ProjetoHorario } from "./modelo.ts";
+import { DIAS, type Dia, type HorariosPorDia, type Id, type Professor, type ProjetoHorario } from "./modelo.ts";
 import { PALETA_CORES, criarOferta, criarTurmaAvulsa, gerarFaixas, juntarOfertas, manterDocentes, novoId, novoProjeto } from "./operacoes.ts";
 
+/** O formulário da versão anterior: disciplinas por turma, ligadas a professores e a grupos pelo NOME. */
+export interface FormularioAntigo {
+    turmas: { nome: string; horarios: HorariosPorDia }[];
+    disciplinas: { nome: string; turma: string; aulas: number; agrupar?: number; dividir?: boolean }[];
+    disciplinas_unidas: { grupo: string; disciplinas: string[] }[];
+    professores: { nome: string; disciplinas: string[]; horarios: HorariosPorDia }[];
+}
+
 /** O formulário antigo dentro de um JSON qualquer, ou null se não for um. */
-export function extrairFormularioAntigo(dados: unknown): { formulario: FormularioHorario; tempos?: number } | null {
+export function extrairFormularioAntigo(dados: unknown): { formulario: FormularioAntigo; tempos?: number } | null {
     const raiz = dados as { formData?: unknown; config?: { quantidadeTempos?: unknown } } | null;
-    const f = (raiz?.formData ?? raiz) as Partial<FormularioHorario> | null;
+    const f = (raiz?.formData ?? raiz) as Partial<FormularioAntigo> | null;
     if (!f || !Array.isArray(f.turmas) || !Array.isArray(f.disciplinas) || !Array.isArray(f.professores)) return null;
     const tempos = typeof raiz?.config?.quantidadeTempos === "number" ? raiz.config.quantidadeTempos : undefined;
-    return { formulario: { ...f, disciplinas_unidas: f.disciplinas_unidas ?? [] } as FormularioHorario, tempos };
+    return { formulario: { ...f, disciplinas_unidas: f.disciplinas_unidas ?? [] } as FormularioAntigo, tempos };
 }
 
 export function projetoDoFormatoAntigo(
-    f: FormularioHorario,
+    f: FormularioAntigo,
     nome: string,
     temposConfigurados = 0,
 ): { projeto: ProjetoHorario; professores: Professor[] } {

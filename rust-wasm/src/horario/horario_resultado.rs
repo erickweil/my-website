@@ -1,4 +1,4 @@
-//! Validação de um quadro e montagem do resultado no formato que a página renderiza.
+//! Validação de um quadro e montagem do resultado que a página recebe (aulas alocadas e problemas).
 //!
 //! Port de `obterRegrasVioladas` e `construirQuadro` (antigo `horario-solver.ts`). Os dois solvers
 //! (Pencilmark e GA) entregam o resultado por aqui, então a página recebe sempre a mesma estrutura
@@ -92,56 +92,66 @@ pub fn validar(regras: &mut HorarioRegrasPencilmark, quadro: &[i32]) -> Validaca
     validacao
 }
 
-// ── Estrutura entregue à página (`TurmaHorarioResult[]` em horario-regras.ts) ─────────────────
+// ── Estrutura entregue à página (`ResultadoDoSolver` em horario-regras.ts) ────────────────────
 
+/// Uma aula num horário. Uma aula em conjunto aparece uma vez, não uma por turma.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct TempoResultado {
-    /// Nome da disciplina, `"???"` para célula não resolvida, `null` para sem aula.
-    pub descricao: Option<String>,
-    /// Motivo da violação, se houver.
-    pub violacao: Option<&'static str>,
-}
-
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct DiaResultado {
+pub struct Alocacao {
+    /// Id da aula na entrada.
+    pub aula: String,
     /// Sigla do dia (`"seg"`, `"ter"`, …).
     pub dia: &'static str,
-    pub tempos: Vec<TempoResultado>,
+    /// Número da aula no dia, a partir de 1.
+    pub tempo: usize,
 }
 
+/// Uma célula do quadro de uma turma que quebra uma regra obrigatória, ou que ficou vazia.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct TurmaResultado {
+pub struct Problema {
+    /// Id da turma na entrada.
     pub turma: String,
-    /// Os 7 dias, de domingo a sábado. A página mostra só os dias ativos.
-    pub horario: Vec<DiaResultado>,
+    pub dia: &'static str,
+    pub tempo: usize,
+    /// Id da aula que está na célula, se há alguma.
+    pub aula: Option<String>,
+    pub mensagem: &'static str,
 }
 
-/// `construirQuadro` do TS.
-pub fn montar_quadro(regras: &RegrasHorario, quadro: &[i32], validacao: &Validacao) -> Vec<TurmaResultado> {
-    regras.turmas.iter().map(|turma| TurmaResultado {
-        turma: turma.nome.clone(),
-        horario: DiaSemana::TODOS.iter().map(|&dia| DiaResultado {
-            dia: dia.sigla(),
-            tempos: (0..regras.n_tempos).map(|tempo| {
+/// As aulas do quadro e os problemas dele, na ordem das turmas, dias e tempos.
+pub fn montar_alocacoes(regras: &RegrasHorario, quadro: &[i32], validacao: &Validacao) -> (Vec<Alocacao>, Vec<Problema>) {
+    let (mut alocacoes, mut problemas) = (Vec::new(), Vec::new());
+    // Aula em conjunto: cada turma tem a sua célula; a alocação sai só uma vez por horário
+    let por_aula = crate::horario::QUANTOS_DIAS * regras.n_tempos;
+    let mut vista = vec![false; regras.aulas.len() * por_aula];
+    for turma in &regras.turmas {
+        for dia in DiaSemana::TODOS {
+            for tempo in 0..regras.n_tempos {
                 let i = regras.to_quadro_index(turma.id, dia, tempo);
-                let descricao = match quadro[i] {
-                    0 => Some("???".to_string()),
-                    v if v < 0 => None,
-                    v => Some(regras.disciplinas.get((v - 1) as usize)
-                        .map_or_else(|| "Disciplina Desconhecida".to_string(), |d| d.nome.clone())),
-                };
-                TempoResultado { descricao, violacao: validacao.por_celula[i] }
-            }).collect(),
-        }).collect(),
-    }).collect()
+                let disciplina = (quadro[i] > 0).then(|| regras.disciplinas.get((quadro[i] - 1) as usize)).flatten();
+                if let Some(d) = disciplina {
+                    let k = d.aula * por_aula + dia.to_index() * regras.n_tempos + tempo;
+                    if !std::mem::replace(&mut vista[k], true) {
+                        alocacoes.push(Alocacao { aula: d.nome.clone(), dia: dia.sigla(), tempo: tempo + 1 });
+                    }
+                }
+                if let Some(mensagem) = validacao.por_celula[i] {
+                    problemas.push(Problema { turma: turma.nome.clone(), dia: dia.sigla(), tempo: tempo + 1, aula: disciplina.map(|d| d.nome.clone()), mensagem });
+                }
+            }
+        }
+    }
+    (alocacoes, problemas)
 }
 
 /// O que os runners entregam ao worker, tanto no progresso quanto no fim.
 #[derive(Serialize, Debug, Clone)]
 pub struct ResultadoHorario {
-    /// Quadro para mostrar; ausente quando o solver não chegou a nenhum quadro.
-    pub solucao: Option<Vec<TurmaResultado>>,
-    /// true se o quadro tem alguma violação ou célula não resolvida.
+    /// As aulas do quadro; ausente quando o solver não chegou a nenhum quadro.
+    pub alocacoes: Option<Vec<Alocacao>>,
+    /// Células que quebram alguma regra obrigatória, ou que ficaram vazias.
+    pub problemas: Vec<Problema>,
+    /// true se o quadro quebra alguma regra obrigatória ou tem célula não resolvida. As regras de
+    /// qualidade (horários a evitar) não entram aqui.
     pub alguma_violacao: bool,
     /// Mensagem para o usuário quando há violação ou não há solução.
     pub mensagem: Option<&'static str>,
@@ -159,16 +169,18 @@ impl ResultadoHorario {
         match quadro {
             Some((quadro, validacao)) if !quadro.is_empty() => {
                 let alguma_violacao = validacao.alguma();
+                let (alocacoes, problemas) = montar_alocacoes(regras, quadro, validacao);
                 Self {
                     mensagem: alguma_violacao.then(|| validacao.geral.unwrap_or(MSG_COM_VIOLACOES)),
-                    solucao: Some(montar_quadro(regras, quadro, validacao)),
+                    alocacoes: Some(alocacoes),
+                    problemas,
                     alguma_violacao,
                     iter,
                     depth,
                     terminou,
                 }
             }
-            _ => Self { solucao: None, alguma_violacao: true, mensagem: Some(MSG_SEM_SOLUCAO), iter, depth, terminou },
+            _ => Self { alocacoes: None, problemas: Vec::new(), alguma_violacao: true, mensagem: Some(MSG_SEM_SOLUCAO), iter, depth, terminou },
         }
     }
 
@@ -181,22 +193,20 @@ impl ResultadoHorario {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::horario::{FomularioHorario, FomularioHorarioDisciplina, FomularioHorarioProfessor, FomularioHorarioTurma};
     use crate::horario::QuadroHorario;
     use crate::pencilmark::solucionar_quadro;
-    use std::collections::HashMap;
     use wasm_bindgen_test::*;
 
     /// Turma "T" com seg 1..=3; A tem 2 aulas, B tem 1; professor P dá as duas.
     fn regras_pequenas() -> RegrasHorario {
-        let h = |t: &[i32]| HashMap::from([("seg".to_string(), t.to_vec())]);
-        let disc = |nome: &str, aulas| FomularioHorarioDisciplina { nome: nome.into(), turma: "T".into(), aulas, agrupar: 0, dividir: false };
-        RegrasHorario::new(FomularioHorario {
-            turmas: vec![FomularioHorarioTurma { nome: "T".into(), horarios: h(&[1, 2, 3]) }],
-            disciplinas: vec![disc("A", 2), disc("B", 1)],
-            disciplinas_unidas: vec![],
-            professores: vec![FomularioHorarioProfessor { nome: "P".into(), disciplinas: vec!["A".into(), "B".into()], horarios: h(&[1, 2, 3]) }],
-        }).unwrap()
+        RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3] } }],
+            "aulas": [
+                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2 },
+                { "id": "B", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 1 }
+            ],
+            "recursos": [{ "id": "P", "disponibilidade": { "seg": [1, 2, 3] } }]
+        }"#).unwrap()
     }
 
     fn resolver(regras: &RegrasHorario) -> QuadroHorario {
@@ -255,30 +265,51 @@ mod tests {
         assert_eq!(r.mensagem, Some(MSG_COM_VIOLACOES));
 
         let r = ResultadoHorario::novo(&regras, None, 5.0, 0, true);
-        assert!(r.solucao.is_none() && r.alguma_violacao);
+        assert!(r.alocacoes.is_none() && r.problemas.is_empty() && r.alguma_violacao);
         assert_eq!(r.mensagem, Some(MSG_SEM_SOLUCAO));
     }
 
     #[wasm_bindgen_test(unsupported = test)]
-    fn formato_do_quadro_montado() {
+    fn alocacoes_e_problemas_do_quadro() {
         let regras = regras_pequenas();
         let mut quadro = regras.get_quadro_vazio();
         quadro[idx_seg(&regras, 0)] = 1; // A
         quadro[idx_seg(&regras, 1)] = 2; // B
         // tempo 2 fica vazio (0)
-        let r = montar_quadro(&regras, &quadro, &Validacao::incompleto(&quadro));
+        let (alocacoes, problemas) = montar_alocacoes(&regras, &quadro, &Validacao::incompleto(&quadro));
+        let aula = |aula: &str, tempo| Alocacao { aula: aula.into(), dia: "seg", tempo };
+        assert_eq!(alocacoes, [aula("A", 1), aula("B", 2)]);
+        assert_eq!(problemas, [Problema { turma: "T".into(), dia: "seg", tempo: 3, aula: None, mensagem: MSG_INCOMPLETO }]);
+    }
 
-        assert_eq!(r.len(), 1);
-        assert_eq!(r[0].turma, "T");
-        let siglas: Vec<_> = r[0].horario.iter().map(|d| d.dia).collect();
-        assert_eq!(siglas, ["dom", "seg", "ter", "qua", "qui", "sex", "sab"]);
+    /// Uma aula dada a duas turmas aparece uma vez por horário; se as turmas estiverem em horários
+    /// diferentes (regra quebrada), aparecem os dois, e o problema aponta a turma e a aula.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn aula_em_conjunto_sai_uma_vez() {
+        let regras = RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2] } }, { "id": "U", "horarios": { "seg": [1, 2] } }],
+            "aulas": [
+                { "id": "junta", "turmas": ["T", "U"], "recursos": [], "aulasSemana": 1 },
+                { "id": "t", "turmas": ["T"], "recursos": [], "aulasSemana": 1 },
+                { "id": "u", "turmas": ["U"], "recursos": [], "aulasSemana": 1 }
+            ],
+            "recursos": []
+        }"#).unwrap();
+        let i = |turma, tempo| regras.to_quadro_index(turma, DiaSemana::Segunda, tempo);
+        let aula = |aula: &str, tempo| Alocacao { aula: aula.into(), dia: "seg", tempo };
+        // Disciplinas: 1 = junta em T, 2 = junta em U, 3 = t, 4 = u
+        let mut quadro = regras.get_quadro_vazio();
+        (quadro[i(0, 0)], quadro[i(0, 1)], quadro[i(1, 0)], quadro[i(1, 1)]) = (1, 3, 2, 4);
+        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let (alocacoes, problemas) = montar_alocacoes(&regras, &quadro, &v);
+        assert_eq!(alocacoes, [aula("junta", 1), aula("t", 2), aula("u", 2)]);
+        assert!(problemas.is_empty(), "{problemas:?}");
 
-        let seg = &r[0].horario[1].tempos;
-        let desc: Vec<_> = seg.iter().map(|t| t.descricao.as_deref()).collect();
-        assert_eq!(desc, [Some("A"), Some("B"), Some("???")]);
-        assert_eq!(seg[2].violacao, Some(MSG_INCOMPLETO));
-        assert_eq!(seg[0].violacao, None);
-        // Domingo: turma sem aula
-        assert!(r[0].horario[0].tempos.iter().all(|t| t.descricao.is_none() && t.violacao.is_none()));
+        // U com a aula conjunta no 2º tempo: fora do horário de T
+        (quadro[i(1, 0)], quadro[i(1, 1)]) = (4, 2);
+        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let (alocacoes, problemas) = montar_alocacoes(&regras, &quadro, &v);
+        assert_eq!(alocacoes, [aula("junta", 1), aula("t", 2), aula("u", 1), aula("junta", 2)]);
+        assert!(problemas.iter().any(|p| p.turma == "U" && p.aula.as_deref() == Some("junta") && p.mensagem == crate::horario::MOTIVO_CONJUNTA), "{problemas:?}");
     }
 }

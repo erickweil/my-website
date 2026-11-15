@@ -1,0 +1,516 @@
+{
+  "turmas": [
+    {
+      "nome": "Turma 1",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Turma 2",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Turma 3",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    }
+  ],
+  "disciplinas": [
+    {
+      "nome": "Disciplina 1",
+      "turma": "Turma 2",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 2",
+      "turma": "Turma 2",
+      "aulas": 4,
+      "agrupar": 2,
+      "dividir": false
+    },
+    {
+      "nome": "Disciplina 3",
+      "turma": "Turma 2",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 4",
+      "turma": "Turma 2",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 5",
+      "turma": "Turma 2",
+      "aulas": 4,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Disciplina 6",
+      "turma": "Turma 2",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 7",
+      "turma": "Turma 3",
+      "aulas": 4,
+      "agrupar": 4
+    },
+    {
+      "nome": "Disciplina 8",
+      "turma": "Turma 3",
+      "aulas": 4,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 9",
+      "turma": "Turma 3",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 10",
+      "turma": "Turma 3",
+      "aulas": 4,
+      "agrupar": 2,
+      "dividir": false
+    },
+    {
+      "nome": "Disciplina 11",
+      "turma": "Turma 3",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 12",
+      "turma": "Turma 3",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 13",
+      "turma": "Turma 3",
+      "aulas": 2,
+      "agrupar": 2
+    },
+    {
+      "nome": "Disciplina 14",
+      "turma": "Turma 1",
+      "aulas": 4,
+      "agrupar": 2,
+      "dividir": false
+    },
+    {
+      "nome": "Disciplina 15",
+      "turma": "Turma 1",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": false
+    },
+    {
+      "nome": "Disciplina 16",
+      "turma": "Turma 1",
+      "aulas": 2,
+      "agrupar": 2,
+      "dividir": false
+    },
+    {
+      "nome": "Disciplina 17",
+      "turma": "Turma 1",
+      "aulas": 4,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Disciplina 18",
+      "turma": "Turma 1",
+      "aulas": 4,
+      "agrupar": 2,
+      "dividir": true
+    },
+    {
+      "nome": "Disciplina 19",
+      "turma": "Turma 1",
+      "aulas": 4,
+      "agrupar": 4
+    },
+    {
+      "nome": "Disciplina 20",
+      "turma": "Turma 2",
+      "aulas": 4,
+      "agrupar": 4
+    }
+  ],
+  "professores": [
+    {
+      "nome": "Professor A",
+      "disciplinas": [
+        "Disciplina 9"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Professor B",
+      "disciplinas": [
+        "Disciplina 2"
+      ],
+      "horarios": {
+        "seg": [],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": []
+      }
+    },
+    {
+      "nome": "Professor C",
+      "disciplinas": [
+        "Disciplina 14",
+        "Disciplina 1",
+        "Disciplina 3",
+        "Disciplina 11"
+      ],
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Professor D",
+      "disciplinas": [
+        "Disciplina 18",
+        "Disciplina 6",
+        "Disciplina 8",
+        "Disciplina 12",
+        "Disciplina 19"
+      ],
+      "horarios": {
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Professor E",
+      "disciplinas": [
+        "Disciplina 10"
+      ],
+      "horarios": {
+        "ter": [
+          1,
+          2
+        ],
+        "qui": [
+          1,
+          2
+        ],
+        "seg": [],
+        "qua": [],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "nome": "Professor F",
+      "disciplinas": [
+        "Disciplina 16",
+        "Disciplina 5",
+        "Disciplina 20",
+        "Disciplina 13"
+      ],
+      "horarios": {
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Professor G",
+      "disciplinas": [
+        "Disciplina 15"
+      ],
+      "horarios": {
+        "seg": [],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Professor H",
+      "disciplinas": [
+        "Disciplina 17",
+        "Disciplina 4",
+        "Disciplina 19"
+      ],
+      "horarios": {
+        "sex": [],
+        "qua": [],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "nome": "Professor I",
+      "disciplinas": [
+        "Disciplina 7"
+      ],
+      "horarios": {
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [],
+        "ter": []
+      }
+    },
+    {
+      "nome": "Professor J",
+      "disciplinas": [
+        "Disciplina 20"
+      ],
+      "horarios": {
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seg": [],
+        "sex": []
+      }
+    }
+  ],
+  "disciplinas_unidas": [
+    {
+      "grupo": "Grupo 1",
+      "disciplinas": [
+        "Disciplina 19",
+        "Disciplina 20"
+      ]
+    }
+  ]
+}
