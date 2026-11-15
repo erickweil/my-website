@@ -13,6 +13,14 @@ use crate::{
     pencilmark::{Possib, RegrasQuadro},
 };
 
+// Por que uma disciplina não pode ficar numa célula (ver `motivo_impedimento`). Os recursos de
+// ocupação única do formulário ("professores") incluem os ambientes, daí o texto.
+pub const MOTIVO_OUTRA_TURMA: &str = "A disciplina é de outra turma";
+pub const MOTIVO_AULAS_DEMAIS: &str = "A disciplina tem mais aulas no horário do que o previsto";
+pub const MOTIVO_PROFESSOR: &str = "Professor ou ambiente indisponível neste horário, ou ocupado em outra turma";
+pub const MOTIVO_BLOCO: &str = "As aulas da disciplina não formam blocos do tamanho definido";
+pub const MOTIVO_CONJUNTA: &str = "A aula em conjunto não está no mesmo horário nas turmas que participam";
+
 /// `Clone` é barato (as regras ficam atrás de um `Arc`): a busca exaustiva em paralelo dá uma cópia
 /// para cada tarefa.
 #[derive(Clone)]
@@ -52,24 +60,31 @@ impl HorarioRegrasPencilmark {
         quadro[self.regras.to_quadro_index(turma_id, dia, tempo as usize)]
     }
 
-    /// `podeDisciplina` do TS.
+    /// A disciplina pode ser colocada nesta célula (que deve estar vazia no quadro)?
+    #[inline]
     pub fn pode_disciplina(&self, quadro: &[i32], id_disc: usize, id_turma: usize, dia: DiaSemana, tempo: usize) -> bool {
+        self.motivo_impedimento(quadro, id_disc, id_turma, dia, tempo).is_none()
+    }
+
+    /// `podeDisciplina` do TS, dizendo o porquê: `None` se a disciplina pode ser colocada nesta
+    /// célula (que deve estar vazia no quadro), ou a regra que impede. O texto vai para o usuário.
+    pub fn motivo_impedimento(&self, quadro: &[i32], id_disc: usize, id_turma: usize, dia: DiaSemana, tempo: usize) -> Option<&'static str> {
         let disc = &self.regras.disciplinas[id_disc];
 
         // A disciplina deve ser desta turma
         if disc.turma_id != id_turma {
-            return false;
+            return Some(MOTIVO_OUTRA_TURMA);
         }
 
         // Esgotou o número de aulas a serem escolhidas desta disciplina
         if self.cont_aulas[id_disc] >= disc.aulas {
-            return false;
+            return Some(MOTIVO_AULAS_DEMAIS);
         }
 
         // Os professores devem estar disponíveis (e livres) neste tempo
         for &prof_id in &disc.professores {
             if self.prof_matriz[prof_id].get(dia, tempo) == 0 {
-                return false;
+                return Some(MOTIVO_PROFESSOR);
             }
         }
 
@@ -94,7 +109,7 @@ impl HorarioRegrasPencilmark {
 
             // Com dividir, o bloco não pode passar de G (blocos não se tocam)
             if disc.dividir && current_run > g {
-                return false;
+                return Some(MOTIVO_BLOCO);
             }
 
             // Bloco fechado dos dois lados (não pode mais crescer)? -1 (fora/sem aula) ou outra
@@ -104,7 +119,7 @@ impl HorarioRegrasPencilmark {
             if left_blocked && right_blocked {
                 let invalido = if disc.dividir { current_run != g } else { current_run % g != 0 };
                 if invalido {
-                    return false;
+                    return Some(MOTIVO_BLOCO);
                 }
             }
         }
@@ -115,7 +130,7 @@ impl HorarioRegrasPencilmark {
             let unida_turma = self.regras.disciplinas[unida_id].turma_id;
             let v = self.valor(quadro, unida_turma, dia, tempo as isize);
             if v != 0 && v != unida_id as i32 + 1 {
-                return false;
+                return Some(MOTIVO_CONJUNTA);
             }
         }
 
@@ -132,12 +147,12 @@ impl HorarioRegrasPencilmark {
             let disc_outra = &self.regras.disciplinas[(v - 1) as usize];
             for &unida_da_outra in &disc_outra.disciplinas_unidas {
                 if self.regras.disciplinas[unida_da_outra].turma_id == id_turma && unida_da_outra != id_disc {
-                    return false;
+                    return Some(MOTIVO_CONJUNTA);
                 }
             }
         }
 
-        true
+        None
     }
 }
 

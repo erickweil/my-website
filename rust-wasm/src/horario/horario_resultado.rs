@@ -78,8 +78,12 @@ pub fn validar(regras: &mut HorarioRegrasPencilmark, quadro: &[i32]) -> Validaca
         let k = (valor - 1) as usize;
         if !regras.verificar_celula(&quadro, &mut possib) {
             validacao.por_celula[i] = Some(MSG_REGRA_FALHOU);
-        } else if k >= n_possibs || !possib.ler(k) {
+        } else if k >= n_possibs {
             validacao.por_celula[i] = Some(MSG_MARCACAO_INVALIDA);
+        } else if !possib.ler(k) {
+            // Diz qual regra a aula quebra aqui (o estado das regras já está sem esta célula)
+            let (turma, dia, tempo) = regras.regras.from_quadro_index(i);
+            validacao.por_celula[i] = Some(regras.motivo_impedimento(&quadro, k, turma, dia, tempo).unwrap_or(MSG_MARCACAO_INVALIDA));
         }
 
         quadro[i] = valor;
@@ -232,7 +236,7 @@ mod tests {
         // tirando qualquer aula de A, ainda sobram 2 (o máximo), então nenhuma delas cabe ali.
         assert_eq!(v.geral, None);
         for t in 0..3 {
-            assert_eq!(v.por_celula[idx_seg(&regras, t)], Some(MSG_MARCACAO_INVALIDA), "tempo {t}");
+            assert_eq!(v.por_celula[idx_seg(&regras, t)], Some(crate::horario::MOTIVO_AULAS_DEMAIS), "tempo {t}");
         }
 
         let r = ResultadoHorario::novo(&regras, Some((&quadro, &v)), 1.0, 0, true);
