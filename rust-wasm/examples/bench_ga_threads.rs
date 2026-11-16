@@ -116,8 +116,8 @@ fn main() {
     }
 
     for nome in ["faculdade-anonimizado", "media", "grande"] {
-        let tamanho = carregar_horario(nome).tamanho_quadro();
-        medir(&format!("horário {nome:.10}"), || carregar_horario(nome), config_ga_horario(tamanho), segundos, &threads, il);
+        let config = config_ga_horario(&carregar_horario(nome));
+        medir(&format!("horário {nome:.10}"), || carregar_horario(nome), config.clone(), segundos, &threads, il);
     }
     for (cidades, pop) in [(100, 500), (500, 500), (2000, 500)] {
         fastrand::seed(7);

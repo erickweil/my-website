@@ -51,7 +51,7 @@ fn main() {
         .collect();
 
     let base = carregar(instancia);
-    let mut cfg = config_ga_horario(base.tamanho_quadro());
+    let mut cfg = config_ga_horario(&base);
     cfg.ilhas = ilhas;
     let por_geracao = (cfg.population_size * ilhas.max(1)) as u64;
     let total = (orcamento / por_geracao) as usize;

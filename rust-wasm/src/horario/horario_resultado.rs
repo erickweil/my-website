@@ -4,8 +4,10 @@
 //! (Pencilmark e GA) entregam o resultado por aqui, então a página recebe sempre a mesma estrutura
 //! e as mesmas mensagens, qualquer que seja o solver.
 //!
-//! A validação usa as regras do Pencilmark ([`HorarioRegrasPencilmark`]): para cada célula
-//! preenchida, apaga o valor e confere se ele está entre as possibilidades daquela célula.
+//! A validação usa as regras do Pencilmark só com as obrigatórias
+//! ([`HorarioRegrasPencilmark::so_obrigatorias`]): para cada célula preenchida, apaga o valor e
+//! confere se ele está entre as possibilidades daquela célula. Um horário vago também é conferido
+//! (a turma tem folga para ele?).
 
 use serde::Serialize;
 
@@ -20,7 +22,7 @@ pub const MSG_REGRA_FALHOU: &str = "Algo de errado não está certo";
 pub const MSG_MARCACAO_INVALIDA: &str = "Marcação não deveria estar aqui";
 pub const MSG_INCOMPLETO: &str = "Incompleto";
 pub const MSG_SEM_SOLUCAO: &str = "Não foi possível encontrar uma solução viável para este horário com as restrições dadas.";
-pub const MSG_IMPOSSIVEL: &str = "Não existe horário que atenda a todas as restrições: todas as possibilidades foram testadas.";
+pub const MSG_IMPOSSIVEL: &str = "Não existe horário que atenda a todas as restrições, contando os horários a evitar como indisponíveis e sem horário vago entre duas aulas do mesmo turno: todas as possibilidades foram testadas.";
 pub const MSG_COM_VIOLACOES: &str = "Não foi possível gerar um horário completo com as configurações fornecidas.";
 
 /// Violações encontradas num quadro.
@@ -228,7 +230,7 @@ mod tests {
         fastrand::seed(1);
         let regras = regras_pequenas();
         let quadro = resolver(&regras);
-        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &quadro);
         assert!(!v.alguma(), "{v:?}");
 
         let r = ResultadoHorario::novo(&regras, Some((&quadro, &v)), 1.0, 0, true);
@@ -245,7 +247,7 @@ mod tests {
         let i_b = (0..3).map(|t| idx_seg(&regras, t)).find(|&i| quadro[i] == 2).unwrap();
         quadro[i_b] = 1;
 
-        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &quadro);
         // `verificar_quadro` só checa agrupamentos; o excesso de aulas aparece por célula:
         // tirando qualquer aula de A, ainda sobram 2 (o máximo), então nenhuma delas cabe ali.
         assert_eq!(v.geral, None);
@@ -262,7 +264,7 @@ mod tests {
     fn celula_vazia_e_quadro_ausente() {
         let regras = regras_pequenas();
         let quadro = regras.get_quadro_vazio();
-        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &quadro);
         assert_eq!(v.por_celula[idx_seg(&regras, 0)], Some(MSG_VAZIO));
         assert_eq!(v.geral, None);
         let r = ResultadoHorario::novo(&regras, Some((&quadro, &v)), 0.0, 0, false);
@@ -304,14 +306,14 @@ mod tests {
         // Disciplinas: 1 = junta em T, 2 = junta em U, 3 = t, 4 = u
         let mut quadro = regras.get_quadro_vazio();
         (quadro[i(0, 0)], quadro[i(0, 1)], quadro[i(1, 0)], quadro[i(1, 1)]) = (1, 3, 2, 4);
-        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &quadro);
         let (alocacoes, problemas) = montar_alocacoes(&regras, &quadro, &v);
         assert_eq!(alocacoes, [aula("junta", 1), aula("t", 2), aula("u", 2)]);
         assert!(problemas.is_empty(), "{problemas:?}");
 
         // U com a aula conjunta no 2º tempo: fora do horário de T
         (quadro[i(1, 0)], quadro[i(1, 1)]) = (4, 2);
-        let v = validar(&mut HorarioRegrasPencilmark::new(regras.clone()), &quadro);
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &quadro);
         let (alocacoes, problemas) = montar_alocacoes(&regras, &quadro, &v);
         assert_eq!(alocacoes, [aula("junta", 1), aula("t", 2), aula("u", 1), aula("junta", 2)]);
         assert!(problemas.iter().any(|p| p.turma == "U" && p.aula.as_deref() == Some("junta") && p.mensagem == crate::horario::MOTIVO_CONJUNTA), "{problemas:?}");

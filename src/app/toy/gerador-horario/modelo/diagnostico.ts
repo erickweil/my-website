@@ -4,7 +4,7 @@
  * - `diagnosticar`: o que impede ou ameaça um horário completo, antes de gerar. Cada pendência diz
  *   em que tela se corrige.
  * - `observarHorario`: como um horário já gerado se sai nas regras de qualidade (horários a evitar,
- *   jornada, descanso, intervalo), que a busca exata ignora e o algoritmo genético tenta atender.
+ *   jornada, descanso, intervalo, horário vago entre aulas), que o algoritmo genético tenta atender.
  * - `detalharProblema`: quem está em choque numa célula que o solver marcou com problema.
  */
 
@@ -92,7 +92,7 @@ export function diagnosticar(projeto: ProjetoHorario, cadastros: Cadastros): Pen
     for (const t of projeto.turmas) {
         const [aulas, tempos] = [aulasDaTurma(projeto, t.id), contarTempos(limitarAoQuadro(t.horarios, projeto.quadro))];
         if (tempos === 0) erro({ tela: "turmas", turmaId: t.id, mensagem: `A turma ${nome(t)} não tem nenhum horário marcado.` });
-        else if (aulas < tempos) erro({ tela: "aulas", turmaId: t.id, mensagem: `A turma ${nome(t)} tem ${tempos} horários marcados e só ${aulas} aulas: ${tempos - aulas === 1 ? "falta 1" : `faltam ${tempos - aulas}`}.` });
+        // Menos aulas que horários é permitido: os que sobram ficam vagos, de preferência nas pontas do turno
         else if (aulas > tempos) erro({ tela: "aulas", turmaId: t.id, mensagem: `A turma ${nome(t)} tem ${aulas} aulas para ${tempos} horários: ${aulas - tempos === 1 ? "sobra 1" : `sobram ${aulas - tempos}`}.` });
 
         const faltando = componentesNaoOfertados(projeto, t, cadastros.cursos);
@@ -192,6 +192,19 @@ export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, h
             const disciplina = (oferta && turma && nomeNaTurma(oferta, turma.id)) || "(sem nome)";
             lista.push(`${disciplina} (${nome(turma)}), ${dia}: uma aula fica sozinha de um lado ${o.regra === "turno" ? "da troca de turno" : "do intervalo"}.`);
         }
+    }
+
+    // Horários vagos entre aulas: uma frase por turma e dia
+    const janelas = new Map<string, { turmaId?: Id; dia: Dia; n: number }>();
+    for (const o of horario.qualidade) {
+        if (o.regra !== "janela") continue;
+        const chave = `${o.turmaId}|${o.dia}`;
+        const atual = janelas.get(chave) ?? { turmaId: o.turmaId, dia: o.dia, n: 0 };
+        janelas.set(chave, { ...atual, n: atual.n + 1 });
+    }
+    for (const { turmaId, dia, n } of janelas.values()) {
+        const turma = projeto.turmas.find((t) => t.id === turmaId);
+        lista.push(`Turma ${nome(turma)}, ${NOME_DO_DIA[dia]}: ${n === 1 ? "1 horário vago" : `${n} horários vagos`} entre aulas do mesmo turno.`);
     }
     return [...new Set(lista)];
 }

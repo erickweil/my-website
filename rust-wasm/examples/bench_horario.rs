@@ -11,7 +11,7 @@
 //!   --segundos N   orçamento de tempo por execução (padrão: 10)
 //!   --runs N       número de execuções independentes (padrão: 3)
 //!   --seed N       semente da 1ª execução; a execução i usa seed+i (padrão: 1)
-//!   --pop-mult N   população = tamanho do quadro × N (padrão: 4, igual ao worker)
+//!   --pop-mult N   população = aulas a alocar × N (padrão: 4, igual à página)
 //!   --csv ARQ      grava a curva de convergência (run,ms,geracao,fitness) em ARQ (só GA)
 //!   --solver S     ga (padrão) ou pencilmark
 //!   --base-iter N  Pencilmark: reinícios com orçamento 2^N, 2^(N+1)…; "none" = sem reinícios,
@@ -86,9 +86,9 @@ fn ler_opcoes() -> Opcoes {
     op
 }
 
-/// A config do GA usada na página, com o multiplicador de população da linha de comando.
-fn config_do_worker(size: usize, pop_mult: usize) -> GAConfig {
-    GAConfig { population_size: size * pop_mult, ..config_ga_horario(size) }
+/// A config do GA usada na página, com o multiplicador de população (por aula) da linha de comando.
+fn config_do_worker(regras: &RegrasHorario, pop_mult: usize) -> GAConfig {
+    GAConfig { population_size: (regras.aulas_a_alocar() * pop_mult).max(64), ..config_ga_horario(regras) }
 }
 
 /// Converte `{ turma: { dia: [aula por tempo] } }` no quadro linearizado.
@@ -124,7 +124,7 @@ fn main() {
         .unwrap_or_else(|e| uso(&format!("entrada inválida em '{}': {e}", op.instancia)));
     let size = regras.turmas.len() * QUANTOS_DIAS * regras.n_tempos;
     let slots_ativos = regras.get_quadro_vazio().iter().filter(|&&v| v == 0).count();
-    let cfg = config_do_worker(size, op.pop_mult);
+    let cfg = config_do_worker(&regras, op.pop_mult);
 
     println!("=== Benchmark nativo: {} de horários ===", if op.solver == "ga" { "GA" } else { "Pencilmark" });
     println!("instância: {}", op.instancia);

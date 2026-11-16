@@ -179,9 +179,9 @@ fn main() {
         }
         p if p.starts_with("horario-") => {
             let nome = match p { "horario-faculdade" => "faculdade-anonimizado", outro => &outro["horario-".len()..] };
-            let tamanho = carregar_horario(nome).tamanho_quadro();
+            let config = config_ga_horario(&carregar_horario(nome));
             // Mesma configuração da página do gerador de horários
-            comparar(&format!("Horário {nome}"), || carregar_horario(nome), config_ga_horario(tamanho), Some(0.0), orc(10_000_000), sementes, ilhas, &variantes);
+            comparar(&format!("Horário {nome}"), || carregar_horario(nome), config.clone(), Some(0.0), orc(10_000_000), sementes, ilhas, &variantes);
         }
         outro => panic!("problema desconhecido: {outro}"),
     }

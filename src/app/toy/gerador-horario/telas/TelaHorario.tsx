@@ -223,7 +223,8 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                             <Ajuda>
                                 <p>
                                     <strong>Busca exata:</strong> acha um horário que cumpre todas as regras obrigatórias, ou prova que não
-                                    existe. Ignora as regras de qualidade.
+                                    existe. Trata os horários a evitar como indisponíveis e só deixa horário vago no começo ou no fim
+                                    do turno; as outras regras de qualidade ela não considera.
                                 </p>
                                 <p>
                                     <strong>Algoritmo genético:</strong> para quadros grandes, que a busca exata não resolve. Devolve o melhor
@@ -234,7 +235,8 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                                     <strong>Regras de qualidade:</strong> horários que o professor pediu para evitar; no máximo 10 horas
                                     entre a primeira e a última aula do professor no dia; 11 horas de descanso até a primeira aula do dia
                                     seguinte; grupo de aulas da mesma disciplina que atravessa o intervalo (ou a troca de turno) sem deixar
-                                    uma aula sozinha de um lado. O horário mostra o que não foi atendido, nos dois métodos.
+                                    uma aula sozinha de um lado; quando a turma tem mais horários que aulas, os vagos no começo ou no fim
+                                    do turno, não entre duas aulas. O horário mostra o que não foi atendido, nos dois métodos.
                                 </p>
                             </Ajuda>
                             <Selecao className="h-8" value={solver} disabled={gerando} onChange={(e) => setSolver(e.target.value as SolverHorario)}>

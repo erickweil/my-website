@@ -4,7 +4,7 @@ use std::{collections::HashMap};
 use serde::Deserialize;
 
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum DiaSemana {
     Domingo = 0,
@@ -159,8 +159,8 @@ pub struct EntradaRecurso {
     pub ambiente: bool,
     /// REGRA OBRIGATÓRIA: o recurso nunca tem aula fora destes tempos.
     pub disponibilidade: HorariosPorDia,
-    /// REGRA DE QUALIDADE: tempos disponíveis em que é melhor não ter aula. Só o algoritmo genético
-    /// leva em conta (ver `PesosFitness::evitar`); a busca exata ignora.
+    /// Tempos disponíveis em que é melhor não ter aula. No algoritmo genético é regra de qualidade;
+    /// na busca exata, o professor fica indisponível nesses tempos.
     #[serde(default)]
     pub evitar: HorariosPorDia,
 }
@@ -239,6 +239,18 @@ pub struct Turma {
     pub id: usize,
     pub nome: String,
     pub horarios: Horario,
+    /// Horários marcados que ficam vagos: tempos marcados menos aulas da turma (0 se faltam tempos).
+    pub folga: i32,
+}
+
+/// Um turno de um dia de uma turma: as células em que ela tem aula, na ordem dos tempos. Os
+/// horários vagos devem ficar nas pontas do trecho, não entre duas aulas.
+#[derive(Clone, Debug)]
+pub struct Trecho {
+    pub turma: usize,
+    pub dia: DiaSemana,
+    /// Índices no quadro.
+    pub celulas: Vec<usize>,
 }
 
 /// Um recurso de ocupação única: professor ou ambiente (o nome vem de quando só havia professores).
@@ -298,8 +310,14 @@ pub struct RegrasHorario {
     /// As horas das aulas do dia; vazio se a entrada não trouxe.
     pub tempos: Vec<TempoDoQuadro>,
     pub n_tempos: usize,
+    /// Os turnos de cada dia de cada turma (sem as horas na entrada, o dia inteiro é um trecho).
+    pub trechos: Vec<Trecho>,
+    /// Por célula do quadro: o trecho dela e a posição dentro dele (`u32::MAX` fora do horário da turma).
+    pub trecho_de: Vec<(u32, u32)>,
     /// Pesos das regras no fitness do algoritmo genético (ver horario_genetic.rs).
     pub pesos: super::PesosFitness,
+    /// Quais operadores o algoritmo genético usa (ver horario_genetic.rs).
+    pub operadores: super::OperadoresGA,
 }
 
 impl RegrasHorario {
@@ -320,7 +338,7 @@ impl RegrasHorario {
         let mut turmas = Vec::new();
         for (i, t) in entrada.turmas.into_iter().enumerate() {
             let horarios = Horario::from_formulario(&t.horarios, n_tempos, &t.id)?;
-            turmas.push(Turma { id: i, nome: t.id, horarios });
+            turmas.push(Turma { id: i, nome: t.id, horarios, folga: 0 });
         }
         let turma_por_id: HashMap<&str, usize> = turmas.iter().map(|t| (t.nome.as_str(), t.id)).collect();
 
@@ -366,12 +384,64 @@ impl RegrasHorario {
 
         // Turnos numerados na ordem em que aparecem
         let mut turnos: Vec<&str> = Vec::new();
-        let tempos = entrada.tempos.iter().map(|t| {
+        let tempos: Vec<TempoDoQuadro> = entrada.tempos.iter().map(|t| {
             let turno = turnos.iter().position(|&x| x == t.turno).unwrap_or_else(|| { turnos.push(&t.turno); turnos.len() - 1 });
             TempoDoQuadro { inicio: t.inicio, fim: t.fim, turno: turno as u8 }
         }).collect();
 
-        Ok(Self { turmas, disciplinas, professores, aulas, tempos, n_tempos, pesos: Default::default() })
+        // Folga de cada turma: horários marcados que sobram depois de todas as aulas
+        for turma in &mut turmas {
+            let marcados = turma.horarios.slots.iter().filter(|&&v| v == 1).count() as i32;
+            let aulas: i32 = disciplinas.iter().filter(|d| d.turma_id == turma.id).map(|d| d.aulas).sum();
+            turma.folga = (marcados - aulas).max(0);
+        }
+
+        let mut regras = Self { turmas, disciplinas, professores, aulas, tempos, n_tempos, trechos: Vec::new(), trecho_de: Vec::new(), pesos: Default::default(), operadores: Default::default() };
+        regras.montar_trechos();
+        Ok(regras)
+    }
+
+    /// Divide o horário de cada turma em trechos: um por dia e turno.
+    fn montar_trechos(&mut self) {
+        let turno = |tempo: usize| self.tempos.get(tempo).map_or(0, |t| t.turno);
+        let mut trechos: Vec<Trecho> = Vec::new();
+        let mut trecho_de = vec![(u32::MAX, u32::MAX); self.tamanho_quadro()];
+        for turma in &self.turmas {
+            for dia in DiaSemana::TODOS {
+                let mut atual: Option<(u8, usize)> = None; // (turno, índice do trecho)
+                for tempo in 0..self.n_tempos {
+                    if turma.horarios.get(dia, tempo) != 1 { continue; }
+                    let t = turno(tempo);
+                    let k = match atual {
+                        Some((tt, k)) if tt == t => k,
+                        _ => {
+                            trechos.push(Trecho { turma: turma.id, dia, celulas: Vec::new() });
+                            atual = Some((t, trechos.len() - 1));
+                            trechos.len() - 1
+                        }
+                    };
+                    let i = self.to_quadro_index(turma.id, dia, tempo);
+                    trecho_de[i] = (k as u32, trechos[k].celulas.len() as u32);
+                    trechos[k].celulas.push(i);
+                }
+            }
+        }
+        self.trechos = trechos;
+        self.trecho_de = trecho_de;
+    }
+
+    /// Valor de um horário vago no quadro (marcado, mas sem aula, porque a turma tem folga). As
+    /// disciplinas valem de 1 a `disciplinas.len()`; 0 é célula ainda não resolvida e -1 é fora do
+    /// horário da turma.
+    #[inline(always)]
+    pub fn vago(&self) -> i32 {
+        self.disciplinas.len() as i32 + 1
+    }
+
+    /// A disciplina numa célula do quadro, se há uma (não vale para vago, não resolvido ou fora).
+    #[inline(always)]
+    pub fn disciplina_em(&self, valor: i32) -> Option<usize> {
+        (valor > 0 && valor < self.vago()).then(|| (valor - 1) as usize)
     }
 
     /// Lê a entrada vinda do JS (o objeto `EntradaDoSolver` da página).
@@ -395,6 +465,12 @@ impl RegrasHorario {
     pub fn de_arquivo(caminho: &str) -> Self {
         let texto = std::fs::read_to_string(caminho).unwrap_or_else(|e| panic!("não foi possível ler '{caminho}': {e}"));
         Self::from_json(&texto).unwrap_or_else(|e| panic!("entrada inválida em '{caminho}': {e}"))
+    }
+
+    /// Quantas células do quadro recebem aula: a soma das aulas por semana de cada turma (uma aula
+    /// em conjunto conta uma vez por turma). Os horários vagos não entram.
+    pub fn aulas_a_alocar(&self) -> usize {
+        self.disciplinas.iter().map(|d| d.aulas.max(0) as usize).sum()
     }
 
     /// Número de células do quadro (turmas × dias × tempos).

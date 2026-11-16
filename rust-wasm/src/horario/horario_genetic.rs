@@ -79,6 +79,29 @@ impl Default for PesosFitness {
     }
 }
 
+/// Operadores do algoritmo genético que podem ser ligados e desligados (para comparar no benchmark
+/// `bench_operadores_horario`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OperadoresGA {
+    /// População inicial com as aulas agrupadas já montadas em blocos (em vez de aula por aula).
+    pub blocos_iniciais: bool,
+    /// Probabilidade de, ao sortear uma aula de disciplina agrupada, a mutação mover o trecho
+    /// inteiro de aulas seguidas dela (troca com outro trecho do mesmo tamanho na turma) em vez de
+    /// só a aula.
+    pub troca_de_blocos: f64,
+}
+
+impl OperadoresGA {
+    /// Só os operadores originais: inicialização aula por aula e troca de duas células.
+    pub const ORIGINAIS: Self = Self { blocos_iniciais: false, troca_de_blocos: 0.0 };
+}
+
+impl Default for OperadoresGA {
+    fn default() -> Self {
+        Self { blocos_iniciais: true, troca_de_blocos: 0.5 }
+    }
+}
+
 /// Tabelas derivadas das regras, montadas uma vez, para o fitness percorrer só o que interessa:
 /// as células ativas e os dias com aula, sem seguir ponteiros de `Vec` dentro de `Vec`.
 #[derive(Clone)]
@@ -218,15 +241,24 @@ impl GAProblem for RegrasHorario {
         Some(0.0)
     }
 
-    fn hash(&self, _genes: &Self::Gene) -> Option<u64> {
-        None
+    /// Usado pelo `diversity_check` do motor para achar filhos repetidos.
+    fn hash(&self, genes: &Self::Gene) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let mut h = rustc_hash::FxHasher::default();
+        genes.hash(&mut h);
+        Some(h.finish())
     }
 
     /// Gerar um quadro aleatório respeitando as restrições iniciais:
     /// - Somente alocar disciplinas nos horários possíveis para a turma
     /// - Somente alocar disciplinas na turma correta 
     /// - Respeitar o número de aulas de cada disciplina (mas sem se preocupar com agrupamento, para não bloquear o solver)
+    /// - Os horários que sobram (folga da turma) ficam vagos; as trocas da mutação os movem como
+    ///   qualquer aula
     fn random_genes(&self) -> Self::Gene {
+        if self.operadores.blocos_iniciais {
+            return self.genes_com_blocos();
+        }
         let mut genes = self.get_quadro_vazio();
 
         for turma in &self.turmas {
@@ -236,6 +268,7 @@ impl GAProblem for RegrasHorario {
                 .filter(|d| d.turma_id == turma.id)
                 .map(|d| (d.id, d.aulas))
                 .collect();
+            let mut vagos_restantes = turma.folga;
             for dia_idx in 0..QUANTOS_DIAS {
                 let dia = DiaSemana::from_index(dia_idx);
                 for tempo in 0..self.n_tempos {
@@ -249,13 +282,21 @@ impl GAProblem for RegrasHorario {
                         .filter(|(_i, (_, aulas))| *aulas > 0)
                         .map(|(i, _)| i)
                         .collect();
-                    if disponiveis.is_empty() {
-                        // deveria ser um erro?
+                    // A turma tem mais horários que aulas: o horário fica vago (sorteado como se
+                    // fosse mais uma disciplina, para os vagos começarem espalhados)
+                    let opcoes = disponiveis.len() + (vagos_restantes > 0) as usize;
+                    if opcoes == 0 {
+                        // Não acontece: a folga da turma cobre os horários que sobram
                         console_log!("Nenhuma disciplina restante para alocar na turma '{}'", turma.nome);
                         continue;
                     }
-
-                    let escolha = disponiveis[random_range(0, disponiveis.len())];
+                    let escolha = random_range(0, opcoes);
+                    if escolha == disponiveis.len() {
+                        genes[idx] = self.vago();
+                        vagos_restantes -= 1;
+                        continue;
+                    }
+                    let escolha = disponiveis[escolha];
                     let disc_id = disciplina_map[escolha].0;
                     genes[idx] = disc_id as i32 + 1;
                     // Decrementa o contador de aulas restantes para a disciplina escolhida
@@ -272,6 +313,7 @@ impl GAProblem for RegrasHorario {
     }
 
     fn mutate(&self, _: &mut Self::State, quadro: &mut Self::Gene, mutation_rate: f64) {
+        let troca_de_blocos = self.operadores.troca_de_blocos;
         // Mutação de trocas dentro das turmas
         let n_mutations = poisson_knuth_sample((quadro.len() as f64) * mutation_rate);
         for _ in 0..n_mutations {            
@@ -283,6 +325,14 @@ impl GAProblem for RegrasHorario {
                 .map(|_| random_range(0, quadro.len()))
                 .find(|&i| quadro[i] != -1)
             else { continue };
+
+            // Aula de disciplina agrupada: às vezes move o trecho inteiro em vez de só a aula
+            if troca_de_blocos > 0.0 && self.disciplina_em(quadro[idx]).is_some_and(|d| self.disciplinas[d].agrupar > 0)
+                && fastrand::f64() < troca_de_blocos
+                && self.trocar_trecho(quadro, idx)
+            {
+                continue;
+            }
 
             // 2. Escolhe aleatoriamente outro slot ativo dentro da mesma turma para trocar
             let turma_id = (idx / self.n_tempos) / QUANTOS_DIAS;
@@ -340,6 +390,101 @@ impl GAProblem for RegrasHorario {
 }
 
 impl RegrasHorario {
+    /// Mutação "troca de blocos": o trecho de aulas seguidas da mesma disciplina que contém a célula
+    /// `idx` troca de lugar com outro trecho do mesmo tamanho, em outro dia ou tempo da turma (só
+    /// células do horário dela). Assim um bloco muda de lugar inteiro, sem passar por estados com
+    /// ele partido. Mantém o multiconjunto da turma. Retorna false se não achou para onde trocar.
+    fn trocar_trecho(&self, quadro: &mut [i32], idx: usize) -> bool {
+        let n = self.n_tempos;
+        let v = quadro[idx];
+        let linha = idx - idx % n;
+        let (mut a, mut b) = (idx, idx + 1);
+        while a > linha && quadro[a - 1] == v { a -= 1; }
+        while b < linha + n && quadro[b] == v { b += 1; }
+        let k = b - a;
+        let inicio_turma = linha - linha % (QUANTOS_DIAS * n);
+        for _ in 0..10 {
+            let dia = random_range(0, QUANTOS_DIAS);
+            let t = random_range(0, n - k + 1);
+            let destino = inicio_turma + dia * n + t;
+            // Sem sobrepor a origem e só dentro do horário da turma
+            if destino < b && a < destino + k { continue; }
+            if quadro[destino..destino + k].iter().any(|&x| x == -1) { continue; }
+            for j in 0..k {
+                quadro.swap(a + j, destino + j);
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Quadro inicial com as aulas agrupadas já em blocos: para cada turma, os blocos (do maior para
+    /// o menor) vão para posições sorteadas entre as que cabem, de preferência onde os professores
+    /// estão disponíveis e, com "não emendar", sem encostar em outro bloco da mesma disciplina. Se um
+    /// bloco não cabe em lugar nenhum, as aulas dele entram soltas. Depois as aulas sem agrupamento
+    /// e os horários vagos preenchem o resto, ao acaso. O multiconjunto de cada turma é o mesmo de
+    /// `random_genes` sem blocos.
+    pub fn genes_com_blocos(&self) -> QuadroHorario {
+        let n = self.n_tempos;
+        let mut genes = self.get_quadro_vazio();
+        let pode_prof = |d: usize, celula: usize| {
+            let (_, dia, tempo) = self.from_quadro_index(celula);
+            self.disciplinas[d].professores.iter().all(|&p| self.professores[p].horarios.get(dia, tempo) == 1)
+        };
+        for turma in &self.turmas {
+            let inicio = turma.id * QUANTOS_DIAS * n;
+            // (disciplina, tamanho) dos blocos, e as peças soltas
+            let mut blocos: Vec<(usize, usize)> = Vec::new();
+            let mut soltas: Vec<i32> = Vec::new();
+            for d in self.disciplinas.iter().filter(|d| d.turma_id == turma.id) {
+                let g = d.agrupar.max(0);
+                let (n_blocos, resto) = if g > 0 { (d.aulas / g, d.aulas % g) } else { (0, d.aulas) };
+                blocos.extend((0..n_blocos).map(|_| (d.id, g as usize)));
+                soltas.extend((0..resto).map(|_| d.id as i32 + 1));
+            }
+            soltas.extend((0..turma.folga).map(|_| self.vago()));
+            fastrand::shuffle(&mut blocos);
+            blocos.sort_by_key(|&(_, k)| std::cmp::Reverse(k));
+
+            let mut candidatos: Vec<(usize, bool)> = Vec::new();
+            for (d, k) in blocos {
+                let valor = d as i32 + 1;
+                candidatos.clear();
+                for dia in 0..QUANTOS_DIAS {
+                    let linha = inicio + dia * n;
+                    for t in 0..n.saturating_sub(k - 1) {
+                        let ini = linha + t;
+                        if genes[ini..ini + k].iter().any(|&x| x != 0) { continue; }
+                        let encosta = self.disciplinas[d].dividir
+                            && ((t > 0 && genes[ini - 1] == valor) || (t + k < n && genes[ini + k] == valor));
+                        let bom = !encosta && (ini..ini + k).all(|c| pode_prof(d, c));
+                        candidatos.push((ini, bom));
+                    }
+                }
+                let bons = candidatos.iter().filter(|c| c.1).count();
+                let escolhido = if bons > 0 {
+                    candidatos.iter().filter(|c| c.1).nth(random_range(0, bons)).map(|c| c.0)
+                } else if !candidatos.is_empty() {
+                    Some(candidatos[random_range(0, candidatos.len())].0)
+                } else {
+                    None
+                };
+                match escolhido {
+                    Some(ini) => genes[ini..ini + k].fill(valor),
+                    None => soltas.extend((0..k).map(|_| valor)),
+                }
+            }
+
+            // Soltas e vagos nas células que sobraram
+            fastrand::shuffle(&mut soltas);
+            let livres: Vec<usize> = (inicio..inicio + QUANTOS_DIAS * n).filter(|&c| genes[c] == 0).collect();
+            for (c, v) in livres.into_iter().zip(soltas) {
+                genes[c] = v;
+            }
+        }
+        genes
+    }
+
     /// Fitness original, em várias passadas pelo quadro. Mantido como referência: os testes
     /// conferem que `fitness_rapido` com os pesos originais dá exatamente o mesmo valor.
     pub fn fitness_original(&self, state: &mut HorarioGAState, quadro: &[i32]) -> f64 {
@@ -361,10 +506,9 @@ impl RegrasHorario {
                     // Slots inativos: nada a verificar
                     if turma.horarios.get(dia, tempo) != 1 { continue; }
 
-                    let id_disciplina = quadro[self.to_quadro_index(turma.id, dia, tempo)] - 1;
-                    if id_disciplina < 0 { continue; } // slot vazio
+                    let Some(id_disciplina) = self.disciplina_em(quadro[self.to_quadro_index(turma.id, dia, tempo)]) else { continue }; // vago ou não resolvido
 
-                    let disciplina = &self.disciplinas[id_disciplina as usize];
+                    let disciplina = &self.disciplinas[id_disciplina];
 
                     // prof_matriz começa como cópia de prof.horarios (0, 1)
                     // Para cada disciplina alocada, decrementa a disponibilidade dos professores daquela disciplina
@@ -390,14 +534,14 @@ impl RegrasHorario {
                         continue;
                     }
 
-                    let id_disciplina = quadro[index] - 1;
-                    if id_disciplina < 0 {
-                        // Deveria ter uma disciplina alocada
+                    if quadro[index] <= 0 {
+                        // Deveria ter uma disciplina alocada (ou ficar vago)
                         fitness -= 1000.0;
                         continue; // slot vazio
                     }
+                    let Some(id_disciplina) = self.disciplina_em(quadro[index]) else { continue }; // vago
 
-                    let disciplina = &self.disciplinas[id_disciplina as usize];
+                    let disciplina = &self.disciplinas[id_disciplina];
 
                     // Regra: Disponibilidade do professor e sem conflito entre turmas
                     for &prof_id in &disciplina.professores {
@@ -479,10 +623,11 @@ impl RegrasHorario {
         // (`u_professor`); todas menos a primeira, onde ele trabalha (`u_conflito`).
         let mut u_professor = 0i32;
         let mut u_conflito = 0i32;
+        let n_disc = t.prof_de.len() as i32;
         ocupacao.copy_from_slice(&t.disponibilidade);
         for &(i, horario) in &t.ativas {
             let d = quadro[i as usize] - 1;
-            if d < 0 { continue; }
+            if d < 0 || d >= n_disc { continue; } // não resolvido ou vago
             let (ini, fim) = t.prof_de[d as usize];
             for &p in &t.professores[ini as usize..fim as usize] {
                 let k = p as usize * t.slots + horario as usize;
@@ -501,9 +646,10 @@ impl RegrasHorario {
         for &(i, horario) in &t.ativas {
             let d = quadro[i as usize] - 1;
             if d < 0 {
-                estrutura += 1; // deveria ter uma disciplina
+                estrutura += 1; // deveria ter uma disciplina (ou ficar vago)
                 continue;
             }
+            if d >= n_disc { continue; } // vago
             let d = d as usize;
             if !pesos.professor_por_movimentos {
                 let (ini, fim) = t.prof_de[d];
@@ -535,7 +681,7 @@ impl RegrasHorario {
             while i < fim {
                 let v = quadro[i];
                 let mut j = i + 1;
-                if v <= 0 {
+                if v <= 0 || v > n_disc {
                     i = j;
                     continue;
                 }
@@ -599,11 +745,22 @@ impl RegrasHorario {
     }
 }
 
-/// Configuração do GA para o quadro de horários usada pela página (a mesma do antigo worker em TS).
-/// `tamanho` é o número de células do quadro ([`RegrasHorario::tamanho_quadro`]).
-pub fn config_ga_horario(tamanho: usize) -> GAConfig {
+/// Indivíduos da população por aula a alocar (ver [`config_ga_horario`]).
+pub const POPULACAO_POR_AULA: usize = 4;
+
+/// Configuração do GA para o quadro de horários usada pela página.
+///
+/// População: [`POPULACAO_POR_AULA`] por aula que de fato vai para o quadro
+/// ([`RegrasHorario::aulas_a_alocar`]). Antes era por célula do quadro (turmas × 7 dias × tempos),
+/// o que conta dias e turnos em que a turma não tem aula: no técnico (19 turmas em três turnos),
+/// 1596 células para 614 aulas, uma população 2,6 vezes maior e gerações 2,6 vezes mais lentas.
+///
+/// A mutação continua medida no quadro todo (é nele que ela sorteia as posições): em média um
+/// gene trocado por indivíduo.
+pub fn config_ga_horario(regras: &RegrasHorario) -> GAConfig {
+    let tamanho = regras.tamanho_quadro();
     GAConfig {
-        population_size: tamanho * 4,
+        population_size: (regras.aulas_a_alocar() * POPULACAO_POR_AULA).max(64),
         crossover_rate: 0.9,
         mutation_rate: 0.9,
         // em média 1 gene mutado por indivíduo
@@ -691,6 +848,81 @@ mod tests {
 
     fn carregar(nome: &str) -> RegrasHorario {
         RegrasHorario::de_arquivo(&format!("{}/tests/instancias/{nome}.json", env!("CARGO_MANIFEST_DIR")))
+    }
+
+    /// Multiconjunto de cada turma, ordenado (para comparar quadros iniciais).
+    fn por_turma(regras: &RegrasHorario, q: &QuadroHorario) -> Vec<Vec<i32>> {
+        let n = QUANTOS_DIAS * regras.n_tempos;
+        (0..regras.turmas.len()).map(|t| { let mut v = q[t * n..(t + 1) * n].to_vec(); v.sort_unstable(); v }).collect()
+    }
+
+    /// A população inicial com blocos tem as mesmas aulas (e vagos) por turma que a original, sem
+    /// célula por resolver, e os blocos já montados: bem menos erro de agrupamento.
+    #[test]
+    fn inicial_com_blocos_mantem_as_aulas_e_monta_os_blocos() {
+        for nome in ["faculdade-anonimizado", "pequena", "media"] {
+            fastrand::seed(21);
+            let mut original = carregar(nome);
+            original.operadores = OperadoresGA::ORIGINAIS;
+            let com_blocos = RegrasHorario { operadores: OperadoresGA::default(), ..original.clone() };
+            let so_agrupar = |r: &RegrasHorario| RegrasHorario { pesos: PesosFitness { professor: 0.0, conflito: 0.0, unidas: 0.0, ..r.pesos }, ..r.clone() };
+            let (ag_o, ag_b) = (so_agrupar(&original), so_agrupar(&com_blocos));
+            let mut estado = original.initial_state();
+            let (mut soma_o, mut soma_b) = (0.0, 0.0);
+            for _ in 0..30 {
+                let (a, b) = (original.random_genes(), com_blocos.random_genes());
+                assert_eq!(por_turma(&original, &a), por_turma(&original, &b), "{nome}: mesmas aulas por turma");
+                assert!(!b.contains(&0), "{nome}: nenhuma célula por resolver");
+                assert_invariantes(&original, &a, &b);
+                soma_o += ag_o.fitness_rapido(&mut estado, &a);
+                soma_b += ag_b.fitness_rapido(&mut estado, &b);
+            }
+            assert!(soma_b > soma_o * 0.5, "{nome}: blocos iniciais deveriam ter bem menos erro de agrupamento ({soma_b} x {soma_o})");
+        }
+    }
+
+    /// Com vagos: a turma tem folga, e eles também entram no quadro inicial com blocos.
+    #[test]
+    fn inicial_com_blocos_inclui_os_vagos() {
+        fastrand::seed(22);
+        let regras = RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4, 5], "ter": [1, 2, 3] } }],
+            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": 4, "bloco": 2 }, { "id": "B", "turmas": ["T"], "recursos": [], "aulasSemana": 1 }],
+            "recursos": []
+        }"#).unwrap();
+        for _ in 0..50 {
+            let q = regras.genes_com_blocos();
+            assert_eq!(q.iter().filter(|&&v| v == regras.vago()).count(), 3);
+            assert_eq!(q.iter().filter(|&&v| v == 1).count(), 4);
+            assert!(!q.contains(&0));
+        }
+    }
+
+    /// A troca de blocos preserva as invariantes (estrutura e multiconjunto de cada turma).
+    #[test]
+    fn troca_de_blocos_preserva_invariantes() {
+        fastrand::seed(23);
+        let mut regras = carregar("faculdade-anonimizado");
+        regras.operadores.troca_de_blocos = 1.0;
+        let mut estado = regras.initial_state();
+        let referencia = regras.random_genes();
+        let mut quadro = referencia.clone();
+        let mut mudou = 0;
+        for _ in 0..20_000 {
+            let antes = quadro.clone();
+            regras.mutate(&mut estado, &mut quadro, 0.01);
+            mudou += (antes != quadro) as usize;
+            assert_invariantes(&regras, &referencia, &quadro);
+        }
+        assert!(mudou > 1000, "a mutação deveria mudar o quadro");
+    }
+
+    #[test]
+    fn hash_igual_para_quadros_iguais() {
+        let regras = carregar("pequena");
+        let (a, b) = (regras.random_genes(), regras.random_genes());
+        assert_eq!(regras.hash(&a), regras.hash(&a.clone()));
+        assert_ne!(regras.hash(&a), regras.hash(&b));
     }
 
     /// Quadros variados: aleatórios, e cada vez mais evoluídos (inclui quadros quase certos).

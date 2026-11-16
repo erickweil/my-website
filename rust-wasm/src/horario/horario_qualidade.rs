@@ -13,6 +13,9 @@
 //!   aula do dia seguinte. Pesa pelo tempo que falta para as 11 horas.
 //! - **Intervalo**: aulas seguidas da mesma disciplina que atravessam um intervalo deixando uma aula
 //!   sozinha de um dos lados (2 ou mais de cada lado é aceitável). Na **troca de turno** pesa mais.
+//! - **Janela**: horário vago da turma entre duas aulas do mesmo turno. Quando a turma tem mais
+//!   horários marcados que aulas, os vagos devem ficar no começo ou no fim do turno. Conta um por
+//!   horário vago.
 //!
 //! Jornada, descanso e intervalo dependem das horas das aulas (`EntradaHorario::tempos`); sem elas
 //! ficam desligadas. Ambientes não têm jornada, descanso nem horários a evitar.
@@ -35,6 +38,7 @@ const PESO_DESCANSO_POR_HORA: f64 = 3.0;
 const PESO_EVITAR: f64 = 2.0;
 const PESO_TROCA_DE_TURNO: f64 = 2.0;
 const PESO_INTERVALO: f64 = 1.0;
+const PESO_JANELA: f64 = 3.0;
 
 /// O que separa um tempo do seguinte.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -57,16 +61,18 @@ pub struct Qualidade {
     pub intervalo: u32,
     /// O mesmo, numa troca de turno.
     pub troca_de_turno: u32,
+    /// Horários vagos de turmas entre duas aulas do mesmo turno.
+    pub janela: u32,
 }
 
 /// Uma ocorrência de regra de qualidade, para a página mostrar. Os ids são os da entrada.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Ocorrencia {
-    /// `"evitar"`, `"jornada"`, `"descanso"`, `"intervalo"` ou `"turno"`.
+    /// `"evitar"`, `"jornada"`, `"descanso"`, `"intervalo"`, `"turno"` ou `"janela"`.
     pub regra: &'static str,
     /// O professor (evitar, jornada, descanso).
     pub recurso: Option<String>,
-    /// A turma e a aula (evitar, intervalo, turno).
+    /// A turma (evitar, intervalo, turno, janela) e a aula (evitar, intervalo, turno).
     pub turma: Option<String>,
     pub aula: Option<String>,
     /// O dia; no descanso, o primeiro dos dois.
@@ -100,6 +106,10 @@ pub struct TabelasQualidade {
     tem_evitar: bool,
     tem_horas: bool,
     tem_quebras: bool,
+    /// Alguma turma tem horários vagos (folga).
+    tem_vagos: bool,
+    /// Valor de um horário vago no quadro ([`RegrasHorario::vago`]).
+    vago: i32,
     /// Fator que põe a soma de todas as penalidades de qualidade abaixo da menor penalidade
     /// obrigatória: essa menor penalidade dividida pelo pior caso possível mais um.
     escala: f64,
@@ -166,10 +176,12 @@ impl TabelasQualidade {
         let pior = PESO_JORNADA_POR_HORA * pessoas * QUANTOS_DIAS as f64 * 24.0
             + PESO_DESCANSO_POR_HORA * pessoas * QUANTOS_DIAS as f64 * (DESCANSO_MINIMO_MIN as f64 / 60.0)
             + PESO_EVITAR * pares as f64
-            + PESO_TROCA_DE_TURNO * ativas.len() as f64;
+            + PESO_TROCA_DE_TURNO * ativas.len() as f64
+            + PESO_JANELA * ativas.len() as f64;
+        let tem_vagos = r.turmas.iter().any(|t| t.folga > 0);
 
         Self {
-            ativa: tem_evitar || (tem_horas && pessoas > 0.0) || tem_quebras,
+            ativa: tem_evitar || (tem_horas && pessoas > 0.0) || tem_quebras || tem_vagos,
             n_tempos: n,
             ativas,
             linhas,
@@ -183,6 +195,8 @@ impl TabelasQualidade {
             tem_evitar,
             tem_horas,
             tem_quebras,
+            tem_vagos,
+            vago: r.vago(),
             escala: menor_obrigatoria / (pior + 1.0),
         }
     }
@@ -199,7 +213,8 @@ impl TabelasQualidade {
                 + PESO_DESCANSO_POR_HORA * q.descanso_min as f64 / 60.0
                 + PESO_EVITAR * q.evitar as f64
                 + PESO_INTERVALO * q.intervalo as f64
-                + PESO_TROCA_DE_TURNO * q.troca_de_turno as f64)
+                + PESO_TROCA_DE_TURNO * q.troca_de_turno as f64
+                + PESO_JANELA * q.janela as f64)
     }
 
     /// Mede a qualidade do quadro. Com `detalhe`, também lista cada ocorrência (mais lento: só
@@ -214,7 +229,7 @@ impl TabelasQualidade {
             buf.ultimo.fill(SEM_AULA);
             for &(i, dia, tempo) in &self.ativas {
                 let d = quadro[i as usize] - 1;
-                if d < 0 { continue; }
+                if d < 0 || d + 1 >= self.vago { continue; } // não resolvido ou vago
                 let (ini, fim) = self.recursos_de[d as usize];
                 for &p in &self.recursos[ini as usize..fim as usize] {
                     let p = p as usize;
@@ -285,7 +300,7 @@ impl TabelasQualidade {
                 while a < n {
                     let v = quadro[linha + a];
                     let mut b = a + 1;
-                    if v <= 0 {
+                    if v <= 0 || v == self.vago {
                         a = b;
                         continue;
                     }
@@ -318,6 +333,31 @@ impl TabelasQualidade {
                         inicio_do_trecho = k + 1;
                     }
                     a = b;
+                }
+            }
+        }
+
+        // Horários vagos entre duas aulas do mesmo turno
+        if self.tem_vagos {
+            for trecho in &r.trechos {
+                if r.turmas[trecho.turma].folga == 0 { continue; }
+                let aula = |&c: &usize| quadro[c] > 0 && quadro[c] != self.vago;
+                let (Some(primeira), Some(ultima)) = (trecho.celulas.iter().position(aula), trecho.celulas.iter().rposition(aula)) else { continue };
+                let n = trecho.celulas[primeira..ultima].iter().filter(|&&c| quadro[c] == self.vago).count() as u32;
+                if n > 0 {
+                    q.janela += n;
+                    if let Some(lista) = detalhe.as_deref_mut() {
+                        for _ in 0..n {
+                            lista.push(Ocorrencia {
+                                regra: "janela",
+                                recurso: None,
+                                turma: Some(r.turmas[trecho.turma].nome.clone()),
+                                aula: None,
+                                dia: trecho.dia.sigla(),
+                                minutos: 0,
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -474,6 +514,34 @@ mod tests {
         let (q, _) = r.qualidade(&quadro(&r, &[(Segunda, 0), (Segunda, 8), (Terca, 0), (Terca, 2), (Terca, 3)]));
         assert_eq!(q, Qualidade { evitar: 1, ..Default::default() });
         assert_eq!(r.quebra_depois(2), Quebra::Nenhuma);
+    }
+
+    /// Janela é vago ENTRE aulas do mesmo turno: nas pontas da manhã ou da noite não conta, e a
+    /// troca de turno separa os trechos.
+    #[test]
+    fn janela_e_vago_entre_aulas_do_mesmo_turno() {
+        let r = regras("{}");
+        let mut r = r;
+        r.turmas[0].folga = 27; // as aulas do quadro de teste não importam aqui
+        let vago = r.vago();
+        // Segunda: "." = vago, "A" = aula; tempos 0-4 manhã, 5-8 noite
+        let janelas = |dia: &str| {
+            let mut q = r.get_quadro_vazio();
+            for (t, c) in dia.chars().enumerate() {
+                q[r.to_quadro_index(0, Segunda, t)] = if c == 'A' { 1 } else { vago };
+            }
+            let (q, o) = r.qualidade(&q);
+            assert!(o.iter().filter(|x| x.regra == "janela").all(|x| x.turma.as_deref() == Some("T") && x.dia == "seg"));
+            q.janela
+        };
+        assert_eq!(janelas("AAA....AA"), 0, "fim da manhã e começo da noite");
+        assert_eq!(janelas("..AAA.AA."), 0);
+        assert_eq!(janelas("A.AAAAAAA"), 1);
+        assert_eq!(janelas("A..A.AAAA"), 2, "dois vagos entre aulas da manhã; o do fim da manhã não conta");
+        assert_eq!(janelas("AAAAAA..A"), 2, "na noite");
+        assert_eq!(janelas("AAAA.A..."), 0, "a troca de turno não é janela: o vago fecha a manhã");
+        assert_eq!(janelas("........."), 0);
+        assert_eq!(r.trechos.iter().filter(|t| t.dia == Segunda).count(), 2, "manhã e noite");
     }
 
     /// Por pior que seja a qualidade, ela pesa menos que uma única violação obrigatória (peso 20).

@@ -96,7 +96,7 @@ fn main() {
             conflito: p.get(5).copied().unwrap_or(p[0]),
         };
     }
-    let cfg = config_ga_horario(regras.tamanho_quadro());
+    let cfg = config_ga_horario(&regras);
     let ativos = regras.get_quadro_vazio().iter().filter(|&&v| v == 0).count();
     println!("{} turmas, {} disciplinas, {} professores, {} células ativas, pop {}, {:.1} M avaliações por semente",
         regras.turmas.len(), regras.disciplinas.len(), regras.professores.len(), ativos, cfg.population_size, orcamento as f64 / 1e6);

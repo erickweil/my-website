@@ -61,9 +61,9 @@ impl HorarioPencilmarkRunner {
     /// `base_iter`: `None` = busca exaustiva (em paralelo quando há pool de threads);
     /// `Some(n)` = uma thread com reinícios de orçamento 2^n, 2^(n+1)…
     pub fn de_regras(regras: RegrasHorario, base_iter: Option<u32>) -> Self {
+        let validador = HorarioRegrasPencilmark::so_obrigatorias(regras.clone());
         let regras = HorarioRegrasPencilmark::new(regras);
         let (quadro, n_possibs) = (regras.quadro_vazio(), regras.n_possibs());
-        let validador = regras.clone();
         let busca = match base_iter {
             None => BuscaPencilmark::Exaustiva(BuscaExaustiva::new(regras, quadro, n_possibs, 1)),
             Some(_) => BuscaPencilmark::Reinicios(ExecucaoPencilmark::new(regras, quadro, n_possibs, 1, base_iter)),
@@ -176,8 +176,8 @@ impl HorarioGARunner {
     /// `ilhas`: 0 ou 1 = uma população só; N = modelo de ilhas, com N populações do tamanho padrão
     /// (ver `GAConfig.ilhas`). O horário sofre com ótimos locais, e as ilhas ajudam a escapar deles.
     pub fn de_regras(regras: RegrasHorario, ilhas: usize) -> Self {
-        let config = GAConfig { ilhas, ..config_ga_horario(regras.tamanho_quadro()) };
-        let validador = HorarioRegrasPencilmark::new(regras.clone());
+        let config = GAConfig { ilhas, ..config_ga_horario(&regras) };
+        let validador = HorarioRegrasPencilmark::so_obrigatorias(regras.clone());
         Self {
             ga: GeneticAlgorithm::new(regras, config),
             validador,
@@ -380,7 +380,7 @@ mod tests {
     fn ga_com_ilhas_multiplica_a_populacao_e_entrega_resultado() {
         fastrand::seed(4);
         let regras = carregar("pequena");
-        let tamanho = regras.tamanho_quadro();
+        let aulas = regras.aulas_a_alocar();
         let mut r = HorarioGARunner::de_regras(regras, 4);
         // Em chamadas pequenas, como o worker faz: a época de ilhas atravessa várias chamadas
         for _ in 0..12 {
@@ -389,7 +389,7 @@ mod tests {
             }
         }
         assert_eq!(r.ga.config.ilhas, 4);
-        assert_eq!(r.ga.config.population_size, tamanho * 4, "população por ilha é a padrão");
+        assert_eq!(r.ga.config.population_size, aulas * crate::horario::POPULACAO_POR_AULA, "população por ilha é a padrão");
         assert!(r.versao() > 0, "deveria ter um melhor quadro");
         let res = r.resultado();
         assert!(res.alocacoes.is_some());
@@ -397,10 +397,10 @@ mod tests {
         assert_eq!(res.terminou, !res.alguma_violacao);
     }
 
-    /// Um professor com horários a evitar: a busca exata ignora (e continua resolvendo); o GA entrega
+    /// Um professor com horários a evitar: a busca exata os trata como indisponíveis; o GA entrega
     /// um horário válido e segue até não sobrar aula em horário a evitar.
     #[wasm_bindgen_test(unsupported = test)]
-    fn evitar_e_regra_de_qualidade_so_do_ga() {
+    fn evitar_e_indisponivel_na_busca_exata_e_qualidade_no_ga() {
         // Turma com 4 tempos na segunda e na terça; P dá 4 aulas e prefere não dar aula na terça
         let entrada = r#"{
             "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4], "ter": [1, 2, 3, 4] } }],
@@ -424,11 +424,17 @@ mod tests {
         assert_eq!(r.qualidade(&pior).0.evitar, 4);
         let f = r.fitness_rapido(&mut estado, &pior);
         assert!(f < 0.0 && f > -20.0, "as 4 aulas a evitar valem menos que uma violação obrigatória: {f}");
+        // Para a validação, aula em horário a evitar não é violação
+        assert!(!validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras()), &pior).alguma());
 
-        fastrand::seed(5);
-        let mut pm = HorarioPencilmarkRunner::de_regras(regras(), None);
-        while !pm.run(1_000) {}
-        assert!(!pm.resultado().alguma_violacao, "a busca exata ignora os horários a evitar");
+        for semente in 1..=5 {
+            fastrand::seed(semente);
+            let mut pm = HorarioPencilmarkRunner::de_regras(regras(), None);
+            while !pm.run(1_000) {}
+            let res = pm.resultado();
+            assert!(!res.alguma_violacao, "{:?}", res.mensagem);
+            assert!(res.qualidade.is_empty(), "a busca exata não põe aula de P na terça: {:?}", res.qualidade);
+        }
 
         fastrand::seed(5);
         let mut ga = HorarioGARunner::de_regras(regras(), 0);
@@ -440,6 +446,122 @@ mod tests {
         assert!(ga.valido() && !ga.resultado().alguma_violacao);
         assert!(ga.resultado().qualidade.is_empty(), "há horário válido sem nenhuma aula na terça para P");
         assert_eq!(ga.melhor_fitness, Some(0.0));
+    }
+
+    /// Se os horários a evitar não deixam espaço para as aulas, a busca exata prova que não há
+    /// horário (com eles indisponíveis); o GA ainda entrega um horário válido, com as ocorrências.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn evitar_que_nao_fecha_e_impossivel_na_busca_exata() {
+        let regras = || RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2], "ter": [1, 2] } }],
+            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 4 }],
+            "recursos": [{ "id": "P", "disponibilidade": { "seg": [1, 2], "ter": [1, 2] }, "evitar": { "seg": [1] } }]
+        }"#).unwrap();
+        fastrand::seed(1);
+        let mut pm = HorarioPencilmarkRunner::de_regras(regras(), None);
+        while !pm.run(1_000) {}
+        assert!(pm.provou_impossivel());
+        assert_eq!(pm.resultado().mensagem, Some(MSG_IMPOSSIVEL));
+
+        let mut ga = HorarioGARunner::de_regras(regras(), 0);
+        while !ga.run(100) {}
+        assert!(ga.valido());
+        assert_eq!(ga.resultado().qualidade.iter().filter(|o| o.regra == "evitar").count(), 1);
+    }
+
+    /// Turma com mais horários que aulas: os dois métodos entregam um horário válido, com os horários
+    /// vagos nas pontas dos turnos.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn horarios_vagos_ficam_nas_pontas_do_turno() {
+        // 2 dias de 5 tempos (10 horários) e 7 aulas: 3 vagos
+        let entrada = r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4, 5], "ter": [1, 2, 3, 4, 5] } }],
+            "aulas": [
+                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2, "bloco": 2 },
+                { "id": "B", "turmas": ["T"], "recursos": ["Q"], "aulasSemana": 3 },
+                { "id": "C", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2 }
+            ],
+            "recursos": [
+                { "id": "P", "disponibilidade": { "seg": [1, 2, 3, 4, 5], "ter": [1, 2, 3, 4, 5] } },
+                { "id": "Q", "disponibilidade": { "seg": [2, 3, 4], "ter": [2, 3, 4] } }
+            ]
+        }"#;
+        let regras = || RegrasHorario::from_json(entrada).unwrap();
+        assert_eq!(regras().turmas[0].folga, 3);
+        let conferir = |res: &ResultadoHorario| {
+            assert!(!res.alguma_violacao, "{:?} {:?}", res.mensagem, res.problemas);
+            assert_eq!(res.alocacoes.as_ref().unwrap().len(), 7);
+            assert!(res.qualidade.iter().all(|o| o.regra != "janela"), "{:?}", res.qualidade);
+            // As aulas de cada dia são seguidas
+            for dia in ["seg", "ter"] {
+                let mut tempos: Vec<usize> = res.alocacoes.as_ref().unwrap().iter().filter(|a| a.dia == dia).map(|a| a.tempo).collect();
+                tempos.sort();
+                assert!(tempos.windows(2).all(|w| w[1] == w[0] + 1), "{dia}: {tempos:?}");
+            }
+        };
+        for semente in 1..=8 {
+            fastrand::seed(semente);
+            let mut pm = HorarioPencilmarkRunner::de_regras(regras(), None);
+            while !pm.run(1_000) {}
+            conferir(&pm.resultado());
+
+            fastrand::seed(semente);
+            let mut ga = HorarioGARunner::de_regras(regras(), 0);
+            let mut blocos = 0;
+            while !ga.run(50) {
+                blocos += 1;
+                assert!(blocos < 2_000, "o GA deveria terminar");
+            }
+            conferir(&ga.resultado());
+        }
+    }
+
+    /// Quando o único jeito é deixar um vago no meio do turno: a busca exata não aceita (prova que
+    /// não há horário), e o GA entrega o horário válido com a janela apontada.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn vago_no_meio_do_turno_so_no_genetico() {
+        let regras = || RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3] } }],
+            "aulas": [
+                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 1 },
+                { "id": "B", "turmas": ["T"], "recursos": ["Q"], "aulasSemana": 1 }
+            ],
+            "recursos": [
+                { "id": "P", "disponibilidade": { "seg": [1] } },
+                { "id": "Q", "disponibilidade": { "seg": [3] } }
+            ]
+        }"#).unwrap();
+        fastrand::seed(1);
+        let mut pm = HorarioPencilmarkRunner::de_regras(regras(), None);
+        while !pm.run(1_000) {}
+        assert!(pm.provou_impossivel());
+
+        let mut ga = HorarioGARunner::de_regras(regras(), 0);
+        while !ga.run(100) {}
+        let res = ga.resultado();
+        assert!(!res.alguma_violacao, "{:?}", res.problemas);
+        assert_eq!(res.qualidade.iter().map(|o| (o.regra, o.turma.as_deref(), o.dia)).collect::<Vec<_>>(), [("janela", Some("T"), "seg")]);
+    }
+
+    /// Vagos além da folga da turma são violação, apontada na célula.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn vagos_alem_da_folga_sao_violacao() {
+        let regras = RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3] } }],
+            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": 2 }],
+            "recursos": []
+        }"#).unwrap();
+        let (vago, i) = (regras.vago(), |t| regras.to_quadro_index(0, DiaSemana::Segunda, t));
+        let mut q = regras.get_quadro_vazio();
+        (q[i(0)], q[i(1)], q[i(2)]) = (1, 1, vago);
+        assert!(!validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &q).alguma());
+        (q[i(0)], q[i(1)], q[i(2)]) = (1, vago, vago);
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &q);
+        assert_eq!(v.por_celula[i(1)], Some(crate::horario::MOTIVO_SEM_FOLGA));
+        // E um vago no meio do turno não é violação, só qualidade
+        (q[i(0)], q[i(1)], q[i(2)]) = (1, vago, 1);
+        assert!(!validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &q).alguma());
+        assert_eq!(regras.qualidade(&q).0.janela, 1);
     }
 
     /// Quando não dá para atender a todos os pedidos, o GA não fica rodando para sempre: para com

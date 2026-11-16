@@ -139,6 +139,17 @@ que só afetam a qualidade do horário existem apenas no algoritmo genético, co
   - A entrada do solver passou a levar as horas das aulas do quadro e a distinguir professor de
     ambiente. O resultado traz as ocorrências, medidas no Rust, para os dois métodos.
   - Ordem dos pesos, do mais grave ao menos: jornada, descanso, evitar e troca de turno, intervalo.
+- **Revisto (15/11/2026, terceira rodada):** a busca exata passou a tratar "evitar" como
+  indisponível, em vez de ignorar. A validação de um horário continua só com as regras
+  obrigatórias (`HorarioRegrasPencilmark::so_obrigatorias`), então uma aula em horário a evitar
+  segue sendo qualidade no resultado do genético.
+- **Feito (15/11/2026, terceira rodada):** turma com mais horários marcados que aulas. Os horários
+  que sobram (a folga da turma) ficam vagos, com um valor próprio no quadro (`RegrasHorario::vago`).
+  - Validação: mais vagos que a folga é violação.
+  - Genético: os vagos entram no multiconjunto da turma; regra de qualidade **janela** (horário
+    vago entre duas aulas do mesmo turno, peso 3, entre evitar e descanso).
+  - Busca exata: o vago é mais uma possibilidade da célula, e só pode ficar nas pontas do turno.
+  - A verificação "faltam aulas" antes de gerar deixou de ser erro.
 - **Fora:** fixar aulas (o horário é sempre gerado do zero) e o genético partir do resultado da
   busca exata (ele é para os quadros grandes, que a busca exata não resolve).
 - **Próximas regras de qualidade possíveis**, quando houver o dado no cadastro: janelas do

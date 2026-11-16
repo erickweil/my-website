@@ -48,7 +48,10 @@ export interface EntradaDoSolver {
         ambiente: boolean;
         /** Regra obrigatória: nunca tem aula fora destes tempos. */
         disponibilidade: HorariosPorDia;
-        /** Regra de qualidade (só o algoritmo genético considera): tempos em que é melhor não ter aula. */
+        /**
+         * Tempos em que é melhor não ter aula: regra de qualidade no algoritmo genético; na busca
+         * exata, o professor fica indisponível neles.
+         */
         evitar: HorariosPorDia;
     }[];
     /**
@@ -60,10 +63,10 @@ export interface EntradaDoSolver {
 
 /** Uma ocorrência de regra de qualidade num horário válido (`Ocorrencia` em horario_qualidade.rs). */
 export interface OcorrenciaDeQualidade {
-    regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno";
+    regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno" | "janela";
     /** O professor (evitar, jornada, descanso). */
     recurso: string | null;
-    /** A turma e a aula (evitar, intervalo, turno). */
+    /** A turma (evitar, intervalo, turno, janela) e a aula (evitar, intervalo, turno). */
     turma: string | null;
     aula: string | null;
     /** O dia; no descanso, o primeiro dos dois. */

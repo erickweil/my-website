@@ -162,7 +162,7 @@ const horarioGerado = z.object({
      * genético tenta atendê-las; a busca exata as ignora.
      */
     qualidade: z.array(z.object({
-        regra: z.enum(["evitar", "jornada", "descanso", "intervalo", "turno"]),
+        regra: z.enum(["evitar", "jornada", "descanso", "intervalo", "turno", "janela"]),
         professorId: id.optional(),
         turmaId: id.optional(),
         ofertaId: id.optional(),

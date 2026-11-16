@@ -144,13 +144,13 @@ export function ResumoDaTurma({ aulas, tempos, onVerAulas }: { aulas: number; te
         <div
             className={
                 "flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm " +
-                (diferenca === 0 ? "border-border bg-muted/30" : "border-destructive/40 bg-destructive/5")
+                (diferenca >= 0 ? "border-border bg-muted/30" : "border-destructive/40 bg-destructive/5")
             }
         >
             <span>
                 <strong className="tabular-nums">{aulas}</strong> aulas por semana nas disciplinas ·{" "}
                 <strong className="tabular-nums">{tempos}</strong> horários marcados
-                {diferenca > 0 && <span className="text-destructive"> · {diferenca === 1 ? "falta 1 aula" : `faltam ${diferenca} aulas`} para preencher os horários</span>}
+                {diferenca > 0 && <span className="text-muted-foreground"> · {diferenca === 1 ? "1 horário fica vago" : `${diferenca} horários ficam vagos`}, de preferência no começo ou no fim do turno</span>}
                 {diferenca < 0 && <span className="text-destructive"> · {diferenca === -1 ? "sobra 1 aula, que não cabe" : `sobram ${-diferenca} aulas, que não cabem`} nos horários</span>}
                 {diferenca === 0 && tempos > 0 && <span className="text-muted-foreground"> · fecha</span>}
             </span>

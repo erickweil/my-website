@@ -2,9 +2,16 @@
 //! `horario-pencilmark.ts` (`HorarioSolverPencilmark`, removido; ver o histórico do git).
 //! Também são as regras usadas para validar o resultado dos dois solvers (`horario_resultado.rs`).
 //!
-//! Mantém o comportamento do TS: cada célula do quadro tem `n_possibs = disciplinas.len()`
-//! possibilidades (todas as disciplinas, de todas as turmas), e as de outra turma são descartadas
-//! em `pode_disciplina`.
+//! Mantém o comportamento do TS: cada célula do quadro tem `n_possibs = disciplinas.len() + 1`
+//! possibilidades (todas as disciplinas, de todas as turmas, e o horário vago), e as de outra turma
+//! são descartadas em `pode_disciplina`.
+//!
+//! Dois modos:
+//! - **Busca** ([`HorarioRegrasPencilmark::new`]): a busca exata não tem regras de qualidade, então
+//!   trata duas delas como obrigatórias: o horário que o professor pediu para evitar é
+//!   indisponível, e o horário vago só pode ficar nas pontas do turno (nunca entre duas aulas).
+//! - **Validação** ([`HorarioRegrasPencilmark::so_obrigatorias`]): só as regras obrigatórias. É o
+//!   que diz se um horário (de qualquer um dos dois métodos) é válido; o resto é qualidade.
 
 use std::sync::Arc;
 
@@ -20,30 +27,77 @@ pub const MOTIVO_AULAS_DEMAIS: &str = "A disciplina tem mais aulas no horário d
 pub const MOTIVO_PROFESSOR: &str = "Professor ou ambiente indisponível neste horário, ou ocupado em outra turma";
 pub const MOTIVO_BLOCO: &str = "As aulas da disciplina não formam blocos do tamanho definido";
 pub const MOTIVO_CONJUNTA: &str = "A aula em conjunto não está no mesmo horário nas turmas que participam";
+pub const MOTIVO_EVITAR: &str = "O professor pediu para evitar este horário";
+pub const MOTIVO_SEM_FOLGA: &str = "A turma tem mais horários vagos do que a folga entre aulas e horários marcados";
+pub const MOTIVO_JANELA: &str = "Horário vago entre duas aulas do mesmo turno";
 
 /// `Clone` é barato (as regras ficam atrás de um `Arc`): a busca exaustiva em paralelo dá uma cópia
 /// para cada tarefa.
 #[derive(Clone)]
 pub struct HorarioRegrasPencilmark {
     pub regras: Arc<RegrasHorario>,
+    /// true = modo de busca: evitar e horário vago no meio do turno também são proibidos.
+    pub estrito: bool,
+    /// Por professor: 1 = pode ter aula (no modo estrito, sem os horários a evitar).
+    disponivel: Arc<Vec<Horario>>,
 
     // Estado derivado do quadro, recalculado em `verificar_quadro`:
     /// Por professor: 1 = disponível, 0 = indisponível OU já ocupado em outra turma neste (dia, tempo)
     prof_matriz: Vec<Horario>,
     /// Por disciplina: quantas aulas já estão alocadas no quadro
     cont_aulas: Vec<i32>,
+    /// Por turma: quantos horários vagos já estão no quadro
+    cont_vagos: Vec<i32>,
 }
 
 impl HorarioRegrasPencilmark {
+    /// Regras da busca exata (modo estrito).
     pub fn new(regras: RegrasHorario) -> Self {
-        let prof_matriz = regras.professores.iter().map(|p| p.horarios.clone()).collect();
-        let cont_aulas = vec![0; regras.disciplinas.len()];
-        Self { regras: Arc::new(regras), prof_matriz, cont_aulas }
+        Self::com_modo(regras, true)
     }
 
-    /// Número de possibilidades por célula (o `nPossibs` do TS).
+    /// Só as regras obrigatórias: para validar um horário.
+    pub fn so_obrigatorias(regras: RegrasHorario) -> Self {
+        Self::com_modo(regras, false)
+    }
+
+    fn com_modo(regras: RegrasHorario, estrito: bool) -> Self {
+        let disponivel: Vec<Horario> = regras.professores.iter().map(|p| {
+            let mut h = p.horarios.clone();
+            if estrito && p.pessoa {
+                for (v, &e) in h.slots.iter_mut().zip(&p.evitar.slots) {
+                    if e != 0 { *v = 0; }
+                }
+            }
+            h
+        }).collect();
+        let cont_aulas = vec![0; regras.disciplinas.len()];
+        let cont_vagos = vec![0; regras.turmas.len()];
+        Self { prof_matriz: disponivel.clone(), disponivel: Arc::new(disponivel), regras: Arc::new(regras), estrito, cont_aulas, cont_vagos }
+    }
+
+    /// Número de possibilidades por célula (o `nPossibs` do TS): as disciplinas e o horário vago.
     pub fn n_possibs(&self) -> usize {
-        self.regras.disciplinas.len()
+        self.regras.disciplinas.len() + 1
+    }
+
+    /// No trecho (turno de um dia da turma) da célula `i`, andando a partir dela para um lado: há
+    /// uma aula depois de um horário vago? (`com_vago_antes = false`: há qualquer aula?) As
+    /// células ainda não resolvidas são puladas.
+    fn aula_alem(&self, quadro: &[i32], i: usize, para_frente: bool, com_vago_antes: bool) -> bool {
+        let (k, pos) = self.regras.trecho_de[i];
+        let celulas = &self.regras.trechos[k as usize].celulas;
+        let vago = self.regras.vago();
+        let mut viu_vago = !com_vago_antes;
+        let mut olhar = |c: usize| -> bool {
+            let v = quadro[c];
+            if v == vago { viu_vago = true; false } else { v > 0 && viu_vago }
+        };
+        if para_frente {
+            celulas[pos as usize + 1..].iter().any(|&c| olhar(c))
+        } else {
+            celulas[..pos as usize].iter().rev().any(|&c| olhar(c))
+        }
     }
 
     /// Quadro inicial: 0 onde pode ter aula, -1 onde não haverá aula.
@@ -69,6 +123,9 @@ impl HorarioRegrasPencilmark {
     /// `podeDisciplina` do TS, dizendo o porquê: `None` se a disciplina pode ser colocada nesta
     /// célula (que deve estar vazia no quadro), ou a regra que impede. O texto vai para o usuário.
     pub fn motivo_impedimento(&self, quadro: &[i32], id_disc: usize, id_turma: usize, dia: DiaSemana, tempo: usize) -> Option<&'static str> {
+        if id_disc == self.regras.disciplinas.len() {
+            return self.motivo_vago(quadro, id_turma, dia, tempo);
+        }
         let disc = &self.regras.disciplinas[id_disc];
 
         // A disciplina deve ser desta turma
@@ -84,7 +141,9 @@ impl HorarioRegrasPencilmark {
         // Os professores devem estar disponíveis (e livres) neste tempo
         for &prof_id in &disc.professores {
             if self.prof_matriz[prof_id].get(dia, tempo) == 0 {
-                return Some(MOTIVO_PROFESSOR);
+                let so_evitar = self.estrito && self.regras.professores[prof_id].horarios.get(dia, tempo) != 0
+                    && self.disponivel[prof_id].get(dia, tempo) == 0;
+                return Some(if so_evitar { MOTIVO_EVITAR } else { MOTIVO_PROFESSOR });
             }
         }
 
@@ -134,24 +193,55 @@ impl HorarioRegrasPencilmark {
             }
         }
 
-        // Checagem reversa: se uma disciplina já alocada em outra turma neste (dia, tempo) exige uma
-        // disciplina unida específica NESTA turma, só essa disciplina pode ser colocada aqui.
+        if let Some(m) = self.motivo_conjunta_reversa(quadro, id_disc, id_turma, dia, tempo) {
+            return Some(m);
+        }
+
+        // Modo estrito: a aula não pode ficar além de um horário vago que já tem aula do outro lado
+        if self.estrito {
+            let i = self.regras.to_quadro_index(id_turma, dia, tempo);
+            if self.aula_alem(quadro, i, false, true) || self.aula_alem(quadro, i, true, true) {
+                return Some(MOTIVO_JANELA);
+            }
+        }
+
+        None
+    }
+
+    /// Checagem reversa: se uma disciplina já alocada em outra turma neste (dia, tempo) exige uma
+    /// disciplina unida específica NESTA turma, só essa disciplina pode ser colocada aqui (nem o
+    /// horário vago).
+    fn motivo_conjunta_reversa(&self, quadro: &[i32], id_disc: usize, id_turma: usize, dia: DiaSemana, tempo: usize) -> Option<&'static str> {
         for outra in &self.regras.turmas {
             if outra.id == id_turma {
                 continue;
             }
             let v = self.valor(quadro, outra.id, dia, tempo as isize);
-            if v <= 0 {
-                continue;
-            }
-            let disc_outra = &self.regras.disciplinas[(v - 1) as usize];
-            for &unida_da_outra in &disc_outra.disciplinas_unidas {
+            let Some(d) = self.regras.disciplina_em(v) else { continue };
+            for &unida_da_outra in &self.regras.disciplinas[d].disciplinas_unidas {
                 if self.regras.disciplinas[unida_da_outra].turma_id == id_turma && unida_da_outra != id_disc {
                     return Some(MOTIVO_CONJUNTA);
                 }
             }
         }
+        None
+    }
 
+    /// Por que esta célula não pode ficar vaga (ou `None` se pode).
+    fn motivo_vago(&self, quadro: &[i32], id_turma: usize, dia: DiaSemana, tempo: usize) -> Option<&'static str> {
+        if self.cont_vagos[id_turma] >= self.regras.turmas[id_turma].folga {
+            return Some(MOTIVO_SEM_FOLGA);
+        }
+        if let Some(m) = self.motivo_conjunta_reversa(quadro, usize::MAX, id_turma, dia, tempo) {
+            return Some(m);
+        }
+        // Modo estrito: vago só nas pontas do turno, nunca entre duas aulas
+        if self.estrito {
+            let i = self.regras.to_quadro_index(id_turma, dia, tempo);
+            if self.aula_alem(quadro, i, false, false) && self.aula_alem(quadro, i, true, false) {
+                return Some(MOTIVO_JANELA);
+            }
+        }
         None
     }
 }
@@ -160,17 +250,24 @@ impl RegrasQuadro for HorarioRegrasPencilmark {
     /// `verificaQuadro` do TS.
     fn verificar_quadro(&mut self, quadro: &[i32]) -> bool {
         // Reinicia contagem de aulas e ocupação dos professores a partir do quadro atual
-        for (matriz, prof) in self.prof_matriz.iter_mut().zip(&self.regras.professores) {
-            matriz.slots.copy_from_slice(&prof.horarios.slots);
+        for (matriz, disp) in self.prof_matriz.iter_mut().zip(self.disponivel.iter()) {
+            matriz.slots.copy_from_slice(&disp.slots);
         }
         self.cont_aulas.fill(0);
+        self.cont_vagos.fill(0);
+        let vago = self.regras.vago();
 
         let n_tempos = self.regras.n_tempos;
         for turma in &self.regras.turmas {
             for tempo in 0..n_tempos {
                 for dia_idx in 0..QUANTOS_DIAS {
                     let dia = DiaSemana::from_index(dia_idx);
-                    let id_disc = quadro[self.regras.to_quadro_index(turma.id, dia, tempo)] - 1;
+                    let valor = quadro[self.regras.to_quadro_index(turma.id, dia, tempo)];
+                    if valor == vago {
+                        self.cont_vagos[turma.id] += 1;
+                        continue;
+                    }
+                    let id_disc = valor - 1;
                     if id_disc < 0 {
                         continue; // sem aula nesse espaço
                     }
@@ -249,7 +346,7 @@ impl RegrasQuadro for HorarioRegrasPencilmark {
             return false;
         }
 
-        for id_disc in 0..self.regras.disciplinas.len() {
+        for id_disc in 0..self.n_possibs() {
             if possibs.ler(id_disc) && !self.pode_disciplina(quadro, id_disc, id_turma, dia, tempo) {
                 possibs.desmarcar(id_disc);
             }
@@ -312,8 +409,8 @@ mod tests {
         assert!(s.regras.verificar_quadro(&melhor), "o melhor parcial deveria ser consistente");
         // Nenhuma disciplina com mais aulas que o permitido
         let mut cont = vec![0; s.regras.regras.disciplinas.len()];
-        for &v in melhor.iter().filter(|&&v| v > 0) {
-            cont[(v - 1) as usize] += 1;
+        for d in melhor.iter().filter_map(|&v| s.regras.regras.disciplina_em(v)) {
+            cont[d] += 1;
         }
         for (d, c) in s.regras.regras.disciplinas.iter().zip(cont) {
             assert!(c <= d.aulas, "{} com {c} aulas (máx {})", d.nome, d.aulas);

@@ -42,9 +42,9 @@ test("projeto que fecha não tem pendências; o quadro real também não tem err
 });
 
 test("turma: aulas que não fecham com os horários", () => {
-    const { p, a, fisica } = projetoQueFecha();
+    const { p, fisica } = projetoQueFecha();
     const menos = { ...p, ofertas: p.ofertas.map((o) => (o.id === fisica ? { ...o, aulasSemana: 2 } : o)) };
-    assert.deepEqual(diagnosticar(menos, cadastros()), [{ gravidade: "erro", tela: "aulas", turmaId: a, mensagem: "A turma A tem 8 horários marcados e só 6 aulas: faltam 2." }]);
+    assert.deepEqual(diagnosticar(menos, cadastros()), [], "menos aulas que horários: os que sobram ficam vagos");
     const mais = { ...p, ofertas: p.ofertas.map((o) => (o.id === fisica ? { ...o, aulasSemana: 5 } : o)) };
     assert.ok(mensagens(mais).includes("erro: A turma A tem 9 aulas para 8 horários: sobra 1."));
     const semHorario = { ...p, turmas: p.turmas.map((t) => ({ ...t, horarios: {} })) };
@@ -115,6 +115,9 @@ test("horário gerado: as ocorrências de qualidade viram frases, e quem está e
             { regra: "intervalo", turmaId: a, ofertaId: calculo, dia: "ter", minutos: 0 },
             { regra: "intervalo", turmaId: a, ofertaId: calculo, dia: "ter", minutos: 0 },
             { regra: "turno", turmaId: a, ofertaId: fisica, dia: "seg", minutos: 0 },
+            { regra: "janela", turmaId: a, dia: "ter", minutos: 0 },
+            { regra: "janela", turmaId: a, dia: "ter", minutos: 0 },
+            { regra: "janela", turmaId: a, dia: "seg", minutos: 0 },
         ],
     };
     assert.deepEqual(observarHorario(p, cadastros(), horario), [
@@ -124,6 +127,8 @@ test("horário gerado: as ocorrências de qualidade viram frases, e quem está e
         "Ana: 8h25 de descanso entre a última aula de segunda e a primeira de terça (o mínimo é 11h).",
         "Cálculo (A), terça: uma aula fica sozinha de um lado do intervalo.",
         "Física (A), segunda: uma aula fica sozinha de um lado da troca de turno.",
+        "Turma A, terça: 2 horários vagos entre aulas do mesmo turno.",
+        "Turma A, segunda: 1 horário vago entre aulas do mesmo turno.",
     ]);
     assert.deepEqual(observarHorario(p, cadastros(), { ...horario, qualidade: [] }), []);
 
