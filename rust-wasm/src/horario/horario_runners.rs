@@ -221,10 +221,10 @@ impl HorarioGARunner {
         self.ga.run(geracoes as usize);
         let info = self.ga.get_info();
 
-        if info.best_fitness != self.melhor_fitness
-            && let Some(genes) = info.best_genes
+        if let Some(genes) = info.best_genes
+            && self.melhor.as_ref().is_none_or(|(q, _)| *q != genes)
         {
-            // Melhorou: valida o novo melhor quadro (com as regras do Pencilmark)
+            // O melhor quadro mudou (melhor fitness, ou outro com o mesmo fitness): valida o novo melhor quadro (com as regras do Pencilmark)
             self.melhor_fitness = info.best_fitness;
             let v = validar(&mut self.validador, &genes);
             self.valido = !v.alguma();

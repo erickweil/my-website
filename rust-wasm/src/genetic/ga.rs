@@ -325,9 +325,11 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
                 (0, 1, true)
             };
 
-            // 2. Melhor global (a cada trecho: não interfere na evolução)
+            // 2. Melhor global (a cada trecho: não interfere na evolução). Empate também troca
+            // (`>=`, aqui e na escolha do elite): a busca anda pelos platôs, e quem acompanha o
+            // progresso vê que o melhor mudou. A estagnação continua contando só melhora de verdade.
             let current_best_fitness = self.population[best_idx].fitness.unwrap_or(f64::MIN);
-            if self.best_fitness.is_none_or(|bf| current_best_fitness > bf) {
+            if self.best_fitness.is_none_or(|bf| current_best_fitness >= bf) {
                 if let Some(bg) = &mut self.best_genes {
                     // clone_from previne realocação
                     bg.clone_from(&self.population[best_idx].genes);
@@ -558,7 +560,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         let mut best_fitness = f64::MIN;
         for (i, ind) in self.population.iter().enumerate() {
             let fit = ind.fitness.unwrap_or(f64::MIN);
-            if fit > best_fitness {
+            if fit >= best_fitness {
                 best_fitness = fit;
                 best_idx = i;
             }
@@ -604,7 +606,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         let mut best_fitness = f64::MIN;
         for (i, ind) in self.population.iter().enumerate() {
             let fit = ind.fitness.unwrap_or(f64::MIN);
-            if fit > best_fitness {
+            if fit >= best_fitness {
                 best_fitness = fit;
                 best_idx = i;
             }
@@ -701,7 +703,7 @@ fn evoluir_ilha<'a, P: GAProblem>(
         let mut melhor_fitness = f64::MIN;
         for (i, ind) in pop.iter_mut().enumerate() {
             let fit = *ind.fitness.get_or_insert_with(|| problem.fitness(estado, &ind.genes));
-            if fit > melhor_fitness {
+            if fit >= melhor_fitness {
                 melhor_fitness = fit;
                 melhor = i;
             }
