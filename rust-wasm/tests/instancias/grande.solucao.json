@@ -1,0 +1,927 @@
+{
+  "1º A": {
+    "seg": [
+      "História 1º A",
+      "Matemática 1º A",
+      "Redação 1º A",
+      "Redação 1º A",
+      "Ciências 1º A"
+    ],
+    "ter": [
+      "Português 1º A",
+      "Matemática 1º A",
+      "Ciências 1º A",
+      "Português 1º A",
+      "Geografia 1º A"
+    ],
+    "qua": [
+      "Inglês 1º A",
+      "Matemática 1º A",
+      "História 1º A",
+      "Matemática 1º A",
+      "Inglês 1º A"
+    ],
+    "qui": [
+      "Português 1º A",
+      "Geografia 1º A",
+      "Ciências 1º A",
+      "Português 1º A",
+      "Português 1º A"
+    ],
+    "sex": [
+      "Ed. Física unida",
+      "Ed. Física unida",
+      "Artes 1º A",
+      "Artes 1º A",
+      "Matemática 1º A"
+    ]
+  },
+  "1º B": {
+    "seg": [
+      "Redação 1º B",
+      "Redação 1º B",
+      "Português 1º B",
+      "Inglês 1º B",
+      "Matemática 1º B"
+    ],
+    "ter": [
+      "Artes 1º B",
+      "Artes 1º B",
+      "História 1º B",
+      "Matemática 1º B",
+      "Matemática 1º B"
+    ],
+    "qua": [
+      "Português 1º B",
+      "História 1º B",
+      "Matemática 1º B",
+      "Ciências 1º B",
+      "Ciências 1º B"
+    ],
+    "qui": [
+      "Ciências 1º B",
+      "Inglês 1º B",
+      "Geografia 1º B",
+      "Matemática 1º B",
+      "Português 1º B"
+    ],
+    "sex": [
+      "Ed. Física unida",
+      "Ed. Física unida",
+      "Português 1º B",
+      "Português 1º B",
+      "Geografia 1º B"
+    ]
+  },
+  "1º C": {
+    "seg": [
+      "Artes 1º C",
+      "Artes 1º C",
+      "Português 1º C",
+      "Ciências 1º C",
+      "Português 1º C"
+    ],
+    "ter": [
+      "Português 1º C",
+      "História 1º C",
+      "Redação 1º C",
+      "Redação 1º C",
+      "Matemática 1º C"
+    ],
+    "qua": [
+      "Português 1º C",
+      "Inglês 1º C",
+      "Geografia 1º C",
+      "Matemática 1º C",
+      "Matemática 1º C"
+    ],
+    "qui": [
+      "Matemática 1º C",
+      "Geografia 1º C",
+      "Ed. Física 1º C",
+      "Ed. Física 1º C",
+      "História 1º C"
+    ],
+    "sex": [
+      "Ciências 1º C",
+      "Matemática 1º C",
+      "Português 1º C",
+      "Ciências 1º C",
+      "Inglês 1º C"
+    ]
+  },
+  "1º D": {
+    "seg": [
+      "Geografia 1º D",
+      "Matemática 1º D",
+      "Artes 1º D",
+      "Artes 1º D",
+      "Português 1º D"
+    ],
+    "ter": [
+      "Redação 1º D",
+      "Redação 1º D",
+      "Matemática 1º D",
+      "Português 1º D",
+      "Geografia 1º D"
+    ],
+    "qua": [
+      "História 1º D",
+      "Português 1º D",
+      "Português 1º D",
+      "Português 1º D",
+      "Ciências 1º D"
+    ],
+    "qui": [
+      "História 1º D",
+      "Ciências 1º D",
+      "Inglês 1º D",
+      "Matemática 1º D",
+      "Matemática 1º D"
+    ],
+    "sex": [
+      "Ed. Física 1º D",
+      "Ed. Física 1º D",
+      "Matemática 1º D",
+      "Inglês 1º D",
+      "Ciências 1º D"
+    ]
+  },
+  "2º A": {
+    "seg": [
+      "Redação 2º A",
+      "Redação 2º A",
+      "Português 2º A",
+      "Ciências 2º A",
+      "Geografia 2º A"
+    ],
+    "ter": [
+      "Matemática 2º A",
+      "Português 2º A",
+      "História 2º A",
+      "Matemática 2º A",
+      "História 2º A"
+    ],
+    "qua": [
+      "Ed. Física 2º A",
+      "Ed. Física 2º A",
+      "Matemática 2º A",
+      "Geografia 2º A",
+      "Português 2º A"
+    ],
+    "qui": [
+      "Inglês 2º A",
+      "Inglês 2º A",
+      "Matemática 2º A",
+      "Matemática 2º A",
+      "Português 2º A"
+    ],
+    "sex": [
+      "Ciências 2º A",
+      "Português 2º A",
+      "Artes 2º A",
+      "Artes 2º A",
+      "Ciências 2º A"
+    ]
+  },
+  "2º B": {
+    "seg": [
+      "Redação 2º B",
+      "Redação 2º B",
+      "Matemática 2º B",
+      "Ciências 2º B",
+      "História 2º B"
+    ],
+    "ter": [
+      "Ciências 2º B",
+      "Português 2º B",
+      "Ed. Física 2º B",
+      "Ed. Física 2º B",
+      "Inglês 2º B"
+    ],
+    "qua": [
+      "Artes 2º B",
+      "Artes 2º B",
+      "Português 2º B",
+      "Ciências 2º B",
+      "Matemática 2º B"
+    ],
+    "qui": [
+      "Matemática 2º B",
+      "Matemática 2º B",
+      "Geografia 2º B",
+      "Português 2º B",
+      "Geografia 2º B"
+    ],
+    "sex": [
+      "Português 2º B",
+      "Português 2º B",
+      "Matemática 2º B",
+      "História 2º B",
+      "Inglês 2º B"
+    ]
+  },
+  "2º C": {
+    "seg": [
+      "Matemática 2º C",
+      "Português 2º C",
+      "Ed. Física 2º C",
+      "Ed. Física 2º C",
+      "Português 2º C"
+    ],
+    "ter": [
+      "Matemática 2º C",
+      "Português 2º C",
+      "Português 2º C",
+      "Geografia 2º C",
+      "Português 2º C"
+    ],
+    "qua": [
+      "História 2º C",
+      "Matemática 2º C",
+      "Ciências 2º C",
+      "Matemática 2º C",
+      "Matemática 2º C"
+    ],
+    "qui": [
+      "Redação 2º C",
+      "Redação 2º C",
+      "Inglês 2º C",
+      "Ciências 2º C",
+      "Inglês 2º C"
+    ],
+    "sex": [
+      "Geografia 2º C",
+      "Ciências 2º C",
+      "Artes 2º C",
+      "Artes 2º C",
+      "História 2º C"
+    ]
+  },
+  "2º D": {
+    "seg": [
+      "Ciências 2º D",
+      "Ciências 2º D",
+      "Português 2º D",
+      "História 2º D",
+      "Português 2º D"
+    ],
+    "ter": [
+      "Artes 2º D",
+      "Artes 2º D",
+      "História 2º D",
+      "Matemática 2º D",
+      "Português 2º D"
+    ],
+    "qua": [
+      "Geografia 2º D",
+      "Matemática 2º D",
+      "Redação 2º D",
+      "Redação 2º D",
+      "Português 2º D"
+    ],
+    "qui": [
+      "Matemática 2º D",
+      "Ciências 2º D",
+      "Inglês 2º D",
+      "Português 2º D",
+      "Geografia 2º D"
+    ],
+    "sex": [
+      "Matemática 2º D",
+      "Matemática 2º D",
+      "Ed. Física 2º D",
+      "Ed. Física 2º D",
+      "Inglês 2º D"
+    ]
+  },
+  "3º A": {
+    "seg": [
+      "Ciências 3º A",
+      "Português 3º A",
+      "História 3º A",
+      "Português 3º A",
+      "Português 3º A"
+    ],
+    "ter": [
+      "Redação 3º A",
+      "Redação 3º A",
+      "Artes 3º A",
+      "Artes 3º A",
+      "Inglês 3º A"
+    ],
+    "qua": [
+      "Português 3º A",
+      "Inglês 3º A",
+      "Matemática 3º A",
+      "Matemática 3º A",
+      "Matemática 3º A"
+    ],
+    "qui": [
+      "Geografia 3º A",
+      "Ciências 3º A",
+      "Matemática 3º A",
+      "Português 3º A",
+      "Matemática 3º A"
+    ],
+    "sex": [
+      "Ed. Física 3º A",
+      "Ed. Física 3º A",
+      "Ciências 3º A",
+      "História 3º A",
+      "Geografia 3º A"
+    ]
+  },
+  "3º B": {
+    "seg": [
+      "Inglês 3º B",
+      "Matemática 3º B",
+      "Português 3º B",
+      "Matemática 3º B",
+      "Geografia 3º B"
+    ],
+    "ter": [
+      "Português 3º B",
+      "Inglês 3º B",
+      "História 3º B",
+      "Ciências 3º B",
+      "Português 3º B"
+    ],
+    "qua": [
+      "Matemática 3º B",
+      "Português 3º B",
+      "Redação 3º B",
+      "Redação 3º B",
+      "Português 3º B"
+    ],
+    "qui": [
+      "História 3º B",
+      "Matemática 3º B",
+      "Artes 3º B",
+      "Artes 3º B",
+      "Geografia 3º B"
+    ],
+    "sex": [
+      "Ed. Física 3º B",
+      "Ed. Física 3º B",
+      "Ciências 3º B",
+      "Matemática 3º B",
+      "Ciências 3º B"
+    ]
+  },
+  "3º C": {
+    "seg": [
+      "Ed. Física 3º C",
+      "Ed. Física 3º C",
+      "História 3º C",
+      "Matemática 3º C",
+      "Matemática 3º C"
+    ],
+    "ter": [
+      "Português 3º C",
+      "Inglês 3º C",
+      "Ciências 3º C",
+      "Geografia 3º C",
+      "Inglês 3º C"
+    ],
+    "qua": [
+      "Português 3º C",
+      "Matemática 3º C",
+      "Matemática 3º C",
+      "História 3º C",
+      "Português 3º C"
+    ],
+    "qui": [
+      "Redação 3º C",
+      "Redação 3º C",
+      "Matemática 3º C",
+      "Ciências 3º C",
+      "Português 3º C"
+    ],
+    "sex": [
+      "Ciências 3º C",
+      "Geografia 3º C",
+      "Artes 3º C",
+      "Artes 3º C",
+      "Português 3º C"
+    ]
+  },
+  "3º D": {
+    "seg": [
+      "História 3º D",
+      "Matemática 3º D",
+      "Redação 3º D",
+      "Redação 3º D",
+      "Ciências 3º D"
+    ],
+    "ter": [
+      "Inglês 3º D",
+      "Ciências 3º D",
+      "Ciências 3º D",
+      "Português 3º D",
+      "História 3º D"
+    ],
+    "qua": [
+      "Matemática 3º D",
+      "Matemática 3º D",
+      "Ed. Física 3º D",
+      "Ed. Física 3º D",
+      "Matemática 3º D"
+    ],
+    "qui": [
+      "Inglês 3º D",
+      "Português 3º D",
+      "Artes 3º D",
+      "Artes 3º D",
+      "Português 3º D"
+    ],
+    "sex": [
+      "Geografia 3º D",
+      "Português 3º D",
+      "Matemática 3º D",
+      "Geografia 3º D",
+      "Português 3º D"
+    ]
+  },
+  "4º A": {
+    "seg": [
+      "Matemática 4º A",
+      "História 4º A",
+      "História 4º A",
+      "Geografia 4º A",
+      "Matemática 4º A"
+    ],
+    "ter": [
+      "Geografia 4º A",
+      "Português 4º A",
+      "Português 4º A",
+      "Inglês 4º A",
+      "Matemática 4º A"
+    ],
+    "qua": [
+      "Ed. Física 4º A",
+      "Ed. Física 4º A",
+      "Ciências 4º A",
+      "Matemática 4º A",
+      "Português 4º A"
+    ],
+    "qui": [
+      "Ciências 4º A",
+      "Inglês 4º A",
+      "Artes 4º A",
+      "Artes 4º A",
+      "Matemática 4º A"
+    ],
+    "sex": [
+      "Redação 4º A",
+      "Redação 4º A",
+      "Ciências 4º A",
+      "Português 4º A",
+      "Português 4º A"
+    ]
+  },
+  "4º B": {
+    "seg": [
+      "Português 4º B",
+      "Geografia 4º B",
+      "Redação 4º B",
+      "Redação 4º B",
+      "Português 4º B"
+    ],
+    "ter": [
+      "Português 4º B",
+      "Inglês 4º B",
+      "Matemática 4º B",
+      "Matemática 4º B",
+      "História 4º B"
+    ],
+    "qua": [
+      "Ed. Física 4º B",
+      "Ed. Física 4º B",
+      "Ciências 4º B",
+      "Matemática 4º B",
+      "Matemática 4º B"
+    ],
+    "qui": [
+      "Português 4º B",
+      "Inglês 4º B",
+      "Artes 4º B",
+      "Artes 4º B",
+      "Geografia 4º B"
+    ],
+    "sex": [
+      "Português 4º B",
+      "Ciências 4º B",
+      "Ciências 4º B",
+      "Matemática 4º B",
+      "História 4º B"
+    ]
+  },
+  "4º C": {
+    "seg": [
+      "Português 4º C",
+      "Geografia 4º C",
+      "Ciências 4º C",
+      "Português 4º C",
+      "Ciências 4º C"
+    ],
+    "ter": [
+      "Ed. Física 4º C",
+      "Ed. Física 4º C",
+      "Redação 4º C",
+      "Redação 4º C",
+      "Matemática 4º C"
+    ],
+    "qua": [
+      "Inglês 4º C",
+      "Matemática 4º C",
+      "Matemática 4º C",
+      "Matemática 4º C",
+      "Português 4º C"
+    ],
+    "qui": [
+      "Matemática 4º C",
+      "Inglês 4º C",
+      "Português 4º C",
+      "Português 4º C",
+      "História 4º C"
+    ],
+    "sex": [
+      "Geografia 4º C",
+      "Ciências 4º C",
+      "Artes 4º C",
+      "Artes 4º C",
+      "História 4º C"
+    ]
+  },
+  "4º D": {
+    "seg": [
+      "Ed. Física 4º D",
+      "Ed. Física 4º D",
+      "Matemática 4º D",
+      "Português 4º D",
+      "Português 4º D"
+    ],
+    "ter": [
+      "Artes 4º D",
+      "Artes 4º D",
+      "Matemática 4º D",
+      "Ciências 4º D",
+      "Português 4º D"
+    ],
+    "qua": [
+      "Ciências 4º D",
+      "Português 4º D",
+      "História 4º D",
+      "Inglês 4º D",
+      "Ciências 4º D"
+    ],
+    "qui": [
+      "Português 4º D",
+      "História 4º D",
+      "Inglês 4º D",
+      "Matemática 4º D",
+      "Geografia 4º D"
+    ],
+    "sex": [
+      "Redação 4º D",
+      "Redação 4º D",
+      "Geografia 4º D",
+      "Matemática 4º D",
+      "Matemática 4º D"
+    ]
+  },
+  "5º A": {
+    "seg": [
+      "Português 5º A",
+      "Inglês 5º A",
+      "Matemática 5º A",
+      "Ciências 5º A",
+      "Ciências 5º A"
+    ],
+    "ter": [
+      "Redação 5º A",
+      "Redação 5º A",
+      "Artes 5º A",
+      "Artes 5º A",
+      "Inglês 5º A"
+    ],
+    "qua": [
+      "Matemática 5º A",
+      "Geografia 5º A",
+      "Português 5º A",
+      "História 5º A",
+      "Matemática 5º A"
+    ],
+    "qui": [
+      "Geografia 5º A",
+      "Matemática 5º A",
+      "Ciências 5º A",
+      "Matemática 5º A",
+      "História 5º A"
+    ],
+    "sex": [
+      "Ed. Física 5º A",
+      "Ed. Física 5º A",
+      "Português 5º A",
+      "Português 5º A",
+      "Português 5º A"
+    ]
+  },
+  "5º B": {
+    "seg": [
+      "Redação 5º B",
+      "Redação 5º B",
+      "Matemática 5º B",
+      "Português 5º B",
+      "Geografia 5º B"
+    ],
+    "ter": [
+      "Artes 5º B",
+      "Artes 5º B",
+      "Ed. Física 5º B",
+      "Ed. Física 5º B",
+      "Matemática 5º B"
+    ],
+    "qua": [
+      "Geografia 5º B",
+      "História 5º B",
+      "Português 5º B",
+      "Matemática 5º B",
+      "Português 5º B"
+    ],
+    "qui": [
+      "Português 5º B",
+      "Ciências 5º B",
+      "Ciências 5º B",
+      "Matemática 5º B",
+      "Inglês 5º B"
+    ],
+    "sex": [
+      "Ciências 5º B",
+      "Matemática 5º B",
+      "História 5º B",
+      "Português 5º B",
+      "Inglês 5º B"
+    ]
+  },
+  "5º C": {
+    "seg": [
+      "Ciências 5º C",
+      "Matemática 5º C",
+      "Matemática 5º C",
+      "Português 5º C",
+      "Geografia 5º C"
+    ],
+    "ter": [
+      "Redação 5º C",
+      "Redação 5º C",
+      "Português 5º C",
+      "Português 5º C",
+      "Português 5º C"
+    ],
+    "qua": [
+      "Ed. Física 5º C",
+      "Ed. Física 5º C",
+      "Matemática 5º C",
+      "Geografia 5º C",
+      "Matemática 5º C"
+    ],
+    "qui": [
+      "Inglês 5º C",
+      "Ciências 5º C",
+      "História 5º C",
+      "Português 5º C",
+      "História 5º C"
+    ],
+    "sex": [
+      "Ciências 5º C",
+      "Matemática 5º C",
+      "Artes 5º C",
+      "Artes 5º C",
+      "Inglês 5º C"
+    ]
+  },
+  "5º D": {
+    "seg": [
+      "Matemática 5º D",
+      "Português 5º D",
+      "Matemática 5º D",
+      "Matemática 5º D",
+      "Ciências 5º D"
+    ],
+    "ter": [
+      "Português 5º D",
+      "Geografia 5º D",
+      "Artes 5º D",
+      "Artes 5º D",
+      "Português 5º D"
+    ],
+    "qua": [
+      "Inglês 5º D",
+      "História 5º D",
+      "Ciências 5º D",
+      "Geografia 5º D",
+      "Matemática 5º D"
+    ],
+    "qui": [
+      "Inglês 5º D",
+      "História 5º D",
+      "Redação 5º D",
+      "Redação 5º D",
+      "Português 5º D"
+    ],
+    "sex": [
+      "Ciências 5º D",
+      "Matemática 5º D",
+      "Ed. Física 5º D",
+      "Ed. Física 5º D",
+      "Português 5º D"
+    ]
+  },
+  "6º A": {
+    "seg": [
+      "Ciências 6º A",
+      "História 6º A",
+      "Ed. Física 6º A",
+      "Ed. Física 6º A",
+      "Matemática 6º A"
+    ],
+    "ter": [
+      "Português 6º A",
+      "Ciências 6º A",
+      "Matemática 6º A",
+      "Inglês 6º A",
+      "Geografia 6º A"
+    ],
+    "qua": [
+      "História 6º A",
+      "Inglês 6º A",
+      "Artes 6º A",
+      "Artes 6º A",
+      "Matemática 6º A"
+    ],
+    "qui": [
+      "Português 6º A",
+      "Geografia 6º A",
+      "Redação 6º A",
+      "Redação 6º A",
+      "Português 6º A"
+    ],
+    "sex": [
+      "Matemática 6º A",
+      "Português 6º A",
+      "Português 6º A",
+      "Ciências 6º A",
+      "Matemática 6º A"
+    ]
+  },
+  "6º B": {
+    "seg": [
+      "Redação 6º B",
+      "Redação 6º B",
+      "Artes 6º B",
+      "Artes 6º B",
+      "Inglês 6º B"
+    ],
+    "ter": [
+      "Matemática 6º B",
+      "Matemática 6º B",
+      "Matemática 6º B",
+      "Ciências 6º B",
+      "História 6º B"
+    ],
+    "qua": [
+      "Matemática 6º B",
+      "Geografia 6º B",
+      "Português 6º B",
+      "Ciências 6º B",
+      "Geografia 6º B"
+    ],
+    "qui": [
+      "Português 6º B",
+      "Português 6º B",
+      "Ciências 6º B",
+      "Português 6º B",
+      "Inglês 6º B"
+    ],
+    "sex": [
+      "Matemática 6º B",
+      "Português 6º B",
+      "Ed. Física 6º B",
+      "Ed. Física 6º B",
+      "História 6º B"
+    ]
+  },
+  "6º C": {
+    "seg": [
+      "Ed. Física 6º C",
+      "Ed. Física 6º C",
+      "Redação 6º C",
+      "Redação 6º C",
+      "Português 6º C"
+    ],
+    "ter": [
+      "Geografia 6º C",
+      "Português 6º C",
+      "Ciências 6º C",
+      "Matemática 6º C",
+      "Português 6º C"
+    ],
+    "qua": [
+      "Artes 6º C",
+      "Artes 6º C",
+      "Inglês 6º C",
+      "Geografia 6º C",
+      "Matemática 6º C"
+    ],
+    "qui": [
+      "Matemática 6º C",
+      "Inglês 6º C",
+      "Português 6º C",
+      "Português 6º C",
+      "Ciências 6º C"
+    ],
+    "sex": [
+      "Matemática 6º C",
+      "Ciências 6º C",
+      "Matemática 6º C",
+      "História 6º C",
+      "História 6º C"
+    ]
+  },
+  "6º D": {
+    "seg": [
+      "Português 6º D",
+      "História 6º D",
+      "Matemática 6º D",
+      "História 6º D",
+      "Inglês 6º D"
+    ],
+    "ter": [
+      "Ciências 6º D",
+      "Ciências 6º D",
+      "Redação 6º D",
+      "Redação 6º D",
+      "Geografia 6º D"
+    ],
+    "qua": [
+      "Ciências 6º D",
+      "Português 6º D",
+      "Artes 6º D",
+      "Artes 6º D",
+      "Português 6º D"
+    ],
+    "qui": [
+      "Matemática 6º D",
+      "Geografia 6º D",
+      "Ed. Física 6º D",
+      "Ed. Física 6º D",
+      "Matemática 6º D"
+    ],
+    "sex": [
+      "Inglês 6º D",
+      "Matemática 6º D",
+      "Português 6º D",
+      "Português 6º D",
+      "Matemática 6º D"
+    ]
+  },
+  "7º A": {
+    "seg": [
+      "Matemática 7º A",
+      "Matemática 7º A",
+      "Inglês 7º A",
+      "Português 7º A",
+      "Ciências 7º A"
+    ],
+    "ter": [
+      "Artes 7º A",
+      "Artes 7º A",
+      "Geografia 7º A",
+      "Ciências 7º A",
+      "Geografia 7º A"
+    ],
+    "qua": [
+      "História 7º A",
+      "Português 7º A",
+      "Matemática 7º A",
+      "Português 7º A",
+      "Matemática 7º A"
+    ],
+    "qui": [
+      "Matemática 7º A",
+      "Português 7º A",
+      "Redação 7º A",
+      "Redação 7º A",
+      "História 7º A"
+    ],
+    "sex": [
+      "Ed. Física 7º A",
+      "Ed. Física 7º A",
+      "Inglês 7º A",
+      "Português 7º A",
+      "Ciências 7º A"
+    ]
+  }
+}

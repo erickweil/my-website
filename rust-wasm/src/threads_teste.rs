@@ -1,0 +1,289 @@
+//! Teste simples de threads (rayon) no WASM, usado por `/toy/threads-teste`.
+//!
+//! Roda `n_tarefas` tarefas pesadas e independentes, em sequência ou com rayon, e registra em qual
+//! thread do pool cada uma rodou. Cada tarefa escreve no console a thread em que rodou. Se o pool
+//! funcionar, aparecem várias threads diferentes e o modo paralelo leva menos tempo.
+
+use rayon::prelude::*;
+use serde::Serialize;
+use wasm_bindgen::prelude::*;
+
+/// Trabalho de CPU puro e determinístico (xorshift64), para medir o ganho sem depender de memória.
+pub fn trabalho_pesado(semente: u64, passos: u32) -> u64 {
+    let mut x = semente.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut acc = 0u64;
+    for _ in 0..passos {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        acc = acc.wrapping_add(x);
+    }
+    acc
+}
+
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub struct ResultadoTeste {
+    /// Threads no pool global do rayon (o número passado ao `initThreadPool`).
+    pub threads_no_pool: usize,
+    /// Quantas threads diferentes executaram ao menos uma tarefa.
+    pub threads_usadas: usize,
+    /// Índice da thread do rayon em que cada tarefa rodou (`null` = fora do pool, ou seja, sequencial).
+    pub thread_por_tarefa: Vec<Option<usize>>,
+    /// Soma dos resultados (como string: u64 não cabe num Number). Igual nos dois modos.
+    pub checksum: String,
+}
+
+pub fn executar(n_tarefas: u32, passos: u32, paralelo: bool) -> ResultadoTeste {
+    let tarefa = |i: u32| {
+        let thread = rayon::current_thread_index();
+        let r = trabalho_pesado(i as u64 + 1, passos);
+        crate::console_log!(
+            "[threads-teste] tarefa {i:>2} rodou na thread {}",
+            thread.map_or("principal (fora do pool)".to_string(), |t| t.to_string())
+        );
+        (r, thread)
+    };
+
+    let resultados: Vec<(u64, Option<usize>)> = if paralelo {
+        (0..n_tarefas).into_par_iter().map(tarefa).collect()
+    } else {
+        (0..n_tarefas).map(tarefa).collect()
+    };
+
+    let mut usadas: Vec<usize> = resultados.iter().filter_map(|&(_, t)| t).collect();
+    usadas.sort_unstable();
+    usadas.dedup();
+
+    ResultadoTeste {
+        threads_no_pool: rayon::current_num_threads(),
+        threads_usadas: usadas.len(),
+        thread_por_tarefa: resultados.iter().map(|&(_, t)| t).collect(),
+        checksum: resultados.iter().fold(0u64, |acc, &(r, _)| acc.wrapping_add(r)).to_string(),
+    }
+}
+
+/// Exposto ao JS. `paralelo = false` roda tudo na thread que chamou (para comparar o tempo).
+#[wasm_bindgen]
+pub fn teste_threads(n_tarefas: u32, passos: u32, paralelo: bool) -> Result<JsValue, JsError> {
+    serde_wasm_bindgen::to_value(&executar(n_tarefas, passos, paralelo)).map_err(|e| JsError::new(&e.to_string()))
+}
+
+// ── Benchmark do motor genético: sequencial × paralelo ───────────────────────────────────────
+
+#[derive(Serialize, Debug)]
+pub struct ResultadoGA {
+    pub problema: String,
+    pub populacao: usize,
+    pub geracoes_por_s_sequencial: f64,
+    pub geracoes_por_s_paralelo: f64,
+    pub ganho: f64,
+    /// A mesma semente deu o mesmo melhor fitness nos dois modos? (tem que ser sempre true)
+    pub resultado_identico: bool,
+    /// O que o modo automático escolheu para este problema.
+    pub automatico_escolheu_paralelo: bool,
+    /// Modelo de ilhas em paralelo, em gerações equivalentes (gerações x ilhas): mesmo número de
+    /// indivíduos avaliados que uma geração do modelo clássico.
+    pub ilhas: usize,
+    pub geracoes_por_s_ilhas: f64,
+    pub ganho_ilhas: f64,
+}
+
+fn medir_ga<P: crate::genetic::problems::GAProblem>(
+    nome: &str,
+    criar: impl Fn() -> P,
+    pop: usize,
+    genes: usize,
+    segundos: f64,
+) -> ResultadoGA {
+    use crate::genetic::ga::{GAConfig, GeneticAlgorithm};
+    use web_time::Instant;
+
+    const ILHAS: usize = 8;
+    let config = |threads| GAConfig {
+        population_size: pop,
+        crossover_rate: 0.9,
+        mutation_rate: 0.9,
+        mutation_gene_rate: 1.0 / genes as f64,
+        tournament_size: 10,
+        max_stagnation: None,
+        diversity_check: false,
+        threads,
+        ..GAConfig::new()
+    };
+    let novo_com = |cfg: GAConfig| {
+        fastrand::seed(1);
+        GeneticAlgorithm::new(criar(), cfg)
+    };
+    let novo = |threads| novo_com(config(threads));
+
+    // Vazão: 1 = sequencial, 2 = sempre paralelo
+    let vazao_de = |mut ga: GeneticAlgorithm<P>| {
+        ga.run(10); // aquecimento
+        let (g0, inicio) = (ga.get_info().generation, Instant::now());
+        while inicio.elapsed().as_secs_f64() < segundos {
+            ga.run(10);
+        }
+        (ga.get_info().generation - g0) as f64 / inicio.elapsed().as_secs_f64()
+    };
+    let (seq, par) = (vazao_de(novo(1)), vazao_de(novo(2)));
+    // Ilhas: uma sincronização por época em vez de uma por geração
+    let ilhas = vazao_de(novo_com(GAConfig { ilhas: ILHAS, ..config(0) })) * ILHAS as f64;
+
+    // Mesma semente, mesmo número de gerações: o melhor fitness tem que ser igual
+    let melhor = |threads| {
+        let mut ga = novo(threads);
+        ga.run(60);
+        ga.get_info().best_fitness
+    };
+    let resultado_identico = melhor(1) == melhor(2);
+
+    let mut auto = novo(0);
+    auto.run(60);
+
+    ResultadoGA {
+        problema: nome.to_string(),
+        populacao: pop,
+        geracoes_por_s_sequencial: seq,
+        geracoes_por_s_paralelo: par,
+        ganho: par / seq,
+        resultado_identico,
+        automatico_escolheu_paralelo: auto.usando_threads(),
+        ilhas: ILHAS,
+        geracoes_por_s_ilhas: ilhas,
+        ganho_ilhas: ilhas / seq,
+    }
+}
+
+pub fn executar_ga(segundos: f64) -> Vec<ResultadoGA> {
+    use crate::genetic::problems::{OneMaxGAProblem, TSPGAProblem};
+
+    let mut resultados = Vec::new();
+    for cidades in [100, 2000] {
+        fastrand::seed(7);
+        let mapa = TSPGAProblem::generate_random_cities(cidades);
+        resultados.push(medir_ga(&format!("TSP {cidades} cidades"), || TSPGAProblem::new(mapa.clone()), 500, cidades, segundos));
+    }
+    for bits in [1_000, 100_000] {
+        resultados.push(medir_ga(&format!("OneMax {bits} bits"), || OneMaxGAProblem::new(bits), 200, bits, segundos));
+    }
+    resultados
+}
+
+/// Exposto ao JS: mede o motor genético em sequência e em paralelo, `segundos` por modo e problema.
+#[wasm_bindgen]
+pub fn teste_ga_threads(segundos: f64) -> Result<JsValue, JsError> {
+    serde_wasm_bindgen::to_value(&executar_ga(segundos)).map_err(|e| JsError::new(&e.to_string()))
+}
+
+// ── Benchmark da busca exaustiva do Pencilmark: sequencial × paralelo ────────────────────────
+
+/// N rainhas como problema do Pencilmark (a célula `i` é a linha `i`; o valor, a coluna da rainha).
+/// Serve de carga genérica: enumerar todas as soluções percorre a árvore de busca inteira.
+#[derive(Clone)]
+pub struct Rainhas;
+
+impl crate::pencilmark::RegrasQuadro for Rainhas {
+    fn verificar_quadro(&mut self, _quadro: &[i32]) -> bool {
+        true
+    }
+
+    fn verificar_celula(&mut self, quadro: &[i32], possib: &mut crate::pencilmark::Possib) -> bool {
+        let n = quadro.len() as i32;
+        let linha = possib.index as i32;
+        for (outra, &v) in quadro.iter().enumerate() {
+            if v <= 0 { continue; }
+            let (outra, coluna) = (outra as i32, v - 1);
+            // Mesma coluna e as duas diagonais
+            for c in [coluna, coluna + (linha - outra), coluna - (linha - outra)] {
+                if (0..n).contains(&c) {
+                    possib.desmarcar(c as usize);
+                }
+            }
+        }
+        true
+    }
+}
+
+#[derive(Serialize, Debug)]
+pub struct ResultadoExaustivo {
+    pub problema: String,
+    /// Soluções encontradas (todas as que existem).
+    pub solucoes: usize,
+    pub nos: f64,
+    pub ms_sequencial: f64,
+    pub ms_paralelo: f64,
+    pub ganho: f64,
+    /// Os dois modos acharam o mesmo número de soluções? (tem que ser sempre true)
+    pub mesmo_resultado: bool,
+    /// Subárvores em que a busca foi repartida no modo paralelo.
+    pub tarefas: f64,
+}
+
+/// Enumera todas as soluções das `n` rainhas em sequência e em paralelo.
+pub fn medir_exaustivo(n: usize) -> ResultadoExaustivo {
+    use crate::pencilmark::BuscaExaustiva;
+    use web_time::Instant;
+
+    let rodar = |threads: usize| {
+        fastrand::seed(1);
+        let mut busca = BuscaExaustiva::new(Rainhas, vec![0; n], n, usize::MAX);
+        busca.threads = threads;
+        let inicio = Instant::now();
+        while !busca.executar(1_000_000) {}
+        (inicio.elapsed().as_secs_f64() * 1000.0, busca)
+    };
+    let (ms_sequencial, seq) = rodar(1);
+    let (ms_paralelo, par) = rodar(0);
+    ResultadoExaustivo {
+        problema: format!("{n} rainhas (todas as soluções)"),
+        solucoes: par.solucoes.len(),
+        nos: par.nos as f64,
+        ms_sequencial,
+        ms_paralelo,
+        ganho: ms_sequencial / ms_paralelo,
+        mesmo_resultado: seq.solucoes.len() == par.solucoes.len() && seq.esgotou() && par.esgotou(),
+        tarefas: par.tarefas as f64,
+    }
+}
+
+/// Exposto ao JS: mede a busca exaustiva do Pencilmark em sequência e em paralelo.
+#[wasm_bindgen]
+pub fn teste_pencilmark_threads() -> Result<JsValue, JsError> {
+    let resultados: Vec<ResultadoExaustivo> = [11, 12, 13].into_iter().map(medir_exaustivo).collect();
+    serde_wasm_bindgen::to_value(&resultados).map_err(|e| JsError::new(&e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn benchmark_exaustivo_acha_todas_as_solucoes_nos_dois_modos() {
+        let r = medir_exaustivo(9);
+        assert_eq!(r.solucoes, 352);
+        assert!(r.mesmo_resultado, "{r:?}");
+    }
+
+    #[test]
+    fn paralelo_da_o_mesmo_resultado_e_usa_varias_threads() {
+        let seq = executar(16, 200_000, false);
+        let par = executar(16, 200_000, true);
+        assert_eq!(seq.checksum, par.checksum);
+        assert!(seq.thread_por_tarefa.iter().all(Option::is_none), "sequencial roda fora do pool");
+        assert!(par.thread_por_tarefa.iter().all(Option::is_some), "paralelo roda dentro do pool");
+        if rayon::current_num_threads() > 1 {
+            assert!(par.threads_usadas > 1, "{par:?}");
+        }
+    }
+
+    #[test]
+    fn benchmark_do_ga_da_resultado_identico_nos_dois_modos() {
+        let resultados = executar_ga(0.05);
+        assert_eq!(resultados.len(), 4);
+        for r in &resultados {
+            assert!(r.resultado_identico, "{r:?}");
+            assert!(r.geracoes_por_s_sequencial > 0.0 && r.geracoes_por_s_paralelo > 0.0, "{r:?}");
+        }
+    }
+}
+

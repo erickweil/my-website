@@ -9,7 +9,8 @@
     "build": "next build --webpack",
     "build:wasm": "bash buildWasm.sh",
     "test:wasm": "cd rust-wasm && wasm-pack test --node",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

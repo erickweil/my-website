@@ -3,11 +3,10 @@
 import { mesclarEstado } from "@/components/Canvas/CanvasController";
 import ZoomableCanvas, { ZoomEstadoType } from "@/components/Canvas/ZoomableCanvas";
 import NonSSRWrapper from "@/components/nonSSRWrapper";
-import { UIEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GAConfig, GAProgressEvent, GeneticAlgorithm } from "@/lib/genetic/ga";
 import { TSPCity, TSPProblem } from "@/lib/genetic/examples/tsp-problem";
-import { useWasm } from "@/lib/useWasm";
-import { TSPGAProblemRunner } from "@/pkg/rust_wasm";
+import type { TSPWorkerEntrada, TSPWorkerSaida } from "./tsp-wasm.worker";
 
 type GeneticEstado = ZoomEstadoType & {
     px: number,
@@ -16,9 +15,13 @@ type GeneticEstado = ZoomEstadoType & {
     cities: TSPCity[],
 
     ga: GeneticAlgorithm<object> | null;
-    wasmRunner: TSPGAProblemRunner | null;
+    /** O progresso atual veio do worker WASM (e não do GA em TS desta thread). */
+    wasmAtivo: boolean;
     progress: GAProgressEvent<object> & {
         msPerGeneration?: number;
+        /** Só no WASM: threads no pool e se o motor está rodando em paralelo. */
+        threads?: number;
+        usandoThreads?: boolean;
     } | null;
 };
 
@@ -99,8 +102,53 @@ function drawTSP(ctx: CanvasRenderingContext2D, ga: GeneticAlgorithm<number[]> |
 }
 
 export default function Genetic() {
-    const wasm = useWasm();
     const [solver, setSolver] = useState<"ts" | "wasm">("ts");
+    const [erroWasm, setErroWasm] = useState<string | null>(null);
+    /** Só no WASM: 1 = uma população; N = modelo de ilhas (N populações, uma por thread). */
+    const [ilhas, setIlhas] = useState(1);
+
+    // O GA em WASM roda num worker (para poder usar threads); a página só manda as cidades e
+    // desenha o último progresso recebido.
+    const workerRef = useRef<Worker | null>(null);
+    const progressoRef = useRef<Extract<TSPWorkerSaida, { tipo: "progresso" }> | null>(null);
+    /** `cliques` (versão das cidades) da última evolução pedida ao worker; -1 = nenhuma. */
+    const enviadoRef = useRef(-1);
+    /** Muda a cada pedido ao worker, para descartar o progresso de um pedido anterior. */
+    const pedidoRef = useRef(0);
+
+    const enviarAoWorker = (msg: TSPWorkerEntrada) => {
+        if (!workerRef.current) {
+            const worker = new Worker(new URL("./tsp-wasm.worker.ts", import.meta.url), { type: "module" });
+            worker.onmessage = (ev: MessageEvent<TSPWorkerSaida>) => {
+                if (ev.data.tipo === "progresso") {
+                    progressoRef.current = ev.data;
+                } else {
+                    setErroWasm(ev.data.texto);
+                }
+            };
+            worker.onerror = (e) => {
+                console.error("Erro no worker do TSP:", e);
+                setErroWasm(e.message || "Erro ao carregar o worker.");
+            };
+            workerRef.current = worker;
+        }
+        workerRef.current.postMessage(msg);
+    };
+
+    // Ao sair do modo WASM, para a evolução no worker; ao voltar, ela recomeça
+    useEffect(() => {
+        if (solver !== "wasm" && workerRef.current) {
+            workerRef.current.postMessage({ tipo: "parar" } satisfies TSPWorkerEntrada);
+        }
+        // Trocar de solver ou de número de ilhas recomeça a evolução no worker
+        enviadoRef.current = -1;
+        progressoRef.current = null;
+    }, [solver, ilhas]);
+
+    useEffect(() => () => {
+        workerRef.current?.terminate();
+        workerRef.current = null;
+    }, []);
 
     return <div className="h-screen max-h-screen w-full flex flex-row overflow-hidden">
         {/* Painel de controle fixo no canto superior direito */}
@@ -108,14 +156,26 @@ export default function Genetic() {
             <span className={solver === "ts" ? "font-bold" : "text-gray-400"}>TS</span>
             <button
                 onClick={() => setSolver(s => s === "ts" ? "wasm" : "ts")}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${solver === "wasm" ? "bg-violet-600" : "bg-gray-300"} ${!wasm && solver === "ts" ? "" : ""}`}
-                title={!wasm ? "WASM ainda carregando..." : undefined}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${solver === "wasm" ? "bg-violet-600" : "bg-gray-300"}`}
             >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${solver === "wasm" ? "translate-x-6" : "translate-x-1"}`} />
             </button>
             <span className={solver === "wasm" ? "font-bold text-violet-700" : "text-gray-400"}>
-                WASM {!wasm && "(carregando…)"}
+                WASM
             </span>
+            {solver === "wasm" && (
+                <label className="ml-2 flex items-center gap-1 font-normal" title="Modelo de ilhas: N populações do mesmo tamanho evoluem separadas, uma por thread, e trocam indivíduos com a vizinha a cada 50 gerações">
+                    ilhas
+                    <select
+                        value={ilhas}
+                        onChange={(e) => setIlhas(Number(e.target.value))}
+                        className="rounded border bg-white px-1 py-0.5"
+                    >
+                        {[1, 4, 8, 16].map((n) => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                </label>
+            )}
+            {erroWasm && <span className="text-red-600" title={erroWasm}>erro: {erroWasm}</span>}
         </div>
         <div className='w-full h-full overflow-hidden'>
         <NonSSRWrapper>
@@ -130,7 +190,7 @@ export default function Genetic() {
                     cliques: 0,
                     cities: [],
                     ga: null,
-                    wasmRunner: null,
+                    wasmAtivo: false,
                     progress: null
                 }
             }}
@@ -159,13 +219,21 @@ export default function Genetic() {
                         ctx.fillText(`Fitness: ${fitness}`, 10, 60);
                         ctx.fillText(`Stagnated for: ${stagnatedFor} gens`, 10, 90);
                         if(estado.progress.msPerGeneration) {
-                            ctx.fillText(`ms/gen: ${estado.progress.msPerGeneration.toFixed(2)}`, 10, 150);
+                            ctx.fillText(`ms/gen: ${estado.progress.msPerGeneration.toFixed(3)}`, 10, 150);
+                        }
+                        if(estado.progress.threads !== undefined) {
+                            ctx.fillText(
+                                estado.progress.usandoThreads
+                                    ? `Threads: ${estado.progress.threads} (paralelo)`
+                                    : `Threads: 1 (sequencial; pool de ${estado.progress.threads})`,
+                                10, 180
+                            );
                         }
                     }
 
                     const ga = estado.ga;
                     const hasTSP = (ga?.problem instanceof TSPProblem && ga.population.length > 0)
-                        || (estado.wasmRunner != null && estado.cities.length > 0);
+                        || (estado.wasmAtivo && estado.cities.length > 0);
 
                     if(hasTSP) {
                         // Cria um problema TSP temporário só para o draw (cidades são suficientes)
@@ -197,45 +265,34 @@ export default function Genetic() {
             }}
             everyFrame={(estado) => {
                 if (solver === "wasm") {
-                    if (!wasm) return null; // WASM ainda não carregou
-                    const size = estado.cities.length;
-                    if (size < 3) return null;
+                    if (estado.cities.length < 3) return null;
 
-                    let runner = estado.wasmRunner;
-                    if (!runner) {
-                        const cfg = new wasm.GAConfig();
-                        cfg.population_size = size * 2;
-                        cfg.crossover_rate = 0.9;
-                        cfg.mutation_rate = 0.9;
-                        cfg.mutation_gene_rate = 1 / size;
-                        cfg.tournament_size = 8;
-                        cfg.max_stagnation = 50000;
-                        cfg.diversity_check = false;
-                        runner = new wasm.TSPGAProblemRunner(estado.cities, cfg);
+                    // Cidades novas (ou acabou de entrar no modo WASM): pede ao worker para recomeçar
+                    if (enviadoRef.current !== estado.cliques) {
+                        enviadoRef.current = estado.cliques;
+                        progressoRef.current = null;
+                        pedidoRef.current++;
+                        enviarAoWorker({ tipo: "iniciar", id: pedidoRef.current, cities: estado.cities, ilhas });
                     }
 
-                    let generationCount = 0;
-                    const timeStart = performance.now();
-                    do {
-                        runner.run(100);
-                        generationCount += 100;
-                    } while (performance.now() - timeStart < 20);
-                    const elapsed = performance.now() - timeStart;
-
-                    const info = runner.get_info() as { generation: number; best_fitness: number; stagnated_for: number, best_genes: number[] };
-
-                    mesclarEstado(estado, {
-                        wasmRunner: runner,
-                        ga: null,
-                        progress: {
-                            genes: info.best_genes,
-                            generation: info.generation,
-                            fitness: info.best_fitness,
-                            current: undefined,
-                            stagnatedFor: info.stagnated_for,
-                            msPerGeneration: elapsed / generationCount
-                        },
-                    });
+                    // Desenha o último progresso recebido, se for do pedido atual
+                    const p = progressoRef.current;
+                    if (p && p.id === pedidoRef.current) {
+                        mesclarEstado(estado, {
+                            ga: null,
+                            wasmAtivo: true,
+                            progress: {
+                                genes: p.genes,
+                                generation: p.generation,
+                                fitness: p.fitness,
+                                current: undefined,
+                                stagnatedFor: p.stagnatedFor,
+                                msPerGeneration: p.msPerGeneration,
+                                threads: p.threads,
+                                usandoThreads: p.usandoThreads,
+                            },
+                        });
+                    }
                 } else {
                     let ga = estado.ga;
                     if(!ga) {
@@ -266,7 +323,7 @@ export default function Genetic() {
 
                     mesclarEstado(estado, {
                         ga: ga,
-                        wasmRunner: null,
+                        wasmAtivo: false,
                         progress: {
                             ...result,
                             msPerGeneration: elapsed / generationCount
@@ -281,17 +338,12 @@ export default function Genetic() {
                     const cities = estado.cities;
                     cities.push(unproject(estado.mouse.x, estado.mouse.y, estado.width, estado.height));
 
-                    // deve recriar o runner com o novo número de cidades
-                    if(estado.wasmRunner) {
-                        estado.wasmRunner.free();
-                        estado.wasmRunner = null;
-                    }
-
+                    // `cliques` muda: o GA em TS é recriado e o worker WASM recomeça com as novas cidades
                     return {
                         cliques: estado.cliques + 1,
                         cities: cities,
                         ga: null,
-                        wasmRunner: null,
+                        wasmAtivo: false,
                         progress: null
                     }
                 },
@@ -309,7 +361,7 @@ export default function Genetic() {
                             cliques: estado.cliques + 1,
                             cities: newCities,
                             ga: null,
-                            wasmRunner: null,
+                            wasmAtivo: false,
                             progress: null
                         };
                     }

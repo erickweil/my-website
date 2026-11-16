@@ -56,6 +56,11 @@ macro_rules! ga_runner {
                 self.ga.config = config;
             }
 
+            /// true se as gerações estão rodando em várias threads (ver `GAConfig.threads`).
+            pub fn usando_threads(&self) -> bool {
+                self.ga.usando_threads()
+            }
+
             /// Retorna metadados da execução (geração, fitness, genes, estagnação) como objeto JS.
             pub fn get_info(&self) -> Result<wasm_bindgen::JsValue, serde_wasm_bindgen::Error> {
                 serde_wasm_bindgen::to_value(&self.ga.get_info())

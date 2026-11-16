@@ -1,4 +1,22 @@
 [target.wasm32-unknown-unknown]
-# Habilita SIMD128 para que o LLVM possa vetorizar loops automaticamente (ex: total_route_distance_squared)
-# Requer browser com suporte a WebAssembly SIMD (Chrome 91+, Firefox 89+, Safari 16.4+)
-rustflags = ["-C", "target-feature=+simd128"]
+# - simd128: deixa o LLVM vetorizar loops (ex: total_route_distance_squared).
+#   Requer WebAssembly SIMD (Chrome 91+, Firefox 89+, Safari 16.4+).
+# - atomics + bulk-memory + memória compartilhada: threads com rayon (wasm-bindgen-rayon).
+#   A página precisa estar "cross-origin isolated" (cabeçalhos COOP/COEP no next.config.ts),
+#   senão o navegador não tem SharedArrayBuffer e o WASM não carrega.
+#   Também exige Rust nightly com `-Z build-std=panic_abort,std` (ver buildWasm.sh e Dockerfile).
+# - max-memory: teto da memória compartilhada (1 GiB), obrigatório com --shared-memory.
+# Flags conforme o README do wasm-bindgen-rayon.
+rustflags = [
+    "-C", "target-feature=+simd128,+atomics,+bulk-memory",
+    "-C", "link-arg=--shared-memory",
+    "-C", "link-arg=--max-memory=1073741824",
+    "-C", "link-arg=--import-memory",
+    "-C", "link-arg=--export=__wasm_init_tls",
+    "-C", "link-arg=--export=__tls_size",
+    "-C", "link-arg=--export=__tls_align",
+    "-C", "link-arg=--export=__tls_base",
+    # O wasm-bindgen precisa deste símbolo para preparar o módulo para threads, e o linker das
+    # versões recentes não o exporta mais por padrão ("failed to find `__heap_base`").
+    "-C", "link-arg=--export=__heap_base",
+]

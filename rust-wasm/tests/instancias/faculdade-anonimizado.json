@@ -1,0 +1,569 @@
+{
+  "turmas": [
+    {
+      "id": "Turma 1",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Turma 2",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Turma 3",
+      "horarios": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    }
+  ],
+  "aulas": [
+    {
+      "id": "Disciplina 1",
+      "turmas": [
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor C"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 2",
+      "turmas": [
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor B"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 3",
+      "turmas": [
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor C"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 4",
+      "turmas": [
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor H"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 5",
+      "turmas": [
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor F"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": false
+    },
+    {
+      "id": "Disciplina 6",
+      "turmas": [
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor D"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 7",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor I"
+      ],
+      "aulasSemana": 4,
+      "bloco": 4,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 8",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor D"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 9",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor A"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 10",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor E"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 11",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor C"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 12",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor D"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 13",
+      "turmas": [
+        "Turma 3"
+      ],
+      "recursos": [
+        "Professor F"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 14",
+      "turmas": [
+        "Turma 1"
+      ],
+      "recursos": [
+        "Professor C"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 15",
+      "turmas": [
+        "Turma 1"
+      ],
+      "recursos": [
+        "Professor G"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 16",
+      "turmas": [
+        "Turma 1"
+      ],
+      "recursos": [
+        "Professor F"
+      ],
+      "aulasSemana": 2,
+      "bloco": 2,
+      "emendar": true
+    },
+    {
+      "id": "Disciplina 17",
+      "turmas": [
+        "Turma 1"
+      ],
+      "recursos": [
+        "Professor H"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": false
+    },
+    {
+      "id": "Disciplina 18",
+      "turmas": [
+        "Turma 1"
+      ],
+      "recursos": [
+        "Professor D"
+      ],
+      "aulasSemana": 4,
+      "bloco": 2,
+      "emendar": false
+    },
+    {
+      "id": "Grupo 1",
+      "turmas": [
+        "Turma 1",
+        "Turma 2"
+      ],
+      "recursos": [
+        "Professor D",
+        "Professor F",
+        "Professor H",
+        "Professor J"
+      ],
+      "aulasSemana": 4,
+      "bloco": 4,
+      "emendar": true
+    }
+  ],
+  "recursos": [
+    {
+      "id": "Professor A",
+      "disponibilidade": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Professor B",
+      "disponibilidade": {
+        "seg": [],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": []
+      }
+    },
+    {
+      "id": "Professor C",
+      "disponibilidade": {
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Professor D",
+      "disponibilidade": {
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Professor E",
+      "disponibilidade": {
+        "ter": [
+          1,
+          2
+        ],
+        "qui": [
+          1,
+          2
+        ],
+        "seg": [],
+        "qua": [],
+        "sex": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "id": "Professor F",
+      "disponibilidade": {
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Professor G",
+      "disponibilidade": {
+        "seg": [],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "sex": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Professor H",
+      "disponibilidade": {
+        "sex": [],
+        "qua": [],
+        "qui": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seg": [
+          1,
+          2,
+          3,
+          4
+        ]
+      }
+    },
+    {
+      "id": "Professor I",
+      "disponibilidade": {
+        "qua": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "qui": [],
+        "ter": []
+      }
+    },
+    {
+      "id": "Professor J",
+      "disponibilidade": {
+        "ter": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "seg": [],
+        "sex": []
+      }
+    }
+  ]
+}

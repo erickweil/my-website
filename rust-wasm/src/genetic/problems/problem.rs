@@ -1,9 +1,13 @@
 use serde::{Serialize};
 
 // Gene deve ser Serialize + Deserialize para ser enviado ao JS
-pub trait GAProblem {
-    type Gene: Clone + std::fmt::Debug + Serialize;
-    type State: Clone;
+// O motor roda blocos da população em threads diferentes (rayon). Por isso o problema é
+// compartilhado entre threads (`Sync`: os métodos recebem `&self`), os genes passam de uma thread
+// para outra, e cada bloco tem o seu próprio `State` (buffers de trabalho), criado por
+// `initial_state`. Tipos comuns (Vec, números, structs sem `Rc`/`RefCell`) já cumprem isso.
+pub trait GAProblem: Sync {
+    type Gene: Clone + std::fmt::Debug + Serialize + Send + Sync;
+    type State: Clone + Send;
 
     /// Retorna o estado inicial do problema, se aplicável
     fn initial_state(&self) -> Self::State;
