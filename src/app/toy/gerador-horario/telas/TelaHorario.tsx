@@ -3,7 +3,7 @@ import { ArrowRight, CircleAlert, CircleCheck, Download, Loader2, Play, Printer,
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { raceWorkers } from "@/lib/workerRace";
+import type { WorkerResponseMsg } from "@/lib/workerRace";
 import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP, type HorarioWorkerTaskValue, type SolverHorario } from "../horario-regras";
 import { detalharProblema, diagnosticar, observarHorario, type Pendencia } from "../modelo/diagnostico";
@@ -108,41 +108,53 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
     const [parcial, setParcial] = useState<HorarioGerado | null>(null);
     const [erro, setErro] = useState<string | null>(null);
     const [visao, setVisao] = useState<Visao>("turmas");
-    const interromper = useRef<(() => void) | null>(null);
-    // Sair da tela no meio da geração encerra o worker
-    useEffect(() => () => interromper.current?.(), []);
+    /** Para a busca em andamento e fica com o último quadro que ela entregou. */
+    const parar = useRef<(() => void) | null>(null);
+    // Sair da tela no meio da geração também para (e guarda o último quadro)
+    useEffect(() => () => parar.current?.(), []);
 
     const professor = (id: Id) => area.cadastros.professores.find((p) => p.id === id);
     const pendencias = diagnosticar(projeto, area.cadastros);
     const erros = pendencias.filter((p) => p.gravidade === "erro").length;
     const totalDeAulas = projeto.ofertas.reduce((s, o) => s + o.aulasSemana, 0);
 
-    const gerar = async () => {
+    /**
+     * Roda o solver num worker. Cada quadro que chega substitui o anterior na tela; quando a busca
+     * termina, ou quando o usuário para, o último quadro recebido é o que fica salvo no projeto.
+     */
+    const gerar = () => {
         setErro(null);
         setParcial(null);
         setGerando(true);
-        const entrada = paraSolver(projeto);
-        const { promise, abort } = raceWorkers<HorarioWorkerTaskValue>({
-            n: 1,
-            createWorker: () => new Worker(new URL("../horario-wasm.worker.ts", import.meta.url)),
-            initMessage: () => ({ action: "solucionarQuadroHorario", solver, entrada, ilhas }),
-            onMessage: (_, msg) => {
-                if (msg.value?.alocacoes) setParcial(doSolver(projeto, msg.value));
-            },
-        });
-        interromper.current = abort;
-        try {
-            salvarHorario(doSolver(projeto, await promise));
-        } catch (e) {
-            // Interrompido pelo usuário: fica o que já estava salvo
-            if (!(e instanceof DOMException && e.name === "AbortError")) {
-                setErro(e instanceof Error ? e.message : "Erro desconhecido ao gerar o horário.");
-            }
-        } finally {
-            interromper.current = null;
+        const doProjeto = projeto;
+        const worker = new Worker(new URL("../horario-wasm.worker.ts", import.meta.url));
+        let ultimo: HorarioGerado | null = null;
+        const encerrar = () => {
+            worker.terminate();
+            parar.current = null;
+            if (ultimo) salvarHorario(ultimo);
             setGerando(false);
             setParcial(null);
-        }
+        };
+        worker.onmessage = (e: MessageEvent<WorkerResponseMsg<HorarioWorkerTaskValue>>) => {
+            const msg = e.data;
+            if (msg.type === "error") {
+                setErro(msg.message ?? "Erro desconhecido ao gerar o horário.");
+            } else if (msg.value?.alocacoes) {
+                ultimo = doSolver(doProjeto, msg.value);
+                setParcial(ultimo);
+            } else if (msg.type === "success") {
+                // Terminou sem chegar a nenhum quadro: fica a mensagem do solver
+                ultimo = doSolver(doProjeto, msg.value!);
+            }
+            if (msg.type !== "message") encerrar();
+        };
+        worker.onerror = () => {
+            setErro("Erro desconhecido ao gerar o horário.");
+            encerrar();
+        };
+        parar.current = encerrar;
+        worker.postMessage({ action: "solucionarQuadroHorario", solver, entrada: paraSolver(projeto), ilhas });
     };
 
     const horario = gerando ? parcial : projeto.horario;
@@ -199,7 +211,7 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
 
                 <div className="mb-6 flex flex-wrap items-center gap-3">
                     {gerando ? (
-                        <Button size="lg" variant="outline" onClick={() => interromper.current?.()}>
+                        <Button size="lg" variant="outline" onClick={() => parar.current?.()}>
                             <X /> Interromper
                         </Button>
                     ) : (
