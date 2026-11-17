@@ -62,6 +62,30 @@ const FATORES_DA_LISTA: [f64; 4] = [1.0, 0.5, 2.0, 1.0];
 
 const SEM_AULA: u8 = u8::MAX;
 
+/// Como a lista do late acceptance é atualizada depois de cada iteração.
+///
+/// Medido em 17/11/2026 (`bench_busca_local`, 10 sementes, uma cadeia, lista 5000, 20 s), tempo até
+/// um horário válido (mediana) e quantas sementes chegaram lá:
+///
+/// | Instância | `SoBaixa` | `Classica` |
+/// | :--- | :--- | :--- |
+/// | média (10 turmas) | 0,27 s, 10/10 | 1,28 s, 10/10 |
+/// | grande (25 turmas) | 0,75 s, 10/10 | 9,75 s, 6/10 |
+/// | técnico real v3 (19 turmas) | 1,59 s, 10/10 | 2,49 s, 10/10 |
+/// | técnico real v4 (19 turmas) | 3,63 s, 5/10 | 3,03 s, 4/10 |
+///
+/// O custo final de qualidade ficou igual nas duas. Por isso o padrão é `SoBaixa`; a clássica fica
+/// para comparação (`--classica` no benchmark).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtualizacaoDaLista {
+    /// Só baixa: `L[k] ← min(L[k], custo atual)`, e o candidato precisa ser estritamente melhor que
+    /// `L[k]`.
+    SoBaixa,
+    /// Como no artigo de Burke e Bykov: `L[k] ← custo atual` sempre (a lista pode subir), e aceita
+    /// o candidato que não piora em relação a `L[k]`.
+    Classica,
+}
+
 /// Tabelas derivadas das regras, montadas uma vez e compartilhadas entre as cadeias.
 struct Tabelas {
     regras: RegrasHorario,
@@ -580,6 +604,7 @@ struct Cadeia {
     rng: fastrand::Rng,
     /// As trocas do movimento sorteado.
     trocas: Vec<(u32, u32)>,
+    atualizacao: AtualizacaoDaLista,
 }
 
 impl Cadeia {
@@ -595,6 +620,7 @@ impl Cadeia {
             degrau: 1,
             rng: fastrand::Rng::with_seed(semente),
             trocas: Vec::new(),
+            atualizacao: AtualizacaoDaLista::SoBaixa,
             atual,
             custo,
         }
@@ -658,6 +684,9 @@ impl Cadeia {
     #[inline]
     fn passo(&mut self, t: &Tabelas) {
         let k = (self.iteracao % self.lista.len() as u64) as usize;
+        let classica = self.atualizacao == AtualizacaoDaLista::Classica;
+        // O candidato passa pela lista? (`custo` = o dele, ou um mínimo dele)
+        let passa_na_lista = |custo: f64, lista: f64| if classica { custo <= lista } else { custo < lista };
         if self.sortear(t) {
             for &(a, b) in &self.trocas {
                 self.atual.trocar(t, a as usize, b as usize);
@@ -665,7 +694,7 @@ impl Cadeia {
             // Só com as regras obrigatórias já dá para recusar a maioria: a qualidade só soma custo
             self.atual.acertar_obrigatorias(t);
             let minimo = self.atual.custo_obrigatorio(t);
-            if minimo > self.custo && minimo >= self.lista[k] {
+            if minimo > self.custo && !passa_na_lista(minimo, self.lista[k]) {
                 for &(a, b) in self.trocas.iter().rev() {
                     self.atual.trocar(t, a as usize, b as usize);
                 }
@@ -673,7 +702,7 @@ impl Cadeia {
             } else {
                 self.atual.acertar_qualidade(t);
                 let novo = self.atual.custo(t);
-                if novo <= self.custo || novo < self.lista[k] {
+                if novo <= self.custo || passa_na_lista(novo, self.lista[k]) {
                     self.custo = novo;
                     if novo < self.melhor_custo {
                         self.melhor_custo = novo;
@@ -690,7 +719,7 @@ impl Cadeia {
                 }
             }
         }
-        if self.custo < self.lista[k] {
+        if classica || self.custo < self.lista[k] {
             self.lista[k] = self.custo;
         }
         self.iteracao += 1;
@@ -751,6 +780,14 @@ impl BuscaLocal {
             })
             .collect();
         Self { tabelas, cadeias, iteracoes: 0 }
+    }
+
+    /// Troca a regra de atualização da lista do late acceptance (padrão: [`AtualizacaoDaLista::SoBaixa`]).
+    pub fn com_atualizacao(mut self, atualizacao: AtualizacaoDaLista) -> Self {
+        for c in &mut self.cadeias {
+            c.atualizacao = atualizacao;
+        }
+        self
     }
 
     /// Faz `iteracoes` movimentos em cada cadeia (em paralelo, se há pool de threads). Para antes
@@ -823,10 +860,15 @@ mod tests {
     /// Movimento a movimento, aceito ou desfeito, o custo incremental é exatamente o fitness
     /// calculado do zero, e as contagens de qualidade são as de `medir`.
     fn conferir_incremental(regras: &RegrasHorario, movimentos: usize) {
+        conferir_incremental_com(regras, movimentos, AtualizacaoDaLista::SoBaixa);
+    }
+
+    fn conferir_incremental_com(regras: &RegrasHorario, movimentos: usize, atualizacao: AtualizacaoDaLista) {
         fastrand::seed(7);
         let t = Tabelas::new(regras);
         let mut state = regras.initial_state();
         let mut c = Cadeia::new(&t, Avaliacao::new(&t, regras.random_genes()), 50, 11);
+        c.atualizacao = atualizacao;
         assert_eq!(c.custo, -regras.fitness(&mut state, &c.atual.quadro), "custo inicial");
         for i in 0..movimentos {
             c.passo(&t);
@@ -846,6 +888,11 @@ mod tests {
         for nome in ["faculdade-anonimizado", "pequena", "media"] {
             conferir_incremental(&instancia(nome), 3000);
         }
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn custo_incremental_igual_ao_fitness_com_a_lista_classica() {
+        conferir_incremental_com(&instancia("pequena"), 3000, AtualizacaoDaLista::Classica);
     }
 
     #[wasm_bindgen_test(unsupported = test)]

@@ -97,8 +97,18 @@ export interface ResultadoDoSolver {
     terminou: boolean;
 }
 
-/** O que o worker manda para a página, no progresso e no fim. */
-export type HorarioWorkerTaskValue = ResultadoDoSolver & {
+/** Como a busca está indo: o worker manda a cada bloco de trabalho (cerca de 100 ms). */
+export interface ProgressoDoSolver {
+    /** Tempo desde o início da busca. */
+    ms: number;
+    /** Pencilmark: nós visitados. GA: geração. Busca local: movimentos, somando as cadeias. */
+    iter: number;
+    /** Pencilmark: ramos da busca ainda em aberto. GA: gerações sem melhora. Busca local: movimentos sem melhora. */
+    depth: number;
+    /** Busca local e GA: custo do melhor quadro (0 = todas as regras atendidas). */
+    custo?: number;
+    /** Quantas vezes o melhor quadro mudou (mesmo com o mesmo custo). */
+    versao: number;
     /** Só no GA: tempo médio por geração no último bloco. */
     msPorGeracao?: number;
     /** Só no GA: número de ilhas em uso (0 = uma população só). */
@@ -107,4 +117,11 @@ export type HorarioWorkerTaskValue = ResultadoDoSolver & {
     threads?: number;
     /** Só na busca local: buscas independentes em paralelo. */
     cadeias?: number;
-};
+}
+
+/** O que o worker manda para a página, no progresso e no fim. */
+export interface HorarioWorkerTaskValue {
+    progresso: ProgressoDoSolver;
+    /** O melhor quadro: só quando ele mudou desde a última mensagem, e sempre no fim. */
+    resultado?: ResultadoDoSolver;
+}

@@ -160,11 +160,12 @@ pub struct ResultadoHorario {
     /// Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade (que a busca
     /// local e o algoritmo genético tentam atender). Vazio se há violação ou não há quadro.
     pub qualidade: Vec<Ocorrencia>,
-    /// Pencilmark: nós visitados. GA: geração. (f64 porque u64 não cabe num Number do JS)
+    /// Pencilmark: nós visitados. GA: geração. Busca local: movimentos. (f64 porque u64 não cabe num Number do JS)
     pub iter: f64,
-    /// Pencilmark: profundidade da busca. GA: gerações sem melhora.
+    /// Pencilmark: profundidade da busca. GA: gerações sem melhora. Busca local: movimentos sem melhora.
     pub depth: usize,
-    /// true quando o solver parou (achou solução, esgotou a busca ou atingiu o limite).
+    /// true quando o solver terminou sozinho: custo 0 (busca local e genético), ou horário achado ou
+    /// impossibilidade provada (busca exata). Os outros casos só param quando o usuário interrompe.
     pub terminou: bool,
 }
 

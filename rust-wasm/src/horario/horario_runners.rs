@@ -3,9 +3,14 @@
 //! Os três têm a mesma interface:
 //! - `new(formulario)`: lança um `Error` do JS com mensagem legível se o formulário for inválido;
 //! - `run(n) -> bool`: avança `n` passos (nós da busca / gerações / movimentos) e diz se terminou;
-//! - `versao() -> u32`: muda sempre que o melhor quadro muda, para o worker só postar progresso
-//!   quando há algo novo;
+//! - `versao() -> u32`: muda sempre que o melhor quadro muda (mesmo que o custo seja o mesmo), para
+//!   o worker só mandar o quadro quando há algo novo;
+//! - `custo()` (busca local e genético): o custo do melhor quadro, 0 = nada a melhorar;
 //! - `get_resultado()`: o [`ResultadoHorario`] atual, pronto para a página.
+//!
+//! A busca local e o genético não têm limite de tempo: rodam até custo 0 (todas as regras
+//! obrigatórias e de qualidade atendidas) ou até o usuário interromper. A busca exata termina ao
+//! achar um horário válido (ela não melhora a qualidade) ou ao provar que não existe nenhum.
 //!
 //! A lógica fica nos métodos sem `wasm_bindgen` (que recebem [`RegrasHorario`] e devolvem
 //! [`ErroEntrada`]), para poder ser testada fora do navegador.
@@ -20,21 +25,6 @@ use crate::{
     },
     pencilmark::{BuscaExaustiva, ExecucaoPencilmark},
 };
-
-/// Limite de gerações do GA (o worker em TS rodava 1000 blocos de 500 gerações).
-pub const MAX_GERACOES_GA: usize = 500_000;
-
-/// Com um horário já válido, o GA continua para atender às regras de qualidade (horários a evitar
-/// e as outras regras de qualidade) e para depois deste número de gerações sem melhora.
-pub const GERACOES_SEM_MELHORA_NA_QUALIDADE: usize = 1_000;
-
-/// Com um horário já válido, a busca local continua atrás das regras de qualidade e para depois
-/// deste número de movimentos (por cadeia) sem melhora. São umas três voltas completas pelas
-/// folgas da busca (ver `horario_busca_local.rs`).
-pub const MOVIMENTOS_SEM_MELHORA_NA_QUALIDADE: u64 = 10_000_000;
-
-/// Limite de movimentos da busca local (por cadeia), para quando ela não chega a um horário válido.
-pub const MAX_MOVIMENTOS_BUSCA_LOCAL: u64 = 2_000_000_000;
 
 fn erro_js(e: ErroEntrada) -> JsError {
     JsError::new(&e.to_string())
@@ -216,12 +206,9 @@ impl HorarioGARunner {
         Ok(Self::de_regras(RegrasHorario::from_js(formulario).map_err(erro_js)?, ilhas))
     }
 
-    /// Roda `geracoes` gerações. Retorna true quando terminou:
-    /// - o melhor quadro é válido e atende a todas as regras de qualidade (fitness 0); ou
-    /// - é válido e a qualidade não melhora há [`GERACOES_SEM_MELHORA_NA_QUALIDADE`] gerações; ou
-    /// - atingiu [`MAX_GERACOES_GA`].
-    ///
-    /// Antes de terminar, um quadro válido já é entregue como progresso (ver [`Self::valido`]).
+    /// Roda `geracoes` gerações. Retorna true quando terminou: o melhor quadro é válido e atende a
+    /// todas as regras de qualidade (fitness 0). Sem isso, continua até ser interrompido; um quadro
+    /// válido já é entregue como progresso (ver [`Self::valido`]).
     pub fn run(&mut self, geracoes: u32) -> bool {
         if self.terminou {
             return true;
@@ -239,11 +226,16 @@ impl HorarioGARunner {
             self.melhor = Some((genes, v));
             self.versao += 1;
         }
-        let qualidade_parada = self.melhor_fitness == Some(0.0) || info.stagnated_for >= GERACOES_SEM_MELHORA_NA_QUALIDADE;
-        if (self.valido && qualidade_parada) || info.generation >= MAX_GERACOES_GA {
+        if self.valido && self.melhor_fitness == Some(0.0) {
             self.terminou = true;
         }
         self.terminou
+    }
+
+    /// O custo do melhor quadro (o fitness com o sinal trocado; 0 = nada a melhorar), ou
+    /// `undefined` antes da primeira geração.
+    pub fn custo(&self) -> Option<f64> {
+        self.melhor_fitness.map(|f| -f)
     }
 
     pub fn versao(&self) -> u32 {
@@ -313,10 +305,6 @@ impl HorarioBuscaLocalRunner {
         )
     }
 
-    /// O custo do melhor quadro: o fitness do genético com o sinal trocado (0 = nada a melhorar).
-    pub fn custo(&self) -> f64 {
-        self.melhor_custo
-    }
 }
 
 #[wasm_bindgen]
@@ -326,12 +314,9 @@ impl HorarioBuscaLocalRunner {
         Ok(Self::de_regras(RegrasHorario::from_js(formulario).map_err(erro_js)?, cadeias))
     }
 
-    /// Faz `movimentos` movimentos em cada cadeia. Retorna true quando terminou:
-    /// - o melhor quadro é válido e atende a todas as regras de qualidade (custo 0); ou
-    /// - é válido e não melhora há [`MOVIMENTOS_SEM_MELHORA_NA_QUALIDADE`] movimentos; ou
-    /// - atingiu [`MAX_MOVIMENTOS_BUSCA_LOCAL`].
-    ///
-    /// Antes de terminar, um quadro válido já é entregue como progresso (ver [`Self::valido`]).
+    /// Faz `movimentos` movimentos em cada cadeia. Retorna true quando terminou: o melhor quadro é
+    /// válido e atende a todas as regras de qualidade (custo 0). Sem isso, continua até ser
+    /// interrompida; um quadro válido já é entregue como progresso (ver [`Self::valido`]).
     pub fn run(&mut self, movimentos: u32) -> bool {
         if self.terminou {
             return true;
@@ -339,20 +324,26 @@ impl HorarioBuscaLocalRunner {
         let resolvido = self.busca.executar(movimentos as u64);
         self.movimentos += movimentos as u64;
 
-        if self.busca.melhor_custo() < self.melhor_custo {
-            self.melhor_custo = self.busca.melhor_custo();
+        // O melhor quadro mudou: com custo menor, ou outro de mesmo custo (de outra cadeia)
+        if self.busca.melhor() != self.melhor.0.as_slice() {
+            let custo = self.busca.melhor_custo();
+            if custo < self.melhor_custo {
+                self.melhorou_em = self.movimentos;
+            }
+            self.melhor_custo = custo;
             let quadro = self.busca.melhor().to_vec();
             let v = validar(&mut self.validador, &quadro);
             self.valido = !v.alguma();
             self.melhor = (quadro, v);
-            self.melhorou_em = self.movimentos;
             self.versao += 1;
         }
-        let parou_na_qualidade = self.valido && self.movimentos - self.melhorou_em >= MOVIMENTOS_SEM_MELHORA_NA_QUALIDADE;
-        if resolvido || parou_na_qualidade || self.movimentos >= MAX_MOVIMENTOS_BUSCA_LOCAL {
-            self.terminou = true;
-        }
+        self.terminou = resolvido;
         self.terminou
+    }
+
+    /// O custo do melhor quadro: o fitness do genético com o sinal trocado (0 = nada a melhorar).
+    pub fn custo(&self) -> f64 {
+        self.melhor_custo
     }
 
     pub fn versao(&self) -> u32 {
@@ -520,8 +511,8 @@ mod tests {
         assert!(r.versao() > 0, "deveria ter um melhor quadro");
         let res = r.resultado();
         assert!(res.alocacoes.is_some());
-        // Com alguma violação ainda não terminou; sem violação, terminou
-        assert_eq!(res.terminou, !res.alguma_violacao);
+        // Só termina com o quadro sem violação (e com todas as regras de qualidade atendidas)
+        assert!(!res.terminou || !res.alguma_violacao);
     }
 
     /// Um professor com horários a evitar: a busca exata os trata como indisponíveis; o GA entrega
@@ -591,9 +582,9 @@ mod tests {
         assert_eq!(pm.resultado().mensagem, Some(MSG_IMPOSSIVEL));
 
         let mut ga = HorarioGARunner::de_regras(regras(), 0);
-        while !ga.run(100) {}
-        assert!(ga.valido());
+        rodar_ate_valido(&mut ga);
         assert_eq!(ga.resultado().qualidade.iter().filter(|o| o.regra == "evitar").count(), 1);
+        assert!(!ga.run(100), "com uma regra de qualidade que não fecha, o GA não termina sozinho");
     }
 
     /// Turma com mais horários que aulas: os dois métodos entregam um horário válido, com os horários
@@ -664,7 +655,7 @@ mod tests {
         assert!(pm.provou_impossivel());
 
         let mut ga = HorarioGARunner::de_regras(regras(), 0);
-        while !ga.run(100) {}
+        rodar_ate_valido(&mut ga);
         let res = ga.resultado();
         assert!(!res.alguma_violacao, "{:?}", res.problemas);
         assert_eq!(res.qualidade.iter().map(|o| (o.regra, o.turma.as_deref(), o.dia)).collect::<Vec<_>>(), [("janela", Some("T"), "seg")]);
@@ -691,10 +682,19 @@ mod tests {
         assert_eq!(regras.qualidade(&q).0.janela, 1);
     }
 
-    /// Quando não dá para atender a todos os pedidos, o GA não fica rodando para sempre: para com
-    /// um horário válido depois de um tempo sem melhorar.
+    /// Roda o GA até ter um horário válido (com limite, para o teste não travar).
+    fn rodar_ate_valido(ga: &mut HorarioGARunner) {
+        let mut blocos = 0;
+        while !ga.run(100) && !ga.valido() {
+            blocos += 1;
+            assert!(blocos < 2_000, "o GA deveria chegar a um horário válido");
+        }
+    }
+
+    /// Quando não dá para atender a todos os pedidos, o GA entrega o horário válido e continua
+    /// tentando melhorar até ser interrompido (não para sozinho por falta de melhora).
     #[wasm_bindgen_test(unsupported = test)]
-    fn ga_para_com_horario_valido_quando_a_qualidade_nao_fecha() {
+    fn ga_continua_com_horario_valido_quando_a_qualidade_nao_fecha() {
         // P dá as 4 aulas da turma e quer evitar a segunda inteira: 2 aulas caem lá de qualquer jeito
         let regras = RegrasHorario::from_json(r#"{
             "turmas": [{ "id": "T", "horarios": { "seg": [1, 2], "ter": [1, 2] } }],
@@ -703,14 +703,31 @@ mod tests {
         }"#).unwrap();
         fastrand::seed(6);
         let mut ga = HorarioGARunner::de_regras(regras, 0);
-        let mut geracoes = 0;
-        while !ga.run(100) {
-            geracoes += 100;
+        for _ in 0..30 {
+            assert!(!ga.run(100), "não termina sem custo 0");
             assert!(ga.valido(), "o primeiro quadro já é válido");
-            assert!(geracoes <= GERACOES_SEM_MELHORA_NA_QUALIDADE + 200, "deveria ter parado por falta de melhora");
         }
-        assert!(!ga.resultado().alguma_violacao);
-        assert_eq!(ga.resultado().qualidade.iter().filter(|o| o.regra == "evitar" && o.recurso.as_deref() == Some("P")).count(), 2);
+        let res = ga.resultado();
+        assert!(!res.alguma_violacao && !res.terminou);
+        assert!(ga.custo().is_some_and(|c| c > 0.0));
+        assert_eq!(res.qualidade.iter().filter(|o| o.regra == "evitar" && o.recurso.as_deref() == Some("P")).count(), 2);
+    }
+
+    /// A busca local também: com uma regra de qualidade que não fecha, segue rodando com o
+    /// horário válido.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn busca_local_continua_quando_a_qualidade_nao_fecha() {
+        let regras = RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2], "ter": [1, 2] } }],
+            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 4 }],
+            "recursos": [{ "id": "P", "disponibilidade": { "seg": [1, 2], "ter": [1, 2] }, "evitar": { "seg": [1, 2] } }]
+        }"#).unwrap();
+        fastrand::seed(6);
+        let mut r = HorarioBuscaLocalRunner::de_regras(regras, 1);
+        for _ in 0..20 {
+            assert!(!r.run(20_000), "não termina sem custo 0");
+        }
+        assert!(r.valido() && r.custo() > 0.0 && !r.resultado().terminou);
     }
 
     /// A busca local resolve as instâncias que o genético e a busca exata não resolviam (10 e 25
@@ -765,7 +782,7 @@ mod tests {
         fastrand::seed(1);
         let mut r = HorarioBuscaLocalRunner::de_regras(carregar("inviavel"), 1);
         for _ in 0..50 {
-            assert!(!r.run(20_000), "sem horário válido a busca não termina antes do limite");
+            assert!(!r.run(20_000), "sem horário válido a busca não termina");
         }
         let res = r.resultado();
         assert!(!r.valido() && res.alguma_violacao && !res.terminou);

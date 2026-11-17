@@ -25,7 +25,7 @@ cargo run --release --example bench_horario -- tests/instancias/faculdade-anonim
 cd rust-wasm
 cargo run --release --example bench_busca_local -- tests/instancias/grande.json --sementes 8
 # de onde parte: --de quadro.json (um quadro pronto) ou --ga N (o melhor do genético depois de N segundos)
-# opções: --segundos N, --lista N, --cadeias N
+# opções: --segundos N, --lista N, --cadeias N, --classica (lista do late acceptance como no artigo)
 ```
 - Reproduzir fora do navegador um projeto da página (exporte a área de trabalho em "Projetos")
 ```bash

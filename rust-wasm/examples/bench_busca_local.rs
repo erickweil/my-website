@@ -15,12 +15,13 @@
 //!   --sementes N   número de sementes (padrão: 5)
 //!   --lista N      comprimento da lista do late acceptance (padrão: LISTA_PADRAO)
 //!   --cadeias N    buscas independentes em paralelo (padrão: 1)
+//!   --classica     lista do late acceptance como no artigo (sempre recebe o custo atual)
 
 use std::{collections::HashMap, env, fs, time::Instant};
 
 use rust_wasm::{
     genetic::{ga::GeneticAlgorithm, problems::GAProblem},
-    horario::{config_ga_horario, BuscaLocal, DiaSemana, QuadroHorario, RegrasHorario, LISTA_PADRAO},
+    horario::{config_ga_horario, AtualizacaoDaLista, BuscaLocal, DiaSemana, QuadroHorario, RegrasHorario, LISTA_PADRAO},
 };
 
 /// Lê um quadro `{ turma: { dia: [aula por tempo] } }`; o que sobra marcado sem aula fica vago.
@@ -57,8 +58,9 @@ fn main() {
     let sementes: u64 = arg("--sementes").map_or(5, |s| s.parse().unwrap());
     let lista: usize = arg("--lista").map_or(LISTA_PADRAO, |s| s.parse().unwrap());
     let cadeias: usize = arg("--cadeias").map_or(1, |s| s.parse().unwrap());
+    let atualizacao = if args.iter().any(|a| a == "--classica") { AtualizacaoDaLista::Classica } else { AtualizacaoDaLista::SoBaixa };
 
-    println!("{caminho}: {} turmas, {} aulas | lista {lista}, {cadeias} cadeia(s), {segundos} s por semente", regras.turmas.len(), regras.aulas_a_alocar());
+    println!("{caminho}: {} turmas, {} aulas | lista {lista}, {cadeias} cadeia(s), {atualizacao:?}, {segundos} s por semente", regras.turmas.len(), regras.aulas_a_alocar());
     println!("{:>7} {:>10} {:>12} {:>14} {:>10} {:>12} {:>10}", "semente", "partida", "válido em", "movimentos", "final", "final em", "M mov/s");
 
     let mut state = regras.initial_state();
@@ -79,7 +81,7 @@ fn main() {
         };
         let partida = -regras.fitness(&mut state, &inicial);
 
-        let mut busca = BuscaLocal::new(&regras, &inicial, cadeias, lista);
+        let mut busca = BuscaLocal::new(&regras, &inicial, cadeias, lista).com_atualizacao(atualizacao);
         let inicio = Instant::now();
         let (mut valido_em, mut melhor, mut melhor_em) = (None, busca.melhor_custo(), 0.0);
         loop {

@@ -7,14 +7,14 @@
  * resultado. Erros da entrada chegam aqui como `Error` com a mensagem pronta para o usuário.
  *
  *  - Recebe: { action: "solucionarQuadroHorario", solver, entrada, ilhas }
- *  - Envia type="message" quando o melhor quadro muda
- *  - Envia type="success" ao terminar
+ *  - Envia type="message" a cada bloco de trabalho, com o progresso, e o quadro quando ele mudou
+ *  - Envia type="success" ao terminar (custo 0, ou, na busca exata, horário achado ou impossível)
  *  - Envia type="error" em caso de falha
  */
 
 import { iniciarWasmComThreads } from "@/lib/wasmThreads";
 import { WorkerResponseMsg } from "@/lib/workerRace";
-import { EntradaDoSolver, HorarioWorkerTaskValue, ResultadoDoSolver, SolverHorario } from "./horario-regras";
+import { EntradaDoSolver, HorarioWorkerTaskValue, ProgressoDoSolver, ResultadoDoSolver, SolverHorario } from "./horario-regras";
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -94,9 +94,21 @@ self.onmessage = async (message) => {
               : new wasm.HorarioPencilmarkRunner(entrada, undefined);
 
         try {
-            let versao = runner.versao();
             const inicioDaBusca = performance.now();
+            let versaoPostada = -1;
             let poolPedido = false;
+            let msPorGeracao: number | undefined;
+            const progresso = (resultado: ResultadoDoSolver): ProgressoDoSolver => ({
+                ms: performance.now() - inicioDaBusca,
+                iter: resultado.iter,
+                depth: resultado.depth,
+                custo: runner instanceof wasm.HorarioPencilmarkRunner ? undefined : (runner.custo() ?? undefined),
+                versao: runner.versao(),
+                msPorGeracao,
+                ilhas,
+                threads: runner instanceof wasm.HorarioPencilmarkRunner && runner.usando_threads() ? navigator.hardwareConcurrency : undefined,
+                cadeias: cadeias || undefined,
+            });
             for (;;) {
                 let terminou = false;
                 let feitos = 0;
@@ -105,7 +117,7 @@ self.onmessage = async (message) => {
                     terminou = runner.run(passos);
                     feitos += passos;
                 } while (!terminou && performance.now() - inicio < MS_POR_BLOCO);
-                const msPorGeracao = solver === "genetic" ? (performance.now() - inicio) / feitos : undefined;
+                if (solver === "genetic") msPorGeracao = (performance.now() - inicio) / feitos;
                 if (terminou) break;
 
                 // Pencilmark demorando: cria o pool. A busca exaustiva é a mesma; a partir daqui
@@ -115,18 +127,15 @@ self.onmessage = async (message) => {
                     await iniciarWasmComThreads();
                 }
 
-                // Só posta progresso quando o melhor quadro mudou
-                if (runner.versao() !== versao) {
-                    versao = runner.versao();
-                    const resultado = runner.get_resultado() as ResultadoDoSolver;
-                    const threads = runner instanceof wasm.HorarioPencilmarkRunner && runner.usando_threads()
-                        ? navigator.hardwareConcurrency
-                        : undefined;
-                    postMsg({ type: "message", value: { ...resultado, msPorGeracao, ilhas, threads, cadeias: cadeias || undefined } });
-                }
+                // O progresso vai sempre; o quadro, só quando mudou
+                const resultado = runner.get_resultado() as ResultadoDoSolver;
+                const mudou = runner.versao() !== versaoPostada;
+                versaoPostada = runner.versao();
+                postMsg({ type: "message", value: { progresso: progresso(resultado), resultado: mudou ? resultado : undefined } });
             }
 
-            postMsg({ type: "success", value: runner.get_resultado() as ResultadoDoSolver });
+            const resultado = runner.get_resultado() as ResultadoDoSolver;
+            postMsg({ type: "success", value: { progresso: progresso(resultado), resultado } });
         } finally {
             runner.free();
         }
