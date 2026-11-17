@@ -42,23 +42,79 @@ use crate::{
 /// genético para: ver `examples/bench_busca_local.rs`.
 pub const LISTA_PADRAO: usize = 5_000;
 
-/// Probabilidade de, ao sortear uma aula de disciplina agrupada, mover o grupo inteiro de aulas
-/// seguidas em vez de só a aula.
-const P_BLOCO: f64 = 0.5;
+/// Os números que regulam a busca. O padrão é o que a página usa; os outros valores servem aos
+/// benchmarks (`examples/grade_busca_local.rs`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParametrosBusca {
+    /// Comprimento da lista do late acceptance (ver [`LISTA_PADRAO`]).
+    pub lista: usize,
+    /// Probabilidade de, ao sortear uma aula de disciplina agrupada, mover o grupo inteiro de aulas
+    /// seguidas em vez de só a aula.
+    pub p_bloco: f64,
+    /// Sem melhorar o melhor quadro por este número de listas inteiras, a busca estacionou (o late
+    /// acceptance só aceita piorar enquanto a lista tem custos mais altos que o atual). A cadeia
+    /// então volta para o melhor quadro com uma folga: a lista é preenchida com o custo dele mais a
+    /// folga, e por uma lista inteira ela pode piorar até ali. Ver [`Cadeia::folga`].
+    pub listas_sem_melhora: u64,
+    /// Número de folgas diferentes: depois da maior, volta para a menor.
+    pub folgas: u32,
+    /// Folga na escala da qualidade: fração do custo do melhor quadro, por degrau.
+    pub folga_de_qualidade: f64,
+    /// Com o melhor quadro válido, as voltas alternam entre folga de qualidade e folga de violações
+    /// obrigatórias (sair dos válidos e voltar por outro caminho). false = só folga de qualidade.
+    pub sair_dos_validos: bool,
+    pub atualizacao: AtualizacaoDaLista,
+    /// A cada volta ao melhor quadro, a lista é multiplicada por este fator (1 = não cresce), até
+    /// `lista_max`: começa curta (rápida nos quadros fáceis) e fica longa nos difíceis.
+    pub crescer_lista: f64,
+    pub lista_max: usize,
+    /// Estacionou sem chegar a um horário válido: em vez de voltar ao melhor quadro, recomeça de
+    /// um quadro novo (uma descida nova). A parada passa a contar o progresso da tentativa atual.
+    pub recomecar: bool,
+    /// Probabilidade de o movimento ser uma cadeia de Kempe: dois horários trocados numa turma e,
+    /// em cadeia, nas turmas cujas aulas passariam a disputar um professor ou ambiente com as que
+    /// se moveram (e nas parceiras das aulas em conjunto). Medido em `docs/estudo-busca-local.md`
+    /// §7: com 0,02 corta a cauda do tempo até válido na instância grande; mais que isso fica lento.
+    /// (A troca de colunas, testada lá, foi mais lenta em todas as instâncias e saiu.)
+    pub p_kempe: f64,
+    /// Na cadeia de Kempe, quando a aula sorteada é de um grupo de aulas seguidas de disciplina
+    /// agrupada (com chance `p_bloco`), troca o grupo inteiro em vez de um horário só.
+    pub kempe_de_blocos: bool,
+    /// Com várias cadeias, o comprimento da lista de cada uma é `lista` vezes um destes fatores,
+    /// em rodízio (ver [`FATORES_DA_LISTA`]).
+    pub fatores_da_lista: &'static [f64],
+}
 
-/// Sem melhorar o melhor quadro por este número de listas inteiras, a busca estacionou (o late
-/// acceptance só aceita piorar enquanto a lista tem custos mais altos que o atual). A cadeia então
-/// volta para o melhor quadro com uma folga: a lista é preenchida com o custo dele mais a folga, e
-/// por uma lista inteira ela pode piorar até ali. Ver [`Cadeia::folga`].
-const LISTAS_SEM_MELHORA: u64 = 100;
-/// Número de folgas diferentes: depois da maior, volta para a menor.
-const FOLGAS: u32 = 6;
-/// Folga na escala da qualidade: fração do custo do melhor quadro, por degrau.
-const FOLGA_DE_QUALIDADE: f64 = 0.05;
+impl Default for ParametrosBusca {
+    fn default() -> Self {
+        Self {
+            lista: LISTA_PADRAO,
+            p_bloco: 0.5,
+            listas_sem_melhora: 100,
+            folgas: 6,
+            folga_de_qualidade: 0.05,
+            sair_dos_validos: true,
+            atualizacao: AtualizacaoDaLista::SoBaixa,
+            crescer_lista: 1.0,
+            lista_max: LISTA_PADRAO,
+            recomecar: false,
+            p_kempe: 0.02,
+            kempe_de_blocos: false,
+            fatores_da_lista: &FATORES_DA_LISTA,
+        }
+    }
+}
 
 /// Com várias cadeias, o comprimento da lista de cada uma é o pedido vezes um destes fatores, em
 /// rodízio: listas curtas resolvem depressa os quadros fáceis, as longas insistem nos difíceis.
-const FATORES_DA_LISTA: [f64; 4] = [1.0, 0.5, 2.0, 1.0];
+/// Com a lista padrão: 5000, 2500, 1000, 20000. A ordem importa porque com menos cadeias só os
+/// primeiros entram (com 2: 5000 e 2500).
+///
+/// Medido com 4 cadeias em threads (`docs/estudo-busca-local.md` §8, sementes novas): contra os
+/// fatores anteriores `[1, 0,5, 2, 1]`, a instância média caiu de 0,25 para 0,10 s, a grande de
+/// 1,03 para 0,84 s e o técnico real v3 de 1,10 para 0,46 s; o v4 chegou a válido nas mesmas
+/// 10 de 12 sementes, com mediana de 2,1 s em vez de 3,1 s.
+pub const FATORES_DA_LISTA: [f64; 4] = [1.0, 0.5, 0.2, 4.0];
 
 const SEM_AULA: u8 = u8::MAX;
 
@@ -599,12 +655,18 @@ struct Cadeia {
     iteracao: u64,
     /// Iteração em que o melhor quadro melhorou pela última vez, ou em que a cadeia voltou para ele.
     melhorou_em: u64,
-    /// Degrau da folga da próxima volta ao melhor quadro, de 1 a [`FOLGAS`] (ver [`Self::folga`]).
+    /// Com `p.recomecar`: o melhor custo da tentativa atual e quando ele melhorou.
+    melhor_da_tentativa: f64,
+    melhorou_a_tentativa_em: u64,
+    /// Degrau da folga da próxima volta ao melhor quadro, de 1 a `p.folgas` (ver [`Self::folga`]).
     degrau: u32,
     rng: fastrand::Rng,
     /// As trocas do movimento sorteado.
     trocas: Vec<(u32, u32)>,
-    atualizacao: AtualizacaoDaLista,
+    /// Rascunhos da cadeia de Kempe: turmas já na cadeia e a fila a visitar.
+    na_cadeia: Vec<bool>,
+    fila: Vec<u32>,
+    p: ParametrosBusca,
 }
 
 impl Cadeia {
@@ -617,10 +679,14 @@ impl Cadeia {
             lista: vec![custo; lista.max(1)],
             iteracao: 0,
             melhorou_em: 0,
+            melhor_da_tentativa: custo,
+            melhorou_a_tentativa_em: 0,
             degrau: 1,
             rng: fastrand::Rng::with_seed(semente),
             trocas: Vec::new(),
-            atualizacao: AtualizacaoDaLista::SoBaixa,
+            na_cadeia: vec![false; t.regras.turmas.len()],
+            fila: Vec::new(),
+            p: ParametrosBusca::default(),
             atual,
             custo,
         }
@@ -638,8 +704,76 @@ impl Cadeia {
         let b = t.ativas[self.rng.usize(ini as usize..fim as usize)] as usize;
         let va = q[a];
 
+        // Movimentos entre turmas: os mesmos horários (posições na semana) em várias turmas
+        if self.p.p_kempe > 0.0 && self.rng.f64() < self.p.p_kempe {
+            let (pa, pb) = (a % t.por_turma, b % t.por_turma);
+            if pa == pb { return false; }
+            {
+                // Cadeia de Kempe a partir da turma sorteada. Com `kempe_de_blocos` e a aula sorteada
+                // num grupo de aulas seguidas de disciplina agrupada, a cadeia troca o grupo inteiro
+                // (uma janela de k horários) com a janela do mesmo tamanho que começa em `b`.
+                let agrupada = t.disciplina(va).is_some_and(|d| t.agrupar[d] > 0);
+                let (ja, jb, k) = if self.p.kempe_de_blocos && agrupada && self.rng.f64() < self.p.p_bloco {
+                    let linha = a - a % n;
+                    let (mut x, mut y) = (a, a + 1);
+                    while x > linha && q[x - 1] == va { x -= 1; }
+                    while y < linha + n && q[y] == va { y += 1; }
+                    let k = y - x;
+                    if b % n + k > n || (b < y && x < b + k) { return false; }
+                    (x % t.por_turma, pb, k)
+                } else {
+                    (pa, pb, 1)
+                };
+                let disputam = |x: i32, y: i32| -> bool {
+                    let (Some(dx), Some(dy)) = (t.disciplina(x), t.disciplina(y)) else { return false };
+                    let (rx, ry) = (t.rec_de[dx], t.rec_de[dy]);
+                    let ry = &t.rec[ry.0 as usize..ry.1 as usize];
+                    t.rec[rx.0 as usize..rx.1 as usize].iter().any(|r| ry.contains(r))
+                };
+                self.na_cadeia.fill(false);
+                self.fila.clear();
+                self.na_cadeia[turma] = true;
+                self.fila.push(turma as u32);
+                while let Some(u) = self.fila.pop() {
+                    let base = u as usize * t.por_turma;
+                    // A turma não tem aula em algum horário das janelas: fica de fora
+                    if (0..k).any(|j| q[base + ja + j] == -1 || q[base + jb + j] == -1) { continue; }
+                    for j in 0..k {
+                        if q[base + ja + j] != q[base + jb + j] {
+                            self.trocas.push(((base + ja + j) as u32, (base + jb + j) as u32));
+                        }
+                    }
+                    for j in 0..k {
+                        let (x, y) = (q[base + ja + j], q[base + jb + j]);
+                        // x vai para jb e y para ja: entra quem tem aula com professor ou ambiente em comum lá
+                        for v in 0..t.regras.turmas.len() {
+                            if self.na_cadeia[v] { continue; }
+                            let vb = v * t.por_turma;
+                            if disputam(x, q[vb + jb + j]) || disputam(y, q[vb + ja + j]) {
+                                self.na_cadeia[v] = true;
+                                self.fila.push(v as u32);
+                            }
+                        }
+                        // Aulas em conjunto: as parceiras vão junto
+                        for valor in [x, y] {
+                            let Some(d) = t.disciplina(valor) else { continue };
+                            let (ini, fim) = t.unidas_de[d];
+                            for &(_, inicio) in &t.unidas[ini as usize..fim as usize] {
+                                let v = inicio as usize / t.por_turma;
+                                if !self.na_cadeia[v] {
+                                    self.na_cadeia[v] = true;
+                                    self.fila.push(v as u32);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return !self.trocas.is_empty();
+        }
+
         let agrupada = t.disciplina(va).is_some_and(|d| t.agrupar[d] > 0);
-        if agrupada && self.rng.f64() < P_BLOCO {
+        if agrupada && self.rng.f64() < self.p.p_bloco {
             // O grupo de aulas seguidas que contém `a` troca com o trecho do mesmo tamanho que começa em `b`
             let linha = a - a % n;
             let (mut x, mut y) = (a, a + 1);
@@ -684,7 +818,7 @@ impl Cadeia {
     #[inline]
     fn passo(&mut self, t: &Tabelas) {
         let k = (self.iteracao % self.lista.len() as u64) as usize;
-        let classica = self.atualizacao == AtualizacaoDaLista::Classica;
+        let classica = self.p.atualizacao == AtualizacaoDaLista::Classica;
         // O candidato passa pela lista? (`custo` = o dele, ou um mínimo dele)
         let passa_na_lista = |custo: f64, lista: f64| if classica { custo <= lista } else { custo < lista };
         if self.sortear(t) {
@@ -704,6 +838,10 @@ impl Cadeia {
                 let novo = self.atual.custo(t);
                 if novo <= self.custo || passa_na_lista(novo, self.lista[k]) {
                     self.custo = novo;
+                    if novo < self.melhor_da_tentativa {
+                        self.melhor_da_tentativa = novo;
+                        self.melhorou_a_tentativa_em = self.iteracao;
+                    }
                     if novo < self.melhor_custo {
                         self.melhor_custo = novo;
                         self.melhor_violacoes = self.atual.violacoes();
@@ -724,15 +862,38 @@ impl Cadeia {
         }
         self.iteracao += 1;
 
+        // Estacionou sem horário válido e com `recomecar`: uma tentativa nova, de um quadro novo
+        let limite = self.p.listas_sem_melhora.saturating_mul(self.lista.len() as u64);
+        if self.p.recomecar && self.melhor_violacoes > 0 {
+            if self.iteracao - self.melhorou_a_tentativa_em > limite {
+                fastrand::seed(self.rng.u64(..));
+                self.atual = Avaliacao::new(t, t.regras.genes_com_blocos());
+                self.custo = self.atual.custo(t);
+                if self.p.crescer_lista > 1.0 {
+                    let n = ((self.lista.len() as f64 * self.p.crescer_lista) as usize).min(self.p.lista_max.max(self.lista.len()));
+                    self.lista.resize(n, self.custo);
+                }
+                self.lista.fill(self.custo);
+                self.melhor_da_tentativa = self.custo;
+                self.melhorou_a_tentativa_em = self.iteracao;
+                self.melhorou_em = self.iteracao;
+            }
+            return;
+        }
+
         // Estacionou: volta para o melhor quadro, com folga para piorar
-        if self.iteracao - self.melhorou_em > LISTAS_SEM_MELHORA * self.lista.len() as u64 {
+        if self.iteracao - self.melhorou_em > limite {
             if self.atual.quadro != self.melhor {
                 self.atual = Avaliacao::new(t, self.melhor.clone());
             }
             self.custo = self.melhor_custo;
             let teto = self.melhor_custo + self.folga(t);
+            if self.p.crescer_lista > 1.0 {
+                let n = ((self.lista.len() as f64 * self.p.crescer_lista) as usize).min(self.p.lista_max.max(self.lista.len()));
+                self.lista.resize(n, teto);
+            }
             self.lista.fill(teto);
-            self.degrau = self.degrau % FOLGAS + 1;
+            self.degrau = self.degrau % self.p.folgas.max(1) + 1;
             self.melhorou_em = self.iteracao;
         }
     }
@@ -745,8 +906,10 @@ impl Cadeia {
     ///   qualidade (a busca fica só entre horários válidos, trocando uma observação por outra), e
     ///   uma de violações obrigatórias (sai dos válidos e volta por outro caminho).
     fn folga(&self, t: &Tabelas) -> f64 {
-        if self.melhor_violacoes == 0 && self.degrau % 2 == 1 {
-            self.melhor_custo * FOLGA_DE_QUALIDADE * self.degrau.div_ceil(2) as f64
+        if self.melhor_violacoes == 0 && !self.p.sair_dos_validos {
+            self.melhor_custo * self.p.folga_de_qualidade * self.degrau as f64
+        } else if self.melhor_violacoes == 0 && self.degrau % 2 == 1 {
+            self.melhor_custo * self.p.folga_de_qualidade * self.degrau.div_ceil(2) as f64
         } else if self.melhor_violacoes == 0 {
             (self.degrau / 2) as f64 * t.menor_obrigatoria
         } else {
@@ -771,12 +934,21 @@ impl BuscaLocal {
     /// Os sorteios de cada cadeia saem do gerador global (`fastrand`): fixar a semente dele antes
     /// fixa a busca inteira, com qualquer número de threads.
     pub fn new(regras: &RegrasHorario, inicial: &[i32], cadeias: usize, lista: usize) -> Self {
+        Self::com_parametros(regras, inicial, cadeias, ParametrosBusca { lista, ..Default::default() })
+    }
+
+    /// Como [`Self::new`], com todos os parâmetros (`p.lista` é o comprimento da lista).
+    pub fn com_parametros(regras: &RegrasHorario, inicial: &[i32], cadeias: usize, p: ParametrosBusca) -> Self {
+        let lista = p.lista;
         let tabelas = Arc::new(Tabelas::new(regras));
         let avaliacao = Avaliacao::new(&tabelas, inicial.to_vec());
         let cadeias = (0..cadeias.max(1))
             .map(|i| {
-                let lista = (lista as f64 * FATORES_DA_LISTA[i % FATORES_DA_LISTA.len()]) as usize;
-                Cadeia::new(&tabelas, avaliacao.clone(), lista, fastrand::u64(..))
+                let fatores = if p.fatores_da_lista.is_empty() { &[1.0][..] } else { p.fatores_da_lista };
+                let lista = (lista as f64 * fatores[i % fatores.len()]) as usize;
+                let mut c = Cadeia::new(&tabelas, avaliacao.clone(), lista, fastrand::u64(..));
+                c.p = p;
+                c
             })
             .collect();
         Self { tabelas, cadeias, iteracoes: 0 }
@@ -785,7 +957,7 @@ impl BuscaLocal {
     /// Troca a regra de atualização da lista do late acceptance (padrão: [`AtualizacaoDaLista::SoBaixa`]).
     pub fn com_atualizacao(mut self, atualizacao: AtualizacaoDaLista) -> Self {
         for c in &mut self.cadeias {
-            c.atualizacao = atualizacao;
+            c.p.atualizacao = atualizacao;
         }
         self
     }
@@ -832,6 +1004,11 @@ impl BuscaLocal {
         self.melhor_cadeia().melhor_violacoes == 0
     }
 
+    /// Unidades de violação das regras obrigatórias no melhor quadro (0 = válido).
+    pub fn violacoes_do_melhor(&self) -> i64 {
+        self.melhor_cadeia().melhor_violacoes
+    }
+
     /// true se o melhor quadro atende a todas as regras, obrigatórias e de qualidade.
     pub fn resolvido(&self) -> bool {
         self.melhor_custo() <= 0.0
@@ -868,7 +1045,7 @@ mod tests {
         let t = Tabelas::new(regras);
         let mut state = regras.initial_state();
         let mut c = Cadeia::new(&t, Avaliacao::new(&t, regras.random_genes()), 50, 11);
-        c.atualizacao = atualizacao;
+        c.p.atualizacao = atualizacao;
         assert_eq!(c.custo, -regras.fitness(&mut state, &c.atual.quadro), "custo inicial");
         for i in 0..movimentos {
             c.passo(&t);
@@ -887,6 +1064,31 @@ mod tests {
         // faculdade: horas, intervalos e ambientes; pequena e média: aulas em conjunto e blocos
         for nome in ["faculdade-anonimizado", "pequena", "media"] {
             conferir_incremental(&instancia(nome), 3000);
+        }
+    }
+
+    /// Cadeia de Kempe (de um horário e de blocos): o custo incremental continua igual ao fitness e cada
+    /// turma continua com as mesmas aulas.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn custo_incremental_com_kempe() {
+        for nome in ["faculdade-anonimizado", "pequena", "media"] {
+            let regras = instancia(nome);
+            fastrand::seed(9);
+            let t = Tabelas::new(&regras);
+            let mut state = regras.initial_state();
+            let inicial = regras.random_genes();
+            let mut c = Cadeia::new(&t, Avaliacao::new(&t, inicial.clone()), 50, 13);
+            c.p.p_kempe = 0.5;
+            c.p.kempe_de_blocos = nome != "media";
+            for i in 0..3000 {
+                c.passo(&t);
+                assert_eq!(c.atual.custo(&t), -regras.fitness(&mut state, &c.atual.quadro), "{nome}: custo depois do movimento {i}");
+            }
+            let por_turma = t.por_turma;
+            for u in 0..regras.turmas.len() {
+                let conta = |q: &[i32]| { let mut v = q[u * por_turma..(u + 1) * por_turma].to_vec(); v.sort(); v };
+                assert_eq!(conta(&c.atual.quadro), conta(&inicial), "{nome}: a turma {u} mudou de aulas");
+            }
         }
     }
 

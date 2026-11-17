@@ -47,7 +47,9 @@ const numeroDeIlhas = () => Math.min(Math.max(navigator.hardwareConcurrency || 1
  * número de movimentos por chamada, então as rápidas esperam a mais lenta: com uma cadeia por
  * núcleo lógico, núcleos de eficiência (ou hyper-threads) seguram as outras. Medido num M1 (4 + 4
  * núcleos), no técnico real: 4 cadeias chegam a um horário válido em 0,95 s (mediana), 8 em 1,55 s
- * e uma só em 1,57 s (rust-wasm/examples/bench_busca_local).
+ * e uma só em 1,57 s (rust-wasm/examples/bench_busca_local). Cada cadeia usa uma lista de tamanho
+ * diferente (`FATORES_DA_LISTA` no Rust), e é essa variedade que mais rende: ver
+ * docs/estudo-busca-local.md §8.
  */
 const numeroDeCadeias = () => Math.min(Math.max(Math.floor((navigator.hardwareConcurrency || 1) / 2), 1), 8);
 
