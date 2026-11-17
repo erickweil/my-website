@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 /**
- * Web Worker que roda os solvers de horário em Rust/WASM (Pencilmark ou genético).
+ * Web Worker que roda os solvers de horário em Rust/WASM (Pencilmark, busca local ou genético).
  *
  * O worker não interpreta a entrada: só repassa para o Rust, roda em blocos e encaminha o
  * resultado. Erros da entrada chegam aqui como `Error` com a mensagem pronta para o usuário.
@@ -18,9 +18,10 @@ import { EntradaDoSolver, HorarioWorkerTaskValue, ResultadoDoSolver, SolverHorar
 
 declare const self: DedicatedWorkerGlobalScope;
 
-/** Passos por chamada ao WASM: nós da busca no Pencilmark, gerações no GA. */
+/** Passos por chamada ao WASM: nós da busca no Pencilmark, movimentos (por cadeia) na busca local, gerações no GA. */
 const PASSOS_POR_CHAMADA: Record<SolverHorario, number> = {
     pencilmark: 20_000,
+    local: 20_000,
     genetic: 50,
 };
 
@@ -39,6 +40,15 @@ const MS_ATE_USAR_THREADS = 300;
  * execuções, 8 ilhas 16 de 20, e o modelo sem ilhas 10 de 20, com o mesmo número de avaliações.
  */
 const numeroDeIlhas = () => Math.min(Math.max(navigator.hardwareConcurrency || 1, 2), 16);
+
+/**
+ * Número de cadeias da busca local: metade das threads, entre 1 e 8. Todas as cadeias fazem o mesmo
+ * número de movimentos por chamada, então as rápidas esperam a mais lenta: com uma cadeia por
+ * núcleo lógico, núcleos de eficiência (ou hyper-threads) seguram as outras. Medido num M1 (4 + 4
+ * núcleos), no técnico real: 4 cadeias chegam a um horário válido em 0,95 s (mediana), 8 em 1,55 s
+ * e uma só em 1,57 s (rust-wasm/examples/bench_busca_local).
+ */
+const numeroDeCadeias = () => Math.min(Math.max(Math.floor((navigator.hardwareConcurrency || 1) / 2), 1), 8);
 
 const postMsg = (msg: WorkerResponseMsg<HorarioWorkerTaskValue>) => {
     self.postMessage(msg);
@@ -60,12 +70,16 @@ self.onmessage = async (message) => {
             throw new Error(`Solver desconhecido: ${solver}`);
         }
 
-        // O GA roda em paralelo desde o início e precisa do pool de threads. O Pencilmark resolve a
-        // maioria dos quadros em milissegundos, menos que o tempo de criar o pool: ele começa em
-        // sequência e só passa a dividir a busca entre as threads se demorar (ver abaixo).
+        // O GA roda em paralelo desde o início e precisa do pool de threads; a busca local, de uma
+        // thread por cadeia. O Pencilmark resolve a maioria dos quadros em milissegundos, menos que
+        // o tempo de criar o pool: ele começa em sequência e só passa a dividir a busca entre as
+        // threads se demorar (ver abaixo).
+        const cadeias = solver === "local" ? numeroDeCadeias() : 0;
         let wasm;
         if (solver === "genetic") {
             wasm = await iniciarWasmComThreads();
+        } else if (cadeias > 1) {
+            wasm = await iniciarWasmComThreads(cadeias);
         } else {
             wasm = await import("@/pkg/rust_wasm.js");
             await wasm.default();
@@ -75,7 +89,9 @@ self.onmessage = async (message) => {
         const ilhas = solver === "genetic" && usarIlhas ? numeroDeIlhas() : 0;
         const runner = solver === "genetic"
             ? new wasm.HorarioGARunner(entrada, ilhas)
-            : new wasm.HorarioPencilmarkRunner(entrada, undefined);
+            : solver === "local"
+              ? new wasm.HorarioBuscaLocalRunner(entrada, cadeias)
+              : new wasm.HorarioPencilmarkRunner(entrada, undefined);
 
         try {
             let versao = runner.versao();
@@ -106,7 +122,7 @@ self.onmessage = async (message) => {
                     const threads = runner instanceof wasm.HorarioPencilmarkRunner && runner.usando_threads()
                         ? navigator.hardwareConcurrency
                         : undefined;
-                    postMsg({ type: "message", value: { ...resultado, msPorGeracao, ilhas, threads } });
+                    postMsg({ type: "message", value: { ...resultado, msPorGeracao, ilhas, threads, cadeias: cadeias || undefined } });
                 }
             }
 

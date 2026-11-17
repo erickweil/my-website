@@ -310,10 +310,10 @@ interface AreaDeTrabalho {
   mesmo tempo. Só entram os ambientes usados por mais de uma turma (os outros não restringem).
 - **`tempos[]`:** a hora de início e de fim e o turno de cada aula do quadro.
 - **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. As de
-  qualidade só o algoritmo genético considera, com peso menor que qualquer obrigatória: horários
+  qualidade só a busca local e o algoritmo genético consideram, com peso menor que qualquer obrigatória: horários
   a evitar, jornada de até 10 horas no dia, 11 horas de descanso até o dia seguinte, e grupo de
   aulas partido pelo intervalo ou pela troca de turno com uma aula sozinha. As três últimas usam
-  as horas do quadro. O resultado dos dois métodos traz o que não foi atendido.
+  as horas do quadro. O resultado de qualquer método traz o que não foi atendido.
 
 **O que o solver ignora:** capacidade e número de alunos (conferidos na tela).
 

@@ -49,8 +49,8 @@ export interface EntradaDoSolver {
         /** Regra obrigatória: nunca tem aula fora destes tempos. */
         disponibilidade: HorariosPorDia;
         /**
-         * Tempos em que é melhor não ter aula: regra de qualidade no algoritmo genético; na busca
-         * exata, o professor fica indisponível neles.
+         * Tempos em que é melhor não ter aula: regra de qualidade na busca local e no algoritmo
+         * genético; na busca exata, o professor fica indisponível neles.
          */
         evitar: HorariosPorDia;
     }[];
@@ -75,7 +75,8 @@ export interface OcorrenciaDeQualidade {
     minutos: number;
 }
 
-export type SolverHorario = "pencilmark" | "genetic";
+/** Busca exata (Pencilmark), busca local ou algoritmo genético. */
+export type SolverHorario = "pencilmark" | "local" | "genetic";
 
 /** Resultado de um solver, no progresso e no fim. */
 export interface ResultadoDoSolver {
@@ -89,9 +90,9 @@ export interface ResultadoDoSolver {
     mensagem: string | null;
     /** Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade. */
     qualidade: OcorrenciaDeQualidade[];
-    /** Pencilmark: nós visitados. GA: geração. */
+    /** Pencilmark: nós visitados. GA: geração. Busca local: movimentos, somando as cadeias. */
     iter: number;
-    /** Pencilmark: ramos da busca ainda em aberto. GA: gerações sem melhora. */
+    /** Pencilmark: ramos da busca ainda em aberto. GA: gerações sem melhora. Busca local: movimentos sem melhora. */
     depth: number;
     terminou: boolean;
 }
@@ -104,4 +105,6 @@ export type HorarioWorkerTaskValue = ResultadoDoSolver & {
     ilhas?: number;
     /** Só no Pencilmark: threads dividindo a busca (ausente enquanto roda em uma só). */
     threads?: number;
+    /** Só na busca local: buscas independentes em paralelo. */
+    cadeias?: number;
 };

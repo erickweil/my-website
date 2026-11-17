@@ -1,8 +1,9 @@
 //! Regras de QUALIDADE do horário: não invalidam um horário, só dizem qual horário válido é melhor.
 //!
-//! Só o algoritmo genético as leva em conta (entram no fitness, ver `horario_genetic.rs`); a busca
-//! exata (Pencilmark) fica só com as regras obrigatórias. O resultado de qualquer um dos dois traz
-//! as ocorrências medidas aqui, para a página mostrar.
+//! O algoritmo genético e a busca local as levam em conta (entram no fitness, ver
+//! `horario_genetic.rs`, que é também o custo de `horario_busca_local.rs`); a busca exata
+//! (Pencilmark) fica só com as regras obrigatórias. O resultado de qualquer método traz as
+//! ocorrências medidas aqui, para a página mostrar.
 //!
 //! As regras:
 //! - **Evitar**: aula num horário em que o professor está disponível, mas pediu para evitar.
@@ -95,19 +96,19 @@ pub struct TabelasQualidade {
     recursos_de: Vec<(u32, u32)>,
     recursos: Vec<u32>,
     /// Por recurso: é um professor? (ambiente não tem jornada nem preferências)
-    pessoa: Vec<bool>,
+    pub(super) pessoa: Vec<bool>,
     /// Por recurso e (dia, tempo): disponível, mas a evitar.
-    evitar: Vec<bool>,
+    pub(super) evitar: Vec<bool>,
     /// Por tempo, em minutos desde a meia-noite. Vazios se a entrada não trouxe as horas.
     inicio: Vec<i32>,
     fim: Vec<i32>,
     /// Por tempo: o que o separa do tempo seguinte.
     quebra: Vec<Quebra>,
-    tem_evitar: bool,
-    tem_horas: bool,
-    tem_quebras: bool,
+    pub(super) tem_evitar: bool,
+    pub(super) tem_horas: bool,
+    pub(super) tem_quebras: bool,
     /// Alguma turma tem horários vagos (folga).
-    tem_vagos: bool,
+    pub(super) tem_vagos: bool,
     /// Valor de um horário vago no quadro ([`RegrasHorario::vago`]).
     vago: i32,
     /// Fator que põe a soma de todas as penalidades de qualidade abaixo da menor penalidade
@@ -261,8 +262,7 @@ impl TabelasQualidade {
                 for dia in 0..QUANTOS_DIAS {
                     let k = p * QUANTOS_DIAS + dia;
                     if buf.primeiro[k] == SEM_AULA { continue; }
-                    let fim_do_dia = self.fim[buf.ultimo[k] as usize];
-                    let mut ocorrencia = |regra, minutos: i32| {
+                    let mut ocorrencia = |regra, minutos: u32| {
                         if let Some(lista) = detalhe.as_deref_mut() {
                             lista.push(Ocorrencia {
                                 regra,
@@ -270,22 +270,22 @@ impl TabelasQualidade {
                                 turma: None,
                                 aula: None,
                                 dia: DiaSemana::from_index(dia).sigla(),
-                                minutos: minutos as u32,
+                                minutos,
                             });
                         }
                     };
 
-                    let excesso = fim_do_dia - self.inicio[buf.primeiro[k] as usize] - JORNADA_MAXIMA_MIN;
+                    let excesso = self.excesso_de_jornada(buf.primeiro[k], buf.ultimo[k]);
                     if excesso > 0 {
-                        q.jornada_min += excesso as u32;
+                        q.jornada_min += excesso;
                         ocorrencia("jornada", excesso);
                     }
                     // O dia seguinte na semana (sábado não emenda com domingo)
                     if dia + 1 < QUANTOS_DIAS && buf.primeiro[k + 1] != SEM_AULA {
-                        let descanso = 24 * 60 - fim_do_dia + self.inicio[buf.primeiro[k + 1] as usize];
-                        if descanso < DESCANSO_MINIMO_MIN {
-                            q.descanso_min += (DESCANSO_MINIMO_MIN - descanso) as u32;
-                            ocorrencia("descanso", DESCANSO_MINIMO_MIN - descanso);
+                        let falta = self.falta_de_descanso(buf.ultimo[k], buf.primeiro[k + 1]);
+                        if falta > 0 {
+                            q.descanso_min += falta;
+                            ocorrencia("descanso", falta);
                         }
                     }
                 }
@@ -296,44 +296,21 @@ impl TabelasQualidade {
         if self.tem_quebras {
             for &linha in &self.linhas {
                 let linha = linha as usize;
-                let mut a = 0;
-                while a < n {
-                    let v = quadro[linha + a];
-                    let mut b = a + 1;
-                    if v <= 0 || v == self.vago {
-                        a = b;
-                        continue;
+                self.grupos_partidos(quadro, linha, |v, turno| {
+                    if turno { q.troca_de_turno += 1 } else { q.intervalo += 1 }
+                    if let Some(lista) = detalhe.as_deref_mut() {
+                        let disc = &r.disciplinas[(v - 1) as usize];
+                        let (_, dia, _) = r.from_quadro_index(linha);
+                        lista.push(Ocorrencia {
+                            regra: if turno { "turno" } else { "intervalo" },
+                            recurso: None,
+                            turma: Some(r.turmas[disc.turma_id].nome.clone()),
+                            aula: Some(disc.nome.clone()),
+                            dia: dia.sigla(),
+                            minutos: 0,
+                        });
                     }
-                    while b < n && quadro[linha + b] == v {
-                        b += 1;
-                    }
-                    // Grupo nos tempos a..b; `inicio_do_trecho` = onde começa o trecho entre quebras
-                    let mut inicio_do_trecho = a;
-                    for k in a..b - 1 {
-                        if self.quebra[k] == Quebra::Nenhuma { continue; }
-                        let antes = k + 1 - inicio_do_trecho;
-                        let proxima = (k + 1..b - 1).find(|&j| self.quebra[j] != Quebra::Nenhuma).map_or(b, |j| j + 1);
-                        let depois = proxima - (k + 1);
-                        if antes == 1 || depois == 1 {
-                            let turno = self.quebra[k] == Quebra::TrocaDeTurno;
-                            if turno { q.troca_de_turno += 1 } else { q.intervalo += 1 }
-                            if let Some(lista) = detalhe.as_deref_mut() {
-                                let disc = &r.disciplinas[(v - 1) as usize];
-                                let (_, dia, _) = r.from_quadro_index(linha);
-                                lista.push(Ocorrencia {
-                                    regra: if turno { "turno" } else { "intervalo" },
-                                    recurso: None,
-                                    turma: Some(r.turmas[disc.turma_id].nome.clone()),
-                                    aula: Some(disc.nome.clone()),
-                                    dia: dia.sigla(),
-                                    minutos: 0,
-                                });
-                            }
-                        }
-                        inicio_do_trecho = k + 1;
-                    }
-                    a = b;
-                }
+                });
             }
         }
 
@@ -341,9 +318,7 @@ impl TabelasQualidade {
         if self.tem_vagos {
             for trecho in &r.trechos {
                 if r.turmas[trecho.turma].folga == 0 { continue; }
-                let aula = |&c: &usize| quadro[c] > 0 && quadro[c] != self.vago;
-                let (Some(primeira), Some(ultima)) = (trecho.celulas.iter().position(aula), trecho.celulas.iter().rposition(aula)) else { continue };
-                let n = trecho.celulas[primeira..ultima].iter().filter(|&&c| quadro[c] == self.vago).count() as u32;
+                let n = self.janelas_do_trecho(quadro, &trecho.celulas);
                 if n > 0 {
                     q.janela += n;
                     if let Some(lista) = detalhe.as_deref_mut() {
@@ -363,6 +338,63 @@ impl TabelasQualidade {
         }
 
         q
+    }
+
+    // As regras, uma a uma, sobre um pedaço do quadro. `medir` soma todas; a busca local
+    // (`horario_busca_local.rs`) recalcula só os pedaços em que um movimento mexeu.
+
+    /// Jornada: minutos acima das 10 horas num dia que vai do tempo `primeiro` ao tempo `ultimo`.
+    #[inline]
+    pub(super) fn excesso_de_jornada(&self, primeiro: u8, ultimo: u8) -> u32 {
+        (self.fim[ultimo as usize] - self.inicio[primeiro as usize] - JORNADA_MAXIMA_MIN).max(0) as u32
+    }
+
+    /// Descanso: minutos que faltam para as 11 horas entre a última aula de um dia (`ultimo`) e a
+    /// primeira do dia seguinte (`primeiro_seguinte`).
+    #[inline]
+    pub(super) fn falta_de_descanso(&self, ultimo: u8, primeiro_seguinte: u8) -> u32 {
+        let descanso = 24 * 60 - self.fim[ultimo as usize] + self.inicio[primeiro_seguinte as usize];
+        (DESCANSO_MINIMO_MIN - descanso).max(0) as u32
+    }
+
+    /// Intervalo e troca de turno numa linha do quadro (um dia de uma turma, que começa no índice
+    /// `linha`): chama `achou(valor da disciplina, é troca de turno)` para cada grupo de aulas
+    /// seguidas partido por uma quebra com uma aula sozinha de um dos lados.
+    pub(super) fn grupos_partidos(&self, quadro: &[i32], linha: usize, mut achou: impl FnMut(i32, bool)) {
+        let n = self.n_tempos;
+        let mut a = 0;
+        while a < n {
+            let v = quadro[linha + a];
+            let mut b = a + 1;
+            if v <= 0 || v == self.vago {
+                a = b;
+                continue;
+            }
+            while b < n && quadro[linha + b] == v {
+                b += 1;
+            }
+            // Grupo nos tempos a..b; `inicio_do_trecho` = onde começa o trecho entre quebras
+            let mut inicio_do_trecho = a;
+            for k in a..b - 1 {
+                if self.quebra[k] == Quebra::Nenhuma { continue; }
+                let antes = k + 1 - inicio_do_trecho;
+                let proxima = (k + 1..b - 1).find(|&j| self.quebra[j] != Quebra::Nenhuma).map_or(b, |j| j + 1);
+                let depois = proxima - (k + 1);
+                if antes == 1 || depois == 1 {
+                    achou(v, self.quebra[k] == Quebra::TrocaDeTurno);
+                }
+                inicio_do_trecho = k + 1;
+            }
+            a = b;
+        }
+    }
+
+    /// Janela: horários vagos entre a primeira e a última aula de um trecho (as células de um turno
+    /// de um dia de uma turma).
+    pub(super) fn janelas_do_trecho(&self, quadro: &[i32], celulas: &[usize]) -> u32 {
+        let aula = |&c: &usize| quadro[c] > 0 && quadro[c] != self.vago;
+        let (Some(primeira), Some(ultima)) = (celulas.iter().position(aula), celulas.iter().rposition(aula)) else { return 0 };
+        celulas[primeira..ultima].iter().filter(|&&c| quadro[c] == self.vago).count() as u32
     }
 }
 

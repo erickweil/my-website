@@ -157,8 +157,8 @@ pub struct ResultadoHorario {
     pub alguma_violacao: bool,
     /// Mensagem para o usuário quando há violação ou não há solução.
     pub mensagem: Option<&'static str>,
-    /// Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade (que só o
-    /// algoritmo genético tenta atender). Vazio se há violação ou não há quadro.
+    /// Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade (que a busca
+    /// local e o algoritmo genético tentam atender). Vazio se há violação ou não há quadro.
     pub qualidade: Vec<Ocorrencia>,
     /// Pencilmark: nós visitados. GA: geração. (f64 porque u64 não cabe num Number do JS)
     pub iter: f64,

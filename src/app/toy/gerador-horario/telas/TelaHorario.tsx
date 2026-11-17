@@ -239,20 +239,26 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                                     do turno; as outras regras de qualidade ela não considera.
                                 </p>
                                 <p>
-                                    <strong>Algoritmo genético:</strong> para quadros grandes, que a busca exata não resolve. Devolve o melhor
-                                    horário que encontrar, mesmo com erros, e depois de chegar a um horário válido continua tentando atender
-                                    às regras de qualidade. Pode ser interrompido a qualquer momento.
+                                    <strong>Busca local:</strong> para quadros grandes, que a busca exata não resolve. Parte de um horário
+                                    com erros e o conserta trocando aulas de lugar. Devolve o melhor horário que encontrar, mesmo com erros,
+                                    e depois de chegar a um horário válido continua tentando atender às regras de qualidade. Pode ser
+                                    interrompida a qualquer momento.
+                                </p>
+                                <p>
+                                    <strong>Algoritmo genético:</strong> o método anterior para quadros grandes, com as mesmas regras da
+                                    busca local. É bem mais lento e costuma parar perto de um horário válido, sem chegar nele.
                                 </p>
                                 <p>
                                     <strong>Regras de qualidade:</strong> horários que o professor pediu para evitar; no máximo 10 horas
                                     entre a primeira e a última aula do professor no dia; 11 horas de descanso até a primeira aula do dia
                                     seguinte; grupo de aulas da mesma disciplina que atravessa o intervalo (ou a troca de turno) sem deixar
                                     uma aula sozinha de um lado; quando a turma tem mais horários que aulas, os vagos no começo ou no fim
-                                    do turno, não entre duas aulas. O horário mostra o que não foi atendido, nos dois métodos.
+                                    do turno, não entre duas aulas. O horário mostra o que não foi atendido, em qualquer método.
                                 </p>
                             </Ajuda>
                             <Selecao className="h-8" value={solver} disabled={gerando} onChange={(e) => setSolver(e.target.value as SolverHorario)}>
                                 <option value="pencilmark">Busca exata (padrão)</option>
+                                <option value="local">Busca local</option>
                                 <option value="genetic">Algoritmo genético</option>
                             </Selecao>
                         </label>

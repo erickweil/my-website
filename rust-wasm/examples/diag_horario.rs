@@ -31,8 +31,8 @@ struct Violacoes {
 fn analisar(r: &RegrasHorario, q: &[i32]) -> Violacoes {
     let mut v = Violacoes::default();
     let disc = |i: usize, dia: DiaSemana, t: usize| {
-        let val = q[r.to_quadro_index(i, dia, t)];
-        (val > 0).then(|| &r.disciplinas[(val - 1) as usize])
+        // Horário vago e fora do horário não são disciplina
+        r.disciplina_em(q[r.to_quadro_index(i, dia, t)]).map(|d| &r.disciplinas[d])
     };
     for dia in DiaSemana::TODOS {
         for t in 0..r.n_tempos {

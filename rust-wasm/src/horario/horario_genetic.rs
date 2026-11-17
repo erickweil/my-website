@@ -7,8 +7,8 @@ use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poiss
 ///
 /// As regras de QUALIDADE não invalidam o horário, só dizem qual horário válido é melhor: horários
 /// a evitar, jornada e descanso do professor, grupos de aulas partidos pelo intervalo (ver
-/// `horario_qualidade.rs`). Elas existem apenas aqui, no algoritmo genético; a busca exata as
-/// ignora. Para uma regra de qualidade nunca ser trocada por uma obrigatória, todas as penalidades
+/// `horario_qualidade.rs`). Elas entram no fitness, que o algoritmo genético maximiza e a busca
+/// local (`horario_busca_local.rs`) usa como custo; a busca exata as ignora. Para uma regra de qualidade nunca ser trocada por uma obrigatória, todas as penalidades
 /// de qualidade somadas valem menos que a menor penalidade obrigatória.
 ///
 /// Pesos de cada regra no fitness (pontos descontados por unidade de violação) e como as violações

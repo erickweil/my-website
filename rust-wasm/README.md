@@ -20,6 +20,18 @@ cargo run --release --example bench_horario -- tests/instancias/media.json --seg
 cargo run --release --example bench_horario -- tests/instancias/faculdade-anonimizado.json --solver pencilmark
 # opções: --seed N, --pop-mult N, --csv curva.csv, --solver ga|pencilmark, --base-iter N|none
 ```
+- Benchmark nativo da busca local (tempo até um horário válido e qualidade no fim)
+```bash
+cd rust-wasm
+cargo run --release --example bench_busca_local -- tests/instancias/grande.json --sementes 8
+# de onde parte: --de quadro.json (um quadro pronto) ou --ga N (o melhor do genético depois de N segundos)
+# opções: --segundos N, --lista N, --cadeias N
+```
+- Reproduzir fora do navegador um projeto da página (exporte a área de trabalho em "Projetos")
+```bash
+node rust-wasm/tests/instancias/de-projeto.mjs ~/Downloads/horarios.json rust-wasm/tests/instancias/real-tecnico.json
+cd rust-wasm && cargo run --release --example bench_busca_local -- tests/instancias/real-tecnico.json
+```
 
 As instâncias em `tests/instancias/` estão no formato da entrada do solver (`EntradaHorario`: turmas,
 aulas e recursos, ligados por id). As sintéticas são geradas por `node tests/instancias/gerar.mjs`

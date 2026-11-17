@@ -4,7 +4,8 @@
  * - `diagnosticar`: o que impede ou ameaça um horário completo, antes de gerar. Cada pendência diz
  *   em que tela se corrige.
  * - `observarHorario`: como um horário já gerado se sai nas regras de qualidade (horários a evitar,
- *   jornada, descanso, intervalo, horário vago entre aulas), que o algoritmo genético tenta atender.
+ *   jornada, descanso, intervalo, horário vago entre aulas), que a busca local e o algoritmo genético
+ *   tentam atender.
  * - `detalharProblema`: quem está em choque numa célula que o solver marcou com problema.
  */
 
