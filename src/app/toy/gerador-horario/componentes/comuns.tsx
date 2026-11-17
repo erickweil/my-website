@@ -121,6 +121,32 @@ export const corDoTexto = (hex: string) => {
 
 export const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
+/**
+ * Lista que mostra só os primeiros `limite` itens, com um botão para ver o resto: para avisos que
+ * podem ser muitos e não devem empurrar o resto da tela para baixo.
+ */
+export function ListaComLimite<T>({ itens, limite = 5, className, children }: {
+    itens: T[];
+    limite?: number;
+    className?: string;
+    children: (item: T, i: number) => React.ReactNode;
+}) {
+    const [aberta, setAberta] = useState(false);
+    // Esconder só um ou dois não vale o botão
+    const cabe = itens.length <= limite + 2;
+    const visiveis = aberta || cabe ? itens : itens.slice(0, limite);
+    return (
+        <>
+            <ul className={className}>{visiveis.map(children)}</ul>
+            {!cabe && (
+                <button type="button" className="mt-1 text-xs font-medium underline" onClick={() => setAberta(!aberta)}>
+                    {aberta ? "Ver menos" : `Ver mais ${itens.length - limite}`}
+                </button>
+            )}
+        </>
+    );
+}
+
 /** Lista lateral de itens: coluna no computador, fila rolável no celular. */
 export function ListaLateral({ children }: { children: React.ReactNode }) {
     return <nav className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">{children}</nav>;

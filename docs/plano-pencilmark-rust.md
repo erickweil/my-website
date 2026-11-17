@@ -1,5 +1,12 @@
 # Plano — Migrar o solver Pencilmark de TS para Rust
 
+> **Situação em 17/11/2026: concluído, arquivado.** O Pencilmark roda em Rust
+> (`rust-wasm/src/pencilmark/`, `horario_pencilmark.rs`), com busca exaustiva dividida entre as
+> threads desde o início, prova de impossibilidade e validação por célula (`validar`). O solver em TS
+> e o adaptador do formato antigo foram removidos. As caixas abaixo não foram mantidas; o
+> documento fica como registro do plano. Pendente do §2.2: as possibilidades continuam globais
+> (`n_possibs = disciplinas.len()`), não locais por turma.
+
 > Objetivo: o gerador de horário passa a rodar **inteiro em Rust/WASM** (Pencilmark + GA + validação),
 > com um único worker e uma única implementação das regras do lado do Rust. O TS fica só com
 > formulário, renderização e orquestração dos workers.

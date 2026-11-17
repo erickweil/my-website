@@ -18,21 +18,22 @@ import { EntradaDoSolver, HorarioWorkerTaskValue, ProgressoDoSolver, ResultadoDo
 
 declare const self: DedicatedWorkerGlobalScope;
 
-/** Passos por chamada ao WASM: nós da busca no Pencilmark, movimentos (por cadeia) na busca local, gerações no GA. */
+/**
+ * Passos por chamada ao WASM: nós da busca no Pencilmark (somando as threads), movimentos (por
+ * cadeia) na busca local, gerações no GA. Pequenos o bastante para uma chamada durar bem menos que
+ * [`MS_POR_BLOCO`] num quadro grande: o progresso só sai entre chamadas.
+ */
 const PASSOS_POR_CHAMADA: Record<SolverHorario, number> = {
-    pencilmark: 20_000,
+    pencilmark: 5_000,
     local: 20_000,
-    genetic: 50,
+    genetic: 10,
 };
 
 /**
  * Tempo mínimo de trabalho entre uma checagem de progresso e outra. O custo de uma geração do GA
  * varia muito (tamanho do quadro, número de ilhas), então o bloco é medido em tempo, não em gerações.
  */
-const MS_POR_BLOCO = 100;
-
-/** Tempo de busca do Pencilmark em sequência antes de criar o pool de threads. */
-const MS_ATE_USAR_THREADS = 300;
+const MS_POR_BLOCO = 250;
 
 /**
  * Número de ilhas do GA quando a opção está ligada: uma por thread, entre 2 e 16.
@@ -70,20 +71,12 @@ self.onmessage = async (message) => {
             throw new Error(`Solver desconhecido: ${solver}`);
         }
 
-        // O GA roda em paralelo desde o início e precisa do pool de threads; a busca local, de uma
-        // thread por cadeia. O Pencilmark resolve a maioria dos quadros em milissegundos, menos que
-        // o tempo de criar o pool: ele começa em sequência e só passa a dividir a busca entre as
-        // threads se demorar (ver abaixo).
+        // Todos rodam com o pool de threads desde o início: a busca exata divide a árvore de busca, o
+        // GA as ilhas (e o sorteio da população), a busca local as cadeias (uma por thread).
         const cadeias = solver === "local" ? numeroDeCadeias() : 0;
-        let wasm;
-        if (solver === "genetic") {
-            wasm = await iniciarWasmComThreads();
-        } else if (cadeias > 1) {
-            wasm = await iniciarWasmComThreads(cadeias);
-        } else {
-            wasm = await import("@/pkg/rust_wasm.js");
-            await wasm.default();
-        }
+        const wasm = cadeias === 1
+            ? await import("@/pkg/rust_wasm.js").then(async (w) => (await w.default(), w))
+            : await iniciarWasmComThreads(solver === "local" ? cadeias : undefined);
 
         // Lança Error com a mensagem do Rust se a entrada for inválida
         const ilhas = solver === "genetic" && usarIlhas ? numeroDeIlhas() : 0;
@@ -96,7 +89,6 @@ self.onmessage = async (message) => {
         try {
             const inicioDaBusca = performance.now();
             let versaoPostada = -1;
-            let poolPedido = false;
             let msPorGeracao: number | undefined;
             const progresso = (resultado: ResultadoDoSolver): ProgressoDoSolver => ({
                 ms: performance.now() - inicioDaBusca,
@@ -119,13 +111,6 @@ self.onmessage = async (message) => {
                 } while (!terminou && performance.now() - inicio < MS_POR_BLOCO);
                 if (solver === "genetic") msPorGeracao = (performance.now() - inicio) / feitos;
                 if (terminou) break;
-
-                // Pencilmark demorando: cria o pool. A busca exaustiva é a mesma; a partir daqui
-                // o Rust reparte a árvore de busca entre as threads.
-                if (solver === "pencilmark" && !poolPedido && performance.now() - inicioDaBusca > MS_ATE_USAR_THREADS) {
-                    poolPedido = true;
-                    await iniciarWasmComThreads();
-                }
 
                 // O progresso vai sempre; o quadro, só quando mudou
                 const resultado = runner.get_resultado() as ResultadoDoSolver;

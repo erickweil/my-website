@@ -61,7 +61,8 @@ export function TelaTurmas({ area, projeto, mudarProjeto, irParaAulas, turmaInic
                                     onClick={() => setSelecionada(t.id)}
                                     titulo={t.nome || "(sem nome)"}
                                     detalhe={resumoDaTurma(aulas, tempos)}
-                                    alerta={aulas !== tempos}
+                                    // Aulas a menos só deixam horários vagos; aulas demais não cabem
+                                    alerta={aulas > tempos}
                                 />
                             );
                         })}

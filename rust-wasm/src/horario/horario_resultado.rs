@@ -157,8 +157,9 @@ pub struct ResultadoHorario {
     pub alguma_violacao: bool,
     /// Mensagem para o usuário quando há violação ou não há solução.
     pub mensagem: Option<&'static str>,
-    /// Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade (que a busca
-    /// local e o algoritmo genético tentam atender). Vazio se há violação ou não há quadro.
+    /// Onde o quadro deixa a desejar nas regras de qualidade (que a busca local e o algoritmo
+    /// genético tentam atender ao mesmo tempo que as obrigatórias). Vem também quando há violação,
+    /// para a página mostrar as duas contagens. Vazio se não há quadro.
     pub qualidade: Vec<Ocorrencia>,
     /// Pencilmark: nós visitados. GA: geração. Busca local: movimentos. (f64 porque u64 não cabe num Number do JS)
     pub iter: f64,
@@ -178,7 +179,7 @@ impl ResultadoHorario {
                 let (alocacoes, problemas) = montar_alocacoes(regras, quadro, validacao);
                 Self {
                     mensagem: alguma_violacao.then(|| validacao.geral.unwrap_or(MSG_COM_VIOLACOES)),
-                    qualidade: if alguma_violacao { Vec::new() } else { regras.qualidade(quadro).1 },
+                    qualidade: regras.qualidade(quadro).1,
                     alocacoes: Some(alocacoes),
                     problemas,
                     alguma_violacao,

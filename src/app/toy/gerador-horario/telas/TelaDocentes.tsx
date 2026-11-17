@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { DocenteNoProjeto, Id } from "../modelo/modelo";
-import { aulasDoProfessor, contarTempos, limitarAoQuadro, turmasDoProfessor } from "../modelo/operacoes";
+import { aulasDoProfessor, contarTempos, formatarHoras, limitarAoQuadro, minutosNosHorarios, turmasDoProfessor } from "../modelo/operacoes";
 import { Cabecalho, ItemDaLista, ListaLateral, Vazio, plural } from "../componentes/comuns";
 import { GradeTempos, LegendaDaGrade, pintarHorarios, type EstadoDaGrade } from "../componentes/GradeTempos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
@@ -22,6 +22,8 @@ export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: 
     /** "10 aulas · 3 turmas" */
     const resumo = (d: DocenteNoProjeto) =>
         `${plural(aulasDoProfessor(projeto, d.professorId), "aula", "aulas")} · ${plural(turmasDoProfessor(projeto, d.professorId), "turma", "turmas")}`;
+    /** Carga horária se estiver no campus em todos os horários disponíveis (só informativo). */
+    const carga = (d: DocenteNoProjeto) => `${formatarHoras(minutosNosHorarios(d.disponibilidade, projeto.quadro))} disponíveis por semana`;
 
     const pintar = (celulas: Parameters<typeof pintarHorarios>[1], estado: string) =>
         mudarProjeto((p) => ({
@@ -41,13 +43,16 @@ export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: 
         <div>
             <Cabecalho
                 titulo="Docentes"
-                ajuda="A disponibilidade de cada professor neste projeto. Aparecem os professores que têm alguma aula. Escolha um estado e clique ou arraste na grade para pintar. O professor nunca recebe aula num horário indisponível. Os horários a evitar são uma preferência para o algoritmo genético, que tenta respeitá-los; a busca exata nunca põe aula neles."
+                ajuda="A disponibilidade de cada professor neste projeto. Aparecem os professores que têm alguma aula. Escolha um estado e clique ou arraste na grade para pintar. O professor nunca recebe aula num horário indisponível. Os horários a evitar são uma preferência que a busca local e o algoritmo genético tentam respeitar; a busca exata nunca põe aula neles. Na lista, as horas disponíveis somam a duração de todos os horários disponíveis (incluindo os a evitar): é a carga se o professor estiver no campus em todos eles."
             />
 
             {!docente ? (
                 <Vazio>Nenhum professor com aula neste projeto. Atribua os professores na tela de aulas.</Vazio>
             ) : (
                 <div className="grid gap-6 md:grid-cols-[16rem_1fr]">
+                    {/* No computador a lista rola dentro da altura da grade, ao lado dela */}
+                    <div className="md:relative">
+                    <div className="md:absolute md:inset-0 md:overflow-y-auto md:pr-1">
                     <ListaLateral>
                         {docentes.map((d) => {
                             return (
@@ -56,12 +61,19 @@ export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: 
                                     ativo={d.professorId === docente.professorId}
                                     onClick={() => setSelecionado(d.professorId)}
                                     titulo={nomeDe(d.professorId)}
-                                    detalhe={resumo(d)}
+                                    detalhe={
+                                        <span className="flex flex-col items-end">
+                                            <span>{resumo(d)}</span>
+                                            <span title="Horas no campus se estiver em todos os horários disponíveis (inclui os a evitar)">{carga(d)}</span>
+                                        </span>
+                                    }
                                     alerta={aulasDoProfessor(projeto, d.professorId) > disponiveis(d)}
                                 />
                             );
                         })}
                     </ListaLateral>
+                    </div>
+                    </div>
 
                     <div className="min-w-0 space-y-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -77,7 +89,7 @@ export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: 
                             onPintar={pintar}
                         />
                         <p className="text-sm text-muted-foreground">
-                            {resumo(docente)}
+                            {resumo(docente)} · {carga(docente)}
                             {aulasDoProfessor(projeto, docente.professorId) > disponiveis(docente) && (
                                 <span className="text-destructive"> · não há horários disponíveis suficientes para as aulas</span>
                             )}

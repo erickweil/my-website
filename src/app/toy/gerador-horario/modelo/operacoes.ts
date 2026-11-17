@@ -88,6 +88,19 @@ export function horariosCheios(quadro: QuadroHorarios, turnos?: Turno[]): Horari
     return Object.fromEntries(quadro.dias.map((d) => [d, [...tempos]]));
 }
 
+/**
+ * Minutos por semana nos horários dados, pela duração de cada aula do quadro. Na disponibilidade
+ * de um professor: a carga horária se ele estiver no campus em todos os horários disponíveis
+ * (os a evitar também contam, porque continuam disponíveis).
+ */
+export function minutosNosHorarios(horarios: HorariosPorDia, quadro: QuadroHorarios): number {
+    const aulas = aulasDoQuadro(quadro);
+    return Object.values(limitarAoQuadro(horarios, quadro)).reduce((soma, tempos) => soma + (tempos ?? []).reduce((s, t) => s + aulas[t - 1].duracaoMin, 0), 0);
+}
+
+/** "32h" ou "32h30". */
+export const formatarHoras = (minutos: number) => `${Math.floor(minutos / 60)}h${minutos % 60 ? String(minutos % 60).padStart(2, "0") : ""}`;
+
 /** Deixa só os dias e tempos que existem no quadro, com os tempos em ordem e sem repetição. */
 export function limitarAoQuadro(horarios: HorariosPorDia, quadro: QuadroHorarios): HorariosPorDia {
     const n = numeroDeTempos(quadro);
@@ -117,6 +130,60 @@ export function quebraDepoisDe(quadro: QuadroHorarios, tempo: number): "turno" |
 
 export const ordenarFaixas = (faixas: Faixa[]): Faixa[] =>
     [...faixas].sort((a, b) => paraMinutos(a.inicio) - paraMinutos(b.inicio));
+
+export const NOME_DO_TURNO: Record<Turno, string> = { matutino: "Matutino", vespertino: "Vespertino", noturno: "Noturno" };
+
+/** Uma aula do quadro: o tempo (1, 2…, contando o dia todo, como o solver) e o número dela no turno. */
+export interface AulaDoTurno {
+    faixa: FaixaAula;
+    tempo: number;
+    numero: number;
+}
+
+/** As aulas e os intervalos de um turno, em ordem. Os intervalos entre dois turnos (almoço) ficam de fora. */
+export interface TurnoDoQuadro {
+    turno: Turno;
+    linhas: (({ tipo: "aula" } & AulaDoTurno) | { tipo: "intervalo"; faixa: Faixa })[];
+}
+
+/**
+ * O quadro do dia dividido em turnos, com as aulas numeradas dentro de cada turno (1ª, 2ª… do
+ * matutino, de novo 1ª, 2ª… do vespertino). É assim que a página se refere às aulas; o solver e o
+ * armazenamento continuam usando o tempo, que conta o dia todo.
+ */
+export function aulasPorTurno(quadro: QuadroHorarios): TurnoDoQuadro[] {
+    const turnos: TurnoDoQuadro[] = [];
+    let tempo = 0;
+    let intervalos: Faixa[] = [];
+    for (const f of quadro.faixas) {
+        if (f.tipo === "intervalo") {
+            intervalos.push(f);
+            continue;
+        }
+        tempo++;
+        let atual = turnos.at(-1);
+        if (!atual || atual.turno !== f.turno) {
+            atual = { turno: f.turno, linhas: [] };
+            turnos.push(atual);
+        } else {
+            // Intervalo no meio do turno fica; o que separa dois turnos não aparece
+            atual.linhas.push(...intervalos.map((faixa) => ({ tipo: "intervalo" as const, faixa })));
+        }
+        intervalos = [];
+        const numero = atual.linhas.filter((l) => l.tipo === "aula").length + 1;
+        atual.linhas.push({ tipo: "aula", faixa: f, tempo, numero });
+    }
+    return turnos;
+}
+
+/** "2ª aula (vespertino)": como um tempo do quadro aparece para o usuário. */
+export function rotuloDoTempo(quadro: QuadroHorarios, tempo: number): string {
+    for (const t of aulasPorTurno(quadro)) {
+        const aula = t.linhas.find((l) => l.tipo === "aula" && l.tempo === tempo);
+        if (aula?.tipo === "aula") return `${aula.numero}ª aula (${NOME_DO_TURNO[t.turno].toLowerCase()})`;
+    }
+    return `${tempo}ª aula`;
+}
 
 /** Turno em que uma aula começando nesta hora costuma estar. */
 export const turnoDaHora = (hora: string): Turno =>

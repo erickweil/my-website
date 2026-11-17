@@ -73,12 +73,13 @@ export function TelaAulas({
 
             <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
                 {projeto.turmas.map((t) => {
-                    const fecha = aulasDaTurma(projeto, t.id) === contarTempos(t.horarios);
+                    // Só aula demais impede o horário; aulas a menos deixam horários vagos (aviso na turma)
+                    const sobra = aulasDaTurma(projeto, t.id) > contarTempos(t.horarios);
                     return (
                         <button
                             key={t.id}
                             type="button"
-                            title={fecha ? undefined : "As aulas desta turma não fecham com os horários marcados"}
+                            title={sobra ? "A turma tem mais aulas que horários marcados" : undefined}
                             onClick={() => escolherTurma(t.id)}
                             className={cn(
                                 "shrink-0 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
@@ -86,7 +87,7 @@ export function TelaAulas({
                             )}
                         >
                             {t.nome || "(sem nome)"}
-                            {!fecha && <span className={cn("ml-1.5", t.id === turma.id ? "" : "text-destructive")}>●</span>}
+                            {sobra && <span className={cn("ml-1.5", t.id === turma.id ? "" : "text-destructive")}>●</span>}
                         </button>
                     );
                 })}
@@ -156,7 +157,7 @@ export function TelaAulas({
                         </div>
                         <div className="col-span-4 md:order-5 md:col-span-1">
                             <RotuloMovel>Agrupar</RotuloMovel>
-                            <CampoDistribuicao valor={o.distribuicao} onChange={(distribuicao) => mudarOferta(o.id, { distribuicao })} />
+                            <CampoDistribuicao valor={o.distribuicao} aulasSemana={o.aulasSemana} onChange={(distribuicao) => mudarOferta(o.id, { distribuicao })} />
                         </div>
                         {comAmbiente && (
                             <div className="col-span-6 md:order-6 md:col-span-1">

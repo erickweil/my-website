@@ -157,7 +157,7 @@ export function TelaCursos({ area, mudarArea }: Contexto) {
                                             </div>
                                             <div className="col-span-4 md:col-span-1">
                                                 <RotuloMovel>Agrupar</RotuloMovel>
-                                                <CampoDistribuicao valor={c.distribuicao} onChange={(distribuicao) => mudarComponente(c.id, { distribuicao })} />
+                                                <CampoDistribuicao valor={c.distribuicao} aulasSemana={c.aulasSemana} onChange={(distribuicao) => mudarComponente(c.id, { distribuicao })} />
                                             </div>
                                         </div>
                                     ))}

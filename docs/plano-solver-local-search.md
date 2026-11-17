@@ -1,5 +1,30 @@
 # Plano de implementação — Solver de horários por busca local (Rust/WASM)
 
+> **Situação em 17/11/2026: implementado em parte, e já é o método padrão da página.** O código está
+> em `rust-wasm/src/horario/horario_busca_local.rs` e `HorarioBuscaLocalRunner` (`horario_runners.rs`).
+> As caixas do §10 estão atualizadas. O que mudou em relação ao plano:
+>
+> - **Custo:** é o próprio fitness do genético com o sinal trocado (`fitness_rapido`), em `f64`, e
+>   inclui as regras de qualidade (evitar, jornada, descanso, intervalo, janela). Não há
+>   `custo.rs`/`PesosRestricoes` separados; os testes conferem movimento a movimento que o custo
+>   incremental é igual ao fitness do zero.
+> - **Avaliação em duas etapas:** primeiro as obrigatórias (recusa cedo a maioria dos movimentos),
+>   depois a qualidade.
+> - **Vizinhanças:** troca de duas aulas da turma e troca de um grupo de aulas seguidas da mesma
+>   disciplina (bloco) com outro trecho; numa aula em conjunto a troca se repete nas turmas
+>   parceiras. `SwapColuna` e `KempeChain` ficaram para depois.
+> - **Aceitação:** só LAHC, sem trait e sem SA. A lista só baixa (`L[k] ← min(L[k], custo)`); a
+>   versão do artigo (`L[k] ← custo`) foi medida e é pior: ver `AtualizacaoDaLista`.
+> - **Em vez de ILS:** quando o melhor não melhora por 100 listas, a cadeia volta ao melhor quadro
+>   com uma folga crescente (violações obrigatórias ou uma fração do custo de qualidade).
+> - **Cadeias:** várias buscas independentes, uma por thread (metade dos núcleos, até 8).
+> - **Ponto de partida:** um quadro sorteado com os blocos montados (`genes_com_blocos`), não o
+>   Pencilmark.
+> - **Sem limite de tempo:** roda até custo 0 ou até o usuário interromper.
+>
+> O resto deste documento é o plano original (cita arquivos TS e o formato de entrada antigos, que
+> já não existem).
+
 > Substituir o algoritmo genético por busca local com **avaliação incremental de custo**,
 > mantendo o modelo de restrições existente. Alvo: `rust-wasm/src/horario/`.
 
@@ -297,60 +322,60 @@ Cada fase deve terminar com o projeto compilando e os testes passando.
 
 Sem isso não há como afirmar que melhorou.
 
-- [ ] 3–4 instâncias fixas em JSON (`rust-wasm/tests/instancias/`): pequena (3 turmas),
+- [x] 3–4 instâncias fixas em JSON (`rust-wasm/tests/instancias/`): pequena (3 turmas),
       média (10 turmas), grande (25 turmas), e uma **comprovadamente inviável**.
-- [ ] Binário/teste que roda um solver por N segundos com semente fixa e emite
+- [x] Binário/teste que roda um solver por N segundos com semente fixa e emite
       `(tempo, custo, iterações)` em CSV.
-- [ ] Rodar com o GA atual → é a linha de base contra a qual tudo será comparado.
+- [x] Rodar com o GA atual → é a linha de base contra a qual tudo será comparado.
 
 ### Fase 1 — Custo unificado
 
-- [ ] `custo.rs`: `PesosRestricoes` + `custo_total_do_zero(regras, quadro) -> DecomposicaoCusto`.
-- [ ] Teste: `custo_total_do_zero == -fitness_do_GA` (com os pesos default e as duas restrições de
+- [ ] ~~`custo.rs`: `PesosRestricoes`~~ (não feito: o custo é o fitness do GA) + `custo_total_do_zero(regras, quadro) -> DecomposicaoCusto`.
+- [x] Teste: `custo_total_do_zero == -fitness_do_GA` (com os pesos default e as duas restrições de
       professor somadas) — garante que o modelo novo é o mesmo modelo.
 
 ### Fase 2 — Avaliador incremental
 
-- [ ] `avaliador.rs` com `uso[]` e o padrão remove→aplica→soma.
-- [ ] `aplicar(movimento)` / `desfazer(movimento)`.
-- [ ] **Teste de propriedade** (`wasm-bindgen-test`): 10 mil movimentos aleatórios, comparando
+- [x] `avaliador.rs` com `uso[]` e o padrão remove→aplica→soma.
+- [x] `aplicar(movimento)` / `desfazer(movimento)`.
+- [x] **Teste de propriedade** (`wasm-bindgen-test`): 10 mil movimentos aleatórios, comparando
       `custo_total` incremental com `custo_total_do_zero()` a cada passo.
-- [ ] `debug_assert` permanente conforme §4.4.
+- [ ] `debug_assert` permanente conforme §4.4. (no lugar: os testes conferem o custo a cada movimento)
 
 ### Fase 3 — Vizinhanças
 
-- [ ] `SwapSlot`, `SwapBloco`, `SwapColuna`, `KempeChain`.
+- [ ] `SwapSlot`, `SwapBloco` ✔; `SwapColuna`, `KempeChain` pendentes.
 - [ ] **Teste de invariante** para cada uma: após qualquer sequência de movimentos, o multiset de
       cada turma é idêntico ao inicial e nenhum slot `-1` foi tocado.
-- [ ] Sorteio por roleta com pesos configuráveis.
+- [ ] Sorteio por roleta com pesos configuráveis. (hoje: bloco com probabilidade 0,5 quando a aula é agrupada)
 
 ### Fase 4 — Busca local
 
-- [ ] `aceitacao.rs`: trait + LAHC + SA com calibração automática de `T₀`.
-- [ ] `local_search.rs`: laço principal, rastreio de melhor solução, contagem de estagnação.
-- [ ] Comparar LAHC vs SA vs GA no harness. **Decidir com dado, não com preferência.**
+- [ ] `aceitacao.rs`: trait + LAHC + SA (só LAHC, sem trait) com calibração automática de `T₀`.
+- [x] `local_search.rs`: laço principal, rastreio de melhor solução, contagem de estagnação.
+- [ ] Comparar LAHC vs SA vs GA no harness. (LAHC × GA feito: a busca local resolve média, grande e o técnico real; SA não implementado) **Decidir com dado, não com preferência.**
 
 ### Fase 5 — ILS
 
 - [ ] Perturbação ruin & recreate com força adaptativa.
-- [ ] Critério de estagnação e reinício a partir da melhor solução.
+- [x] Critério de estagnação e reinício a partir da melhor solução (volta ao melhor com folga).
 
 ### Fase 6 — Integração
 
-- [ ] `HorarioLocalSearchRunner` + `wasm_bindgen`.
-- [ ] Worker: novo `solverType: "local-search"` em `horario-solver.ts` e no seletor da UI
+- [x] `HorarioLocalSearchRunner` + `wasm_bindgen` (`HorarioBuscaLocalRunner`).
+- [x] Worker: novo `solverType: "local-search"` em `horario-solver.ts` e no seletor da UI
       (`page.tsx:803`), mantendo GA e Pencilmark como opções.
-- [ ] Progresso *anytime*: reportar a melhor solução a cada bloco de iterações — a UI já sabe
+- [x] Progresso *anytime*: reportar a melhor solução a cada bloco de iterações — a UI já sabe
       renderizar isso (`postMessage` com `solucao`/`violacoes`).
-- [ ] Solução inicial vinda do Pencilmark.
-- [ ] Validar com `obterRegrasVioladas` (TS): custo 0 no Rust **tem** que dar zero violações no TS.
+- [ ] Solução inicial vinda do Pencilmark. (parte de `genes_com_blocos`)
+- [x] Validar com `obterRegrasVioladas` (TS) (hoje: o validador do Pencilmark em Rust, `validar`): custo 0 no Rust **tem** que dar zero violações no TS.
 
 ### Fase 7 — Ajuste fino
 
-- [ ] Calibrar `lh`, probabilidades das vizinhanças e força da perturbação no harness.
+- [ ] Calibrar `lh` (lista 5000 medida; probabilidades e perturbação não), probabilidades das vizinhanças e força da perturbação no harness.
 - [ ] Iterar só os dias ativos em vez de `QUANTOS_DIAS = 7` (~29% de trabalho desperdiçado numa
       escola de 5 dias).
-- [ ] Reativar `raceWorkers` com `nWorkers > 1` (`page.tsx:54`) e sementes distintas — execuções
+- [x] Reativar `raceWorkers` (feito como cadeias em threads, dentro do mesmo worker) com `nWorkers > 1` (`page.tsx:54`) e sementes distintas — execuções
       independentes de LAHC são paralelizáveis de graça, sem `SharedArrayBuffer`.
 
 ---

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Coffee, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,11 +6,10 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP } from "../horario-regras";
 import { DIAS, TURNOS, type Faixa, type Turno } from "../modelo/modelo";
-import { faixaSobreposta, fimDaFaixa, novoId, substituirTurno, trocarDias, trocarFaixas, turnoDaHora } from "../modelo/operacoes";
+import { NOME_DO_TURNO, faixaSobreposta, fimDaFaixa, novoId, substituirTurno, trocarDias, trocarFaixas, turnoDaHora, aulasPorTurno } from "../modelo/operacoes";
 import { Ajuda, CampoNumero, Cabecalho, Selecao } from "../componentes/comuns";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
-const NOME_DO_TURNO: Record<Turno, string> = { matutino: "Matutino", vespertino: "Vespertino", noturno: "Noturno" };
 const INICIO_DO_TURNO: Record<Turno, string> = { matutino: "07:30", vespertino: "13:30", noturno: "19:00" };
 
 /** Colunas da tabela de faixas no computador; no celular, 6 colunas em que os campos se empilham. */
@@ -36,7 +35,16 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
             return trocarFaixas(p, [...p.quadro.faixas, nova]);
         });
 
-    let tempo = 0;
+    // Número de cada aula dentro do turno dela, e as aulas que começam um turno (levam o cabeçalho)
+    const numeroDaAula = new Map<string, number>();
+    const comecaTurno = new Set<string>();
+    for (const t of aulasPorTurno(quadro)) {
+        for (const l of t.linhas) {
+            if (l.tipo !== "aula") continue;
+            numeroDaAula.set(l.faixa.id, l.numero);
+            if (l.numero === 1) comecaTurno.add(l.faixa.id);
+        }
+    }
     return (
         <div>
             <Cabecalho
@@ -96,13 +104,18 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                         <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma aula no quadro. Gere um turno abaixo ou adicione as aulas uma a uma.</p>
                     )}
                     {quadro.faixas.map((f) => (
+                        <Fragment key={f.id}>
+                        {comecaTurno.has(f.id) && f.tipo === "aula" && (
+                            <div className="border-t border-border bg-muted/50 px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase first:border-t-0 md:first:border-t">
+                                {NOME_DO_TURNO[f.turno]}
+                            </div>
+                        )}
                         <div
-                            key={f.id}
                             className={cn(COLUNAS, "grid border-t border-border py-1.5 first:border-t-0 md:first:border-t", f.tipo === "intervalo" && "bg-muted/30", f === sobreposta && "bg-destructive/10")}
                         >
                             <div className="col-span-5 flex items-center gap-2 md:col-span-1">
                                 {f.tipo === "aula" ? (
-                                    <span className="font-medium">{++tempo}ª aula</span>
+                                    <span className="font-medium">{numeroDaAula.get(f.id)}ª aula</span>
                                 ) : (
                                     <>
                                         <Coffee className="size-4 shrink-0 text-muted-foreground" />
@@ -144,6 +157,7 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                                 )}
                             </div>
                         </div>
+                        </Fragment>
                     ))}
                 </div>
                 {sobreposta && (

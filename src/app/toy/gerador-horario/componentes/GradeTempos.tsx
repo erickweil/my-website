@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP } from "../horario-regras";
 import type { Dia, QuadroHorarios } from "../modelo/modelo";
-import { fimDaFaixa } from "../modelo/operacoes";
+import { NOME_DO_TURNO, fimDaFaixa, aulasPorTurno } from "../modelo/operacoes";
 
 export interface EstadoDaGrade {
     rotulo: string;
@@ -14,7 +14,10 @@ export interface EstadoDaGrade {
  * Grade dias × tempos do quadro de horários, em que cada célula está num de alguns estados
  * (tem aula / não tem; disponível / evitar / indisponível).
  *
- * Clicar e arrastar pinta várias células; clicar no dia ou no tempo pinta a coluna ou a linha.
+ * As aulas aparecem por turno, numeradas dentro dele (1ª, 2ª… do matutino; 1ª, 2ª… do vespertino).
+ *
+ * Clicar e arrastar pinta várias células; clicar no dia, no turno ou na aula pinta a coluna, o turno
+ * ou a linha.
  * Com `pincel`, pinta sempre com ele; sem, alterna entre os dois primeiros estados.
  */
 export function GradeTempos({
@@ -39,9 +42,9 @@ export function GradeTempos({
         return () => window.removeEventListener("pointerup", soltar);
     }, []);
 
-    let tempo = 0;
-    const linhas = quadro.faixas.map((faixa) => ({ faixa, tempo: faixa.tipo === "aula" ? ++tempo : 0 }));
-    const tempos = linhas.filter((l) => l.tempo > 0).map((l) => l.tempo);
+    const turnos = aulasPorTurno(quadro);
+    const temposDo = (t: (typeof turnos)[number]) => t.linhas.flatMap((l) => (l.tipo === "aula" ? [l.tempo] : []));
+    const tempos = turnos.flatMap(temposDo);
 
     /** Para um grupo de células: o pincel, ou "tudo ligado vira desligado, senão liga tudo". */
     const alvoDe = (celulas: [Dia, number][]) =>
@@ -69,68 +72,83 @@ export function GradeTempos({
                         ))}
                     </tr>
                 </thead>
-                <tbody>
-                    {linhas.map(({ faixa, tempo }, i) => {
-                        if (faixa.tipo === "intervalo") {
+                {turnos.map((turno) => (
+                    <tbody key={turno.turno}>
+                        <tr className="border-t border-border bg-muted/50">
+                            <th colSpan={quadro.dias.length + 1} className="p-0">
+                                <button
+                                    type="button"
+                                    title="Marcar ou desmarcar o turno inteiro"
+                                    className="w-full px-2 py-1 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase hover:bg-muted"
+                                    onClick={() => pintarGrupo(temposDo(turno).flatMap((t) => quadro.dias.map((d): [Dia, number] => [d, t])))}
+                                >
+                                    {NOME_DO_TURNO[turno.turno]}
+                                </button>
+                            </th>
+                        </tr>
+                        {turno.linhas.map((l) => {
+                            const faixa = l.faixa;
+                            if (l.tipo === "intervalo") {
+                                return (
+                                    <tr key={faixa.id} className="bg-muted/30 text-xs text-muted-foreground">
+                                        <td className="px-2 py-0.5">
+                                            <span className="hidden md:inline">{faixa.inicio}</span>
+                                        </td>
+                                        <td colSpan={quadro.dias.length} className="py-0.5 text-center">
+                                            {(faixa.tipo === "intervalo" && faixa.nome) || "Intervalo"} · {faixa.duracaoMin} min
+                                        </td>
+                                    </tr>
+                                );
+                            }
+                            const { tempo, numero } = l;
+                            const nome = `${numero}ª aula (${NOME_DO_TURNO[turno.turno].toLowerCase()})`;
                             return (
-                                <tr key={faixa.id} className="bg-muted/30 text-xs text-muted-foreground">
-                                    <td className="px-2 py-0.5">
-                                        <span className="hidden md:inline">{faixa.inicio}</span>
+                                <tr key={faixa.id} className="border-t border-border">
+                                    <td className="p-0">
+                                        <button
+                                            type="button"
+                                            title="Marcar ou desmarcar esta aula em todos os dias"
+                                            className="h-8 w-full px-2 text-left whitespace-nowrap hover:bg-muted"
+                                            onClick={() => pintarGrupo(quadro.dias.map((d) => [d, tempo]))}
+                                        >
+                                            <span className="font-medium">{numero}ª</span>{" "}
+                                            <span className="hidden text-xs text-muted-foreground md:inline">
+                                                {faixa.inicio}–{fimDaFaixa(faixa)}
+                                            </span>
+                                        </button>
                                     </td>
-                                    <td colSpan={quadro.dias.length} className="py-0.5 text-center">
-                                        {faixa.nome || "Intervalo"} · {faixa.duracaoMin} min
-                                    </td>
+                                    {quadro.dias.map((dia) => {
+                                        const estado = estadoDe(dia, tempo);
+                                        return (
+                                            <td key={dia} className="border-l border-border p-0">
+                                                <button
+                                                    type="button"
+                                                    aria-label={`${DIAS_SEMANA_MAP[dia]}, ${nome}: ${estados[estado]?.rotulo}`}
+                                                    title={estados[estado]?.rotulo}
+                                                    className={cn("block h-8 w-full transition-colors", estados[estado]?.classe)}
+                                                    onPointerDown={(e) => {
+                                                        if (e.button !== 0) return;
+                                                        const alvo = alvoDe([[dia, tempo]]);
+                                                        arrastando.current = alvo;
+                                                        onPintar([[dia, tempo]], alvo);
+                                                    }}
+                                                    onPointerEnter={(e) => {
+                                                        const alvo = arrastando.current;
+                                                        if (alvo && e.buttons === 1 && estado !== alvo) onPintar([[dia, tempo]], alvo);
+                                                    }}
+                                                    // Teclado: Enter e espaço disparam o clique sem pointerdown
+                                                    onClick={(e) => {
+                                                        if (e.detail === 0) pintarGrupo([[dia, tempo]]);
+                                                    }}
+                                                />
+                                            </td>
+                                        );
+                                    })}
                                 </tr>
                             );
-                        }
-                        const anterior = linhas.slice(0, i).findLast((l) => l.faixa.tipo === "aula")?.faixa;
-                        const mudouDeTurno = anterior?.tipo === "aula" && anterior.turno !== faixa.turno;
-                        return (
-                            <tr key={faixa.id} className={cn("border-t border-border", mudouDeTurno && "border-t-4")}>
-                                <td className="p-0">
-                                    <button
-                                        type="button"
-                                        title="Marcar ou desmarcar esta aula em todos os dias"
-                                        className="h-8 w-full px-2 text-left whitespace-nowrap hover:bg-muted"
-                                        onClick={() => pintarGrupo(quadro.dias.map((d) => [d, tempo]))}
-                                    >
-                                        <span className="font-medium">{tempo}ª</span>{" "}
-                                        <span className="hidden text-xs text-muted-foreground md:inline">
-                                            {faixa.inicio}–{fimDaFaixa(faixa)}
-                                        </span>
-                                    </button>
-                                </td>
-                                {quadro.dias.map((dia) => {
-                                    const estado = estadoDe(dia, tempo);
-                                    return (
-                                        <td key={dia} className="border-l border-border p-0">
-                                            <button
-                                                type="button"
-                                                aria-label={`${DIAS_SEMANA_MAP[dia]}, ${tempo}ª aula: ${estados[estado]?.rotulo}`}
-                                                title={estados[estado]?.rotulo}
-                                                className={cn("block h-8 w-full transition-colors", estados[estado]?.classe)}
-                                                onPointerDown={(e) => {
-                                                    if (e.button !== 0) return;
-                                                    const alvo = alvoDe([[dia, tempo]]);
-                                                    arrastando.current = alvo;
-                                                    onPintar([[dia, tempo]], alvo);
-                                                }}
-                                                onPointerEnter={(e) => {
-                                                    const alvo = arrastando.current;
-                                                    if (alvo && e.buttons === 1 && estado !== alvo) onPintar([[dia, tempo]], alvo);
-                                                }}
-                                                // Teclado: Enter e espaço disparam o clique sem pointerdown
-                                                onClick={(e) => {
-                                                    if (e.detail === 0) pintarGrupo([[dia, tempo]]);
-                                                }}
-                                            />
-                                        </td>
-                                    );
-                                })}
-                            </tr>
-                        );
-                    })}
-                </tbody>
+                        })}
+                    </tbody>
+                ))}
             </table>
         </div>
     );

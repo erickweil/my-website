@@ -458,27 +458,38 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
             fastrand::seed(self.rng.u64(..));
         }
 
+        // Sorteia os genes novos: em paralelo quando há pool (numa população grande, com várias
+        // ilhas, são dezenas de milhares de quadros). Cada indivíduo tem a sua semente, tirada do
+        // gerador do motor, então o resultado não depende do número de threads.
+        let paralelo = self.pode_usar_threads();
+        let problem = &self.problem;
+        let sortear = |semente: u64| {
+            fastrand::seed(semente);
+            problem.random_genes()
+        };
+        let sortear_varios = |rng: &mut fastrand::Rng, n: usize| -> Vec<P::Gene> {
+            let sementes: Vec<u64> = (0..n).map(|_| rng.u64(..)).collect();
+            if paralelo { sementes.par_iter().map(|&s| sortear(s)).collect() } else { sementes.iter().map(|&s| sortear(s)).collect() }
+        };
+
         // Re-inicializa os indivíduos existentes
         if reset_population {
-            for ind in &mut self.population {
-                ind.genes = self.problem.random_genes();
+            let novos = sortear_varios(&mut self.rng, self.population.len());
+            for (ind, genes) in self.population.iter_mut().zip(novos) {
+                ind.genes = genes;
                 ind.fitness = None;
                 ind.hash = None;
             }
         }
 
-        // Preenche o restante da população com novos indivíduos aleatórios
-        while self.population.len() < pop_size {
-            self.population.push(Individual {
-                genes: self.problem.random_genes(), 
-                fitness: None, 
-                hash: None,
-            });
-            self.offspring.push(Individual {
-                genes: self.problem.random_genes(), 
-                fitness: None, 
-                hash: None,
-            });
+        // Preenche o restante da população com novos indivíduos aleatórios. Os filhos só precisam
+        // de genes do tamanho certo (são sobrescritos antes de usados): ficam com uma cópia.
+        let faltam = pop_size.saturating_sub(self.population.len());
+        if faltam > 0 {
+            for genes in sortear_varios(&mut self.rng, faltam) {
+                self.offspring.push(Individual { genes: genes.clone(), fitness: None, hash: None });
+                self.population.push(Individual { genes, fitness: None, hash: None });
+            }
         }
         // Remove indivíduos extras se a população atual for maior que o novo tamanho
         self.population.truncate(pop_size);

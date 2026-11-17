@@ -61,7 +61,7 @@ export interface EntradaDoSolver {
     tempos: { inicio: number; fim: number; turno: string }[];
 }
 
-/** Uma ocorrência de regra de qualidade num horário válido (`Ocorrencia` em horario_qualidade.rs). */
+/** Uma ocorrência de regra de qualidade num horário (`Ocorrencia` em horario_qualidade.rs). */
 export interface OcorrenciaDeQualidade {
     regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno" | "janela";
     /** O professor (evitar, jornada, descanso). */
@@ -88,7 +88,7 @@ export interface ResultadoDoSolver {
     alguma_violacao: boolean;
     /** Mensagem para o usuário quando há violação ou não há solução. */
     mensagem: string | null;
-    /** Num quadro sem violação: onde ele deixa a desejar nas regras de qualidade. */
+    /** Onde o quadro deixa a desejar nas regras de qualidade (também quando há violação). */
     qualidade: OcorrenciaDeQualidade[];
     /** Pencilmark: nós visitados. GA: geração. Busca local: movimentos, somando as cadeias. */
     iter: number;
@@ -97,7 +97,7 @@ export interface ResultadoDoSolver {
     terminou: boolean;
 }
 
-/** Como a busca está indo: o worker manda a cada bloco de trabalho (cerca de 100 ms). */
+/** Como a busca está indo: o worker manda a cada bloco de trabalho (cerca de 250 ms). */
 export interface ProgressoDoSolver {
     /** Tempo desde o início da busca. */
     ms: number;

@@ -109,6 +109,9 @@ type Distribuicao =
 | Em blocos de N | `blocos`, N, não emenda | N, sim |
 | Em blocos de N, podendo emendar | `blocos`, N, emenda | N, não |
 
+Ao passar a agrupar, "emendar blocos" vem marcado. Com o bloco do tamanho de todas as aulas da
+semana só há um bloco, e a opção fica desativada (não se aplica).
+
 Para o integrado vão fazer falta, mais adiante, "no máximo N aulas por dia" e "espalhar na semana".
 Entram como campos opcionais de `Distribuicao` quando o solver souber tratá-los.
 
@@ -175,6 +178,10 @@ type Turno = "matutino" | "vespertino" | "noturno";
   É necessário porque professores e ambientes são compartilhados entre turnos.
 - **O número do tempo que o solver usa** é a posição da faixa entre as do tipo `aula`. Intervalo
   não ocupa tempo; ele marca uma **quebra** entre dois tempos vizinhos.
+- **Na tela, as aulas são numeradas por turno** (1ª, 2ª… do matutino; 1ª, 2ª… do vespertino), com
+  um cabeçalho por turno (`aulasPorTurno` em `operacoes.ts`). Vale para a tela do quadro, as grades
+  de disponibilidade e o horário gerado. O intervalo entre dois turnos (almoço) só aparece na tela
+  do quadro, onde é editado. O tempo do solver continua contando o dia todo.
 - **Dois tipos de quebra saem do modelo sem campo extra:** entre tempos de turnos diferentes
   (forte: um bloco nunca deveria atravessar) e intervalo dentro do turno (fraca: prefere não
   atravessar).
@@ -309,11 +316,17 @@ interface AreaDeTrabalho {
 - **Ambiente é um recurso de ocupação única**, igual a um professor: duas aulas não caem nele ao
   mesmo tempo. Só entram os ambientes usados por mais de uma turma (os outros não restringem).
 - **`tempos[]`:** a hora de início e de fim e o turno de cada aula do quadro.
-- **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. As de
-  qualidade só a busca local e o algoritmo genético consideram, com peso menor que qualquer obrigatória: horários
-  a evitar, jornada de até 10 horas no dia, 11 horas de descanso até o dia seguinte, e grupo de
-  aulas partido pelo intervalo ou pela troca de turno com uma aula sozinha. As três últimas usam
-  as horas do quadro. O resultado de qualquer método traz o que não foi atendido.
+- **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. A busca local
+  (o método padrão) e o algoritmo genético consideram as duas ao mesmo tempo, num custo só em que
+  todas as de qualidade somadas valem menos que uma obrigatória: horários a evitar, jornada de até
+  10 horas no dia, 11 horas de descanso até o dia seguinte, e aulas seguidas da mesma disciplina
+  que atravessam o intervalo ou a troca de turno deixando uma aula sozinha de um lado (qualquer
+  disciplina, com ou sem agrupamento; só encostar no intervalo não conta). As três últimas usam as
+  horas do quadro. O resultado de qualquer método traz o que não foi atendido, também quando ainda
+  há violação obrigatória.
+- **Sem limite de tempo:** a busca local e o genético rodam até atender a todas as regras
+  (custo 0) ou até o usuário interromper; a busca exata termina ao achar um horário ou provar que
+  não existe.
 
 **O que o solver ignora:** capacidade e número de alunos (conferidos na tela).
 
@@ -330,6 +343,10 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 - **Matriz:** componentes do período sem oferta na turma, e ofertas diferentes da matriz.
 - **Quadro:** faixas fora de ordem ou sobrepostas.
 - **Depois de gerar:** as regras de qualidade que o horário não atende (medidas pelo solver).
+- **Docentes:** as horas por semana nos horários disponíveis do professor (incluindo os a evitar):
+  a carga se ele estiver no campus em todos eles. Só informativo.
+- **Turmas e aulas:** só aula a mais que horários marcados é erro; aula a menos deixa horários
+  vagos (aviso, sem destaque vermelho).
 
 ---
 
