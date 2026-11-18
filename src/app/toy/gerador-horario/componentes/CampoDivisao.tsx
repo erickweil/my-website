@@ -1,50 +1,43 @@
 import { useState } from "react";
 import { ChevronDown, Plus, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { Divisao } from "../modelo/modelo";
 import { divisoesAceitas, personalizar, regrasDaDivisao, textoDasDivisoes } from "../modelo/divisao";
-import { Ajuda, CampoNumero } from "./comuns";
+import { Ajuda } from "./comuns";
+import { CampoNumero, CampoOpcional } from "./campos";
 
 type Regras = Extract<Divisao["pedacos"], { tipo: "regras" }>;
 
 /**
  * Como as aulas da disciplina se dividem em pedaços (trechos de aulas seguidas no mesmo dia). O
- * campo mostra só as divisões que a escolha permite; ao clicar, abre os limites. A preferência de
- * um pedaço por dia fica fora do popup, como uma opção à parte.
+ * campo mostra só as divisões que a escolha permite (e "espalhar", se marcado); ao clicar, abre os
+ * limites e a preferência de espalhar os pedaços pela semana.
  */
 export function CampoDivisao({ valor, aulasSemana, onChange }: { valor: Divisao; aulasSemana: number; onChange: (d: Divisao) => void }) {
     const divisoes = divisoesAceitas(regrasDaDivisao(valor, aulasSemana), aulasSemana);
     const nenhuma = aulasSemana > 0 && divisoes.length === 0;
     return (
-        <div className="space-y-1">
-            <Popover>
-                <PopoverTrigger
-                    type="button"
-                    title={nenhuma ? "Nenhuma divisão atende a estes limites" : `Permite: ${textoDasDivisoes(divisoes, 12)}`}
-                    className={cn(
-                        "flex h-8 w-full items-center gap-1 rounded-3xl border bg-input/30 px-2.5 text-left text-sm hover:border-foreground/30",
-                        nenhuma ? "border-destructive text-destructive" : "border-border",
-                    )}
-                >
-                    <span className="min-w-0 flex-1 truncate tabular-nums">
-                        {aulasSemana === 0 ? "—" : nenhuma ? "nenhuma possível" : textoDasDivisoes(divisoes, 3).replace(/ · e mais (\d+)$/, " +$1")}
-                    </span>
-                    <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] gap-3 p-3 text-sm">
-                    <EditorDeDivisao valor={valor} aulasSemana={aulasSemana} divisoes={divisoes} onChange={onChange} />
-                </PopoverContent>
-            </Popover>
-            {aulasSemana > 1 && (
-                <label className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground" title="Preferência: o horário tenta, mas pode não atender">
-                    <Checkbox className="size-3.5" checked={valor.espalhar} onCheckedChange={(v) => onChange({ ...valor, espalhar: v === true })} />
-                    um pedaço por dia
-                </label>
-            )}
-        </div>
+        <Popover>
+            <PopoverTrigger
+                type="button"
+                title={nenhuma ? "Nenhuma divisão atende a estes limites" : `Permite: ${textoDasDivisoes(divisoes, 12)}`}
+                className={cn(
+                    "flex h-8 w-full items-center gap-1 rounded-3xl border bg-input/30 px-2.5 text-left text-sm hover:border-foreground/30",
+                    nenhuma ? "border-destructive text-destructive" : "border-border",
+                )}
+            >
+                <span className="min-w-0 flex-1 truncate tabular-nums">
+                    {aulasSemana === 0 ? "—" : nenhuma ? "nenhuma possível" : textoDasDivisoes(divisoes, 3).replace(/ · e mais (\d+)$/, " +$1")}
+                    {valor.espalhar && aulasSemana > 1 && <span className="text-muted-foreground"> · espalhar</span>}
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] gap-3 p-3 text-sm">
+                <EditorDeDivisao valor={valor} aulasSemana={aulasSemana} divisoes={divisoes} onChange={onChange} />
+            </PopoverContent>
+        </Popover>
     );
 }
 
@@ -93,6 +86,13 @@ function EditorDeDivisao({ valor, aulasSemana, divisoes, onChange }: { valor: Di
                 </button>
             )}
 
+            {aulasSemana > 1 && (
+                <label className="flex items-center gap-2 border-t border-border pt-2" title="Preferência: o horário tenta pôr cada pedaço num dia diferente">
+                    <Checkbox checked={valor.espalhar} onCheckedChange={(v) => onChange({ ...valor, espalhar: v === true })} />
+                    Espalhar na semana
+                </label>
+            )}
+
             {aulasSemana > 1 &&
                 (divisoes.length === 0 ? (
                     <p className="rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">Nenhuma divisão atende a estes limites.</p>
@@ -113,35 +113,8 @@ function Intervalo({ rotulo, sufixo, min, max, onChange }: { rotulo: string; suf
             <span className="w-20 shrink-0">{rotulo}</span>
             <CampoNumero aria-label={`${rotulo}: mínimo`} className="h-8 w-12" min={1} max={30} valor={min} onChange={(n) => onChange(n, max)} />
             a
-            <CampoOpcional aria-label={`${rotulo}: máximo`} valor={max} onChange={(n) => onChange(min, n)} />
+            <CampoOpcional aria-label={`${rotulo}: máximo`} className="h-8 w-12" valor={max} onChange={(n) => onChange(min, n)} />
             <span className="text-muted-foreground">{sufixo}</span>
         </div>
-    );
-}
-
-/** Número inteiro positivo ou vazio (= sem limite). */
-function CampoOpcional({ valor, onChange, ...props }: { valor: number | null; onChange: (n: number | null) => void } & Omit<React.ComponentProps<"input">, "onChange" | "value">) {
-    const [texto, setTexto] = useState<string | null>(null);
-    return (
-        <Input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            max={30}
-            placeholder="∞"
-            title="Vazio = sem limite"
-            className="h-8 w-12 text-center"
-            value={texto ?? (valor === null ? "" : String(valor))}
-            onChange={(e) => {
-                setTexto(e.target.value);
-                if (e.target.value === "") onChange(null);
-                else {
-                    const n = Number(e.target.value);
-                    if (Number.isInteger(n) && n >= 1 && n <= 30) onChange(n);
-                }
-            }}
-            onBlur={() => setTexto(null)}
-            {...props}
-        />
     );
 }

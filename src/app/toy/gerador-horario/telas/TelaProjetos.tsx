@@ -9,7 +9,7 @@ import { extrairFormularioAntigo, projetoDoFormatoAntigo } from "../modelo/forma
 import type { AreaDeTrabalho, Id } from "../modelo/modelo";
 import { duplicarProjeto, novoProjeto } from "../modelo/operacoes";
 import { cn } from "@/lib/utils";
-import { Cabecalho, plural } from "../componentes/comuns";
+import { Cabecalho, baixarArquivo, nomeDeArquivo, plural } from "../componentes/comuns";
 import type { Contexto } from "../useAreaDeTrabalho";
 
 /** Dados salvos pela versão anterior da página. */
@@ -56,13 +56,7 @@ export function TelaProjetos({
     /** Baixa o projeto com os cursos, professores e ambientes que ele usa. */
     const exportar = (id: Id) => {
         const arquivo = exportarProjeto(area, id);
-        const nomeDoArquivo = arquivo.projetos[0].nome.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "projeto";
-        const url = URL.createObjectURL(new Blob([JSON.stringify(arquivo, null, 2)], { type: "application/json" }));
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `horario-${nomeDoArquivo}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+        baixarArquivo(`${nomeDeArquivo("horario", arquivo.projetos[0].nome)}.json`, JSON.stringify(arquivo, null, 2), "application/json");
     };
 
     const importar = async (file: File) => {

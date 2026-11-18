@@ -11,6 +11,7 @@ import {
     type Componente,
     type Curso,
     type Periodo,
+    type Professor,
     type Dia,
     type DocenteNoProjeto,
     type Faixa,
@@ -551,6 +552,13 @@ export const PALETA_CORES = [
     "#179fe9", "#ec2d2d", "#2b8a27", "#f79c15", "#3339f3", "#f17cc0",
     "#a75656", "#4e958a", "#a01e6a", "#bec02b", "#589140", "#1f9e78",
 ];
+
+/** Professor novo, com a próxima cor da paleta. */
+export const novoProfessor = (existentes: Professor[], nome = ""): Professor => ({
+    id: novoId(),
+    nome,
+    cor: PALETA_CORES[existentes.length % PALETA_CORES.length],
+});
 
 /** Marca ou desmarca um tempo. */
 export function alternarTempo(horarios: HorariosPorDia, dia: Dia, tempo: number): HorariosPorDia {

@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +7,12 @@ import { cn } from "@/lib/utils";
 import type { Cadastros, Id, ProjetoHorario, Turma } from "../modelo/modelo";
 import { aulasDaTurma, contarTempos, criarTurmaAvulsa, criarTurmaDePeriodo, nomeDoPeriodo, removerTurma, turnosDoQuadro } from "../modelo/operacoes";
 import { diagnosticar, type Pendencia } from "../modelo/diagnostico";
-import { Ajuda, AvisosDaTela, CampoNumero, Cabecalho, Selecao, Vazio, marcaDe, rotuloDoAmbiente } from "../componentes/comuns";
+import { Ajuda, Cabecalho, Vazio, rotuloDoAmbiente } from "../componentes/comuns";
+import { CampoNumero, Selecao } from "../componentes/campos";
+import { Abas } from "../componentes/escolha";
+import { BotaoAdicionar, GrupoDaLista, ItemDaLista, ListaComDetalhe } from "../componentes/lista";
+import { AvisosDaTela, marcaDe } from "../componentes/pendencias";
+import { BotaoRemover } from "../componentes/tabela";
 import { GradeTempos, LegendaDaGrade, pintarHorarios, type EstadoDaGrade } from "../componentes/GradeTempos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 import { AulasDaTurma, JA_NA_TELA } from "./AulasDaTurma";
@@ -58,56 +62,56 @@ export function TelaTurmas({
     const cursoDaTurma = cursos.find((c) => c.id === turma?.origem?.cursoId);
     const periodoDaTurma = cursoDaTurma?.periodos.find((p) => p.id === turma?.origem?.periodoId);
     const ambiente = ambientes.find((a) => a.id === turma?.ambienteId);
+    const superlotada = !!ambiente && ambiente.capacidade > 0 && turma.alunos > ambiente.capacidade;
     const [aulas, tempos] = turma ? [aulasDaTurma(projeto, turma.id), contarTempos(turma.horarios)] : [0, 0];
+
+    const novaTurma = (
+        <NovaTurma
+            cadastros={area.cadastros}
+            projeto={projeto}
+            onCriar={(novo, turmaId, comAulas) => {
+                mudarProjeto(() => novo);
+                abrirTurma(turmaId);
+                mudarAba(comAulas ? "aulas" : "horarios");
+            }}
+        />
+    );
 
     return (
         <div>
-            <Cabecalho
-                titulo="Turmas"
-                acoes={
-                    <NovaTurma
-                        cadastros={area.cadastros}
-                        projeto={projeto}
-                        onCriar={(novo, turmaId, comAulas) => {
-                            mudarProjeto(() => novo);
-                            abrirTurma(turmaId);
-                            mudarAba(comAulas ? "aulas" : "horarios");
-                        }}
-                    />
-                }
-            />
-
+            <Cabecalho titulo="Turmas" />
             <AvisosDaTela className="mb-4" pendencias={pendencias.filter((p) => !p.turmaId)} />
 
-            {!turma ? (
-                <Vazio>Nenhuma turma neste projeto. Crie a primeira em “+ Turma”.</Vazio>
-            ) : (
-                <>
-                    {/* Turmas por curso: no celular cada curso é uma fila que rola de lado */}
-                    <div className="mb-5 space-y-2">
+            <ListaComDetalhe
+                lista={
+                    <>
                         {grupos.map((g) => (
-                            <div key={g.titulo} className="flex min-w-0 gap-3 max-md:flex-col max-md:gap-1 md:items-baseline">
-                                {grupos.length > 1 && (
-                                    <p className="w-32 shrink-0 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase" title={g.titulo}>
-                                        {g.titulo}
-                                    </p>
-                                )}
-                                <div className="-mx-3 flex min-w-0 gap-1.5 overflow-x-auto px-3 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
-                                    {g.turmas.map((t) => (
-                                        <BotaoDaTurma
+                            <Fragment key={g.titulo}>
+                                {grupos.length > 1 && <GrupoDaLista titulo={g.titulo} />}
+                                {g.turmas.map((t) => {
+                                    const [aulasDela, temposDela] = [aulasDaTurma(projeto, t.id), contarTempos(t.horarios)];
+                                    return (
+                                        <ItemDaLista
                                             key={t.id}
-                                            nome={t.nome || "(sem nome)"}
-                                            ativo={t.id === turma.id}
-                                            marca={marcaDe(pendencias.filter((p) => p.turmaId === t.id))}
+                                            ativo={t.id === turma?.id}
                                             onClick={() => abrirTurma(t.id)}
+                                            titulo={t.nome || "(sem nome)"}
+                                            detalhe={`${aulasDela}/${temposDela}`}
+                                            alerta={aulasDela > temposDela}
+                                            marca={marcaDe(pendencias.filter((p) => p.turmaId === t.id))}
                                         />
-                                    ))}
-                                </div>
-                            </div>
+                                    );
+                                })}
+                            </Fragment>
                         ))}
-                    </div>
-
-                    <section className="space-y-4 rounded-2xl border border-border p-3 md:p-4">
+                        {novaTurma}
+                    </>
+                }
+            >
+                {!turma ? (
+                    <Vazio>Nenhuma turma neste projeto. Crie a primeira em “+ Turma”.</Vazio>
+                ) : (
+                    <div className="space-y-4">
                         <div className="flex flex-wrap items-end gap-3">
                             <div className="min-w-40 flex-1 space-y-1.5">
                                 <Label htmlFor="turma-nome">Nome</Label>
@@ -128,23 +132,17 @@ export function TelaTurmas({
                                     </Selecao>
                                 </div>
                             )}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                title="Remover turma"
-                                className="text-destructive hover:text-destructive"
-                                onClick={() => {
-                                    if (confirm(`Remover a turma “${turma.nome}” e as aulas dela?`)) mudarProjeto((p) => removerTurma(p, turma.id));
-                                }}
-                            >
-                                <Trash2 />
-                            </Button>
+                            <BotaoRemover
+                                titulo="Remover turma"
+                                confirmar={`Remover a turma “${turma.nome}” e as aulas dela?`}
+                                onRemover={() => mudarProjeto((p) => removerTurma(p, turma.id))}
+                            />
                         </div>
 
-                        {(cursoDaTurma || (ambiente && turma.alunos > ambiente.capacidade && ambiente.capacidade > 0)) && (
+                        {(cursoDaTurma || superlotada) && (
                             <p className="text-sm text-muted-foreground">
                                 {cursoDaTurma && <>{cursoDaTurma.nome}{periodoDaTurma && `, ${nomeDoPeriodo(cursoDaTurma, periodoDaTurma)}`}</>}
-                                {ambiente && ambiente.capacidade > 0 && turma.alunos > ambiente.capacidade && (
+                                {superlotada && (
                                     <span className="text-destructive">
                                         {cursoDaTurma && " · "}
                                         {ambiente.nome} tem {ambiente.capacidade} lugares e a turma tem {turma.alunos} alunos
@@ -155,25 +153,16 @@ export function TelaTurmas({
 
                         <AvisosDaTela pendencias={pendencias.filter((p) => p.turmaId === turma.id && !(p.codigo && JA_NA_TELA.includes(p.codigo)))} />
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
-                            <div className="flex gap-1" role="tablist" aria-label="Turma">
-                                {(["horarios", "aulas"] as const).map((a) => (
-                                    <button
-                                        key={a}
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={aba === a}
-                                        onClick={() => mudarAba(a)}
-                                        className={cn(
-                                            "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-                                            aba === a ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-                                        )}
-                                    >
-                                        {a === "horarios" ? "Horários" : "Aulas"}
-                                        <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">{a === "horarios" ? tempos : aulas}</span>
-                                    </button>
-                                ))}
-                            </div>
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <Abas
+                                rotulo="Turma"
+                                atual={aba}
+                                onEscolher={mudarAba}
+                                abas={[
+                                    { id: "horarios", rotulo: "Horários", contagem: tempos, alerta: tempos === 0 },
+                                    { id: "aulas", rotulo: "Aulas", contagem: aulas, alerta: aulas === 0 },
+                                ]}
+                            />
                             <ResumoDaTurma aulas={aulas} tempos={tempos} />
                         </div>
 
@@ -196,32 +185,10 @@ export function TelaTurmas({
                         ) : (
                             <AulasDaTurma {...contexto} turma={turma} />
                         )}
-                    </section>
-                </>
-            )}
+                    </div>
+                )}
+            </ListaComDetalhe>
         </div>
-    );
-}
-
-function BotaoDaTurma({ nome, ativo, marca, onClick }: { nome: string; ativo: boolean; marca: "erro" | "aviso" | null; onClick: () => void }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            aria-current={ativo ? "true" : undefined}
-            className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                ativo ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted",
-            )}
-        >
-            {nome}
-            {marca && (
-                <span
-                    className={cn("size-2 rounded-full", marca === "erro" ? "bg-destructive" : "bg-amber-500", ativo && "ring-2 ring-primary-foreground")}
-                    title={marca === "erro" ? "Tem pendências que impedem um horário completo" : "Tem avisos"}
-                />
-            )}
-        </button>
     );
 }
 
@@ -230,7 +197,7 @@ export function ResumoDaTurma({ aulas, tempos }: { aulas: number; tempos: number
     const diferenca = tempos - aulas;
     return (
         <p
-            className={cn("pb-2 text-sm tabular-nums", diferenca < 0 ? "font-medium text-destructive" : "text-muted-foreground")}
+            className={cn("text-sm tabular-nums", diferenca < 0 ? "font-medium text-destructive" : "text-muted-foreground")}
             title="Aulas por semana nas disciplinas × horários marcados para a turma"
         >
             {aulas} aulas em {tempos} horários
@@ -272,14 +239,11 @@ function NovaTurma({
     return (
         <Popover open={aberto} onOpenChange={setAberto}>
             <PopoverTrigger
-                type="button"
                 disabled={turnos.length === 0}
                 title={turnos.length === 0 ? "Antes, defina as aulas no quadro de horários" : undefined}
-                className="inline-flex h-9 items-center gap-1.5 rounded-4xl bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/85 disabled:opacity-50"
-            >
-                <Plus className="size-4" /> Turma
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 gap-3">
+                render={<BotaoAdicionar>Turma</BotaoAdicionar>}
+            />
+            <PopoverContent align="start" className="w-80 gap-3">
                 {cadastros.cursos.length > 0 && (
                     <div className="grid grid-cols-[1fr_auto] gap-2">
                         <label className="space-y-1 text-xs text-muted-foreground">

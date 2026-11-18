@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { Coffee, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { Coffee, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,11 @@ import { cn } from "@/lib/utils";
 import { DIAS_SEMANA_MAP } from "../horario-regras";
 import { DIAS, TURNOS, type Faixa, type Turno } from "../modelo/modelo";
 import { NOME_DO_TURNO, faixaSobreposta, fimDaFaixa, novoId, substituirTurno, trocarDias, trocarFaixas, turnoDaHora, aulasPorTurno } from "../modelo/operacoes";
-import { Ajuda, CampoNumero, Cabecalho, Selecao } from "../componentes/comuns";
+import { Ajuda, Cabecalho } from "../componentes/comuns";
+import { CampoNumero, Selecao } from "../componentes/campos";
+import { Pilula } from "../componentes/escolha";
+import { BotaoAdicionar } from "../componentes/lista";
+import { BotaoRemover, LinhaEditavel, RotuloEmpilhado, TabelaEditavel } from "../componentes/tabela";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
 /** Duração da última aula do quadro, ou 50 minutos se ainda não há aulas. */
@@ -16,11 +20,10 @@ const duracaoDaUltimaAula = (faixas: Faixa[]) => faixas.findLast((f) => f.tipo =
 const INICIO_DO_TURNO: Record<Turno, string> = { matutino: "07:30", vespertino: "13:30", noturno: "19:00" };
 
 /**
- * Colunas da tabela de faixas quando ela é larga; estreita, 6 colunas em que os campos se empilham.
- * Vai pela largura da tabela (container query), não da tela: com o menu lateral aberto a tabela
- * fica estreita mesmo num computador.
+ * Colunas da tabela de faixas: larga, uma linha por faixa; estreita, 6 colunas em que os campos se
+ * empilham (ver componentes/tabela.tsx).
  */
-const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 @2xl:grid-cols-[minmax(9rem,1fr)_7.5rem_6rem_4rem_9rem_2rem]";
+const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 @3xl:grid-cols-[minmax(9rem,1fr)_7.5rem_6rem_4rem_9rem_2rem]";
 
 export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
     const { quadro } = projeto;
@@ -65,18 +68,9 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                     {DIAS.map((dia) => {
                         const ativo = quadro.dias.includes(dia);
                         return (
-                            <button
-                                key={dia}
-                                type="button"
-                                aria-pressed={ativo}
-                                onClick={() => mudarProjeto((p) => trocarDias(p, ativo ? p.quadro.dias.filter((d) => d !== dia) : [...p.quadro.dias, dia]))}
-                                className={cn(
-                                    "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                                    ativo ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
-                                )}
-                            >
+                            <Pilula key={dia} ativa={ativo} onClick={() => mudarProjeto((p) => trocarDias(p, ativo ? p.quadro.dias.filter((d) => d !== dia) : [...p.quadro.dias, dia]))}>
                                 {DIAS_SEMANA_MAP[dia]}
-                            </button>
+                            </Pilula>
                         );
                     })}
                 </div>
@@ -84,88 +78,70 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
 
             <section className="mb-8">
                 <Label className="mb-2">Aulas e intervalos do dia</Label>
-
-                <div className="@container rounded-2xl border border-border">
-                    <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground @2xl:grid")}>
-                        <span>Faixa</span>
-                        <span>Início</span>
-                        <span>Duração (min)</span>
-                        <span>Fim</span>
-                        <span>Turno</span>
-                        <span />
-                    </div>
-                    {quadro.faixas.length === 0 && (
-                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma aula no quadro. Gere um turno abaixo ou adicione as aulas uma a uma.</p>
-                    )}
+                <TabelaEditavel
+                    empilha
+                    colunas={COLUNAS}
+                    cabecalho={<><span>Faixa</span><span>Início</span><span>Duração (min)</span><span>Fim</span><span>Turno</span><span /></>}
+                    vazio={quadro.faixas.length === 0 && "Nenhuma aula no quadro. Gere um turno abaixo ou adicione as aulas uma a uma."}
+                >
                     {quadro.faixas.map((f) => (
                         <Fragment key={f.id}>
-                        {comecaTurno.has(f.id) && f.tipo === "aula" && (
-                            <div className="border-t border-border bg-muted/50 px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase first:border-t-0 @2xl:first:border-t">
-                                {NOME_DO_TURNO[f.turno]}
-                            </div>
-                        )}
-                        <div
-                            className={cn(COLUNAS, "grid border-t border-border py-1.5 first:border-t-0 @2xl:first:border-t", f.tipo === "intervalo" && "bg-muted/30", f === sobreposta && "bg-destructive/10")}
-                        >
-                            <div className="col-span-5 flex items-center gap-2 @2xl:col-span-1">
-                                {f.tipo === "aula" ? (
-                                    <span className="font-medium">{numeroDaAula.get(f.id)}ª aula</span>
-                                ) : (
-                                    <>
-                                        <Coffee className="size-4 shrink-0 text-muted-foreground" />
-                                        <Input
-                                            aria-label="Nome do intervalo"
-                                            className="h-8 w-36"
-                                            value={f.nome}
-                                            onChange={(e) => mudarProjeto((p) => trocarFaixas(p, p.quadro.faixas.map((x) => (x.id === f.id ? { ...f, nome: e.target.value } : x))), true)}
-                                        />
-                                    </>
-                                )}
-                                <span className="text-xs text-muted-foreground @2xl:hidden">até {fimDaFaixa(f)}</span>
-                            </div>
-                            <div className="col-span-1 text-right @2xl:order-last">
-                                <Button
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    title="Remover"
-                                    className="text-destructive hover:text-destructive"
-                                    onClick={() => mudarProjeto((p) => trocarFaixas(p, p.quadro.faixas.filter((x) => x.id !== f.id)))}
-                                >
-                                    <Trash2 />
-                                </Button>
-                            </div>
-                            <div className="col-span-2 @2xl:col-span-1">
-                                <Input aria-label="Início" type="time" className="h-8" value={f.inicio} onChange={(e) => e.target.value && mudarFaixa(f.id, { inicio: e.target.value })} />
-                            </div>
-                            <div className="col-span-2 @2xl:col-span-1">
-                                <CampoNumero aria-label="Duração em minutos" title="Duração em minutos" className="h-8" min={1} max={300} valor={f.duracaoMin} onChange={(n) => mudarFaixa(f.id, { duracaoMin: n })} />
-                            </div>
-                            <div className="hidden text-muted-foreground tabular-nums @2xl:block">{fimDaFaixa(f)}</div>
-                            <div className="col-span-2 @2xl:col-span-1">
-                                {f.tipo === "aula" && (
-                                    <Selecao aria-label="Turno" className="h-8 w-full" value={f.turno} onChange={(e) => mudarFaixa(f.id, { turno: e.target.value as Turno })}>
-                                        {TURNOS.map((t) => (
-                                            <option key={t} value={t}>{NOME_DO_TURNO[t]}</option>
-                                        ))}
-                                    </Selecao>
-                                )}
-                            </div>
-                        </div>
+                            {comecaTurno.has(f.id) && f.tipo === "aula" && (
+                                <div className="border-t border-border bg-muted/50 px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{NOME_DO_TURNO[f.turno]}</div>
+                            )}
+                            <LinhaEditavel colunas={COLUNAS} className={cn(f.tipo === "intervalo" && "bg-muted/30", f === sobreposta && "bg-destructive/10")}>
+                                <div className="col-span-5 flex items-center gap-2 @3xl:col-span-1">
+                                    {f.tipo === "aula" ? (
+                                        <span className="font-medium">{numeroDaAula.get(f.id)}ª aula</span>
+                                    ) : (
+                                        <>
+                                            <Coffee className="size-4 shrink-0 text-muted-foreground" />
+                                            <Input
+                                                aria-label="Nome do intervalo"
+                                                className="h-8 w-36"
+                                                value={f.nome}
+                                                onChange={(e) => mudarProjeto((p) => trocarFaixas(p, p.quadro.faixas.map((x) => (x.id === f.id ? { ...f, nome: e.target.value } : x))), true)}
+                                            />
+                                        </>
+                                    )}
+                                    <span className="text-xs text-muted-foreground @3xl:hidden">até {fimDaFaixa(f)}</span>
+                                </div>
+                                <div className="@3xl:order-last">
+                                    <BotaoRemover titulo="Remover" onRemover={() => mudarProjeto((p) => trocarFaixas(p, p.quadro.faixas.filter((x) => x.id !== f.id)))} />
+                                </div>
+                                <div className="col-span-2 @3xl:col-span-1">
+                                    <RotuloEmpilhado>Início</RotuloEmpilhado>
+                                    <Input aria-label="Início" type="time" className="h-8" value={f.inicio} onChange={(e) => e.target.value && mudarFaixa(f.id, { inicio: e.target.value })} />
+                                </div>
+                                <div className="col-span-2 @3xl:col-span-1">
+                                    <RotuloEmpilhado>Minutos</RotuloEmpilhado>
+                                    <CampoNumero aria-label="Duração em minutos" className="h-8" min={1} max={300} valor={f.duracaoMin} onChange={(n) => mudarFaixa(f.id, { duracaoMin: n })} />
+                                </div>
+                                <div className="hidden text-muted-foreground tabular-nums @3xl:block">{fimDaFaixa(f)}</div>
+                                <div className="col-span-2 @3xl:col-span-1">
+                                    {f.tipo === "aula" && (
+                                        <>
+                                            <RotuloEmpilhado>Turno</RotuloEmpilhado>
+                                            <Selecao aria-label="Turno" className="h-8 w-full" value={f.turno} onChange={(e) => mudarFaixa(f.id, { turno: e.target.value as Turno })}>
+                                                {TURNOS.map((t) => (
+                                                    <option key={t} value={t}>{NOME_DO_TURNO[t]}</option>
+                                                ))}
+                                            </Selecao>
+                                        </>
+                                    )}
+                                </div>
+                            </LinhaEditavel>
                         </Fragment>
                     ))}
-                </div>
+                </TabelaEditavel>
                 {sobreposta && (
                     <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
                         <TriangleAlert className="size-4" /> A faixa das {sobreposta.inicio} começa antes de a anterior terminar.
                     </p>
                 )}
-                <div className="mt-3 flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => adicionar("aula")}>
-                        <Plus /> Aula
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => adicionar("intervalo")}>
-                        <Plus /> Intervalo
-                    </Button>
+                <div className="mt-2 flex gap-2">
+                    <BotaoAdicionar className="md:w-auto" onClick={() => adicionar("aula")}>Aula</BotaoAdicionar>
+                    <BotaoAdicionar className="md:w-auto" onClick={() => adicionar("intervalo")}>Intervalo</BotaoAdicionar>
                 </div>
             </section>
 

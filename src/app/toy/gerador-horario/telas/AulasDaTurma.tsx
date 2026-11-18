@@ -1,17 +1,19 @@
 import { useState } from "react";
-import { ChevronDown, Link2, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, Link2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { Componente, Curso, Id, Oferta, Professor, Turma } from "../modelo/modelo";
-import { atualizarPelaMatriz, alunosDaOferta, buscarComponente, componentesNaoOfertados, criarOferta, diferencasDaMatriz, juntarOfertas, manterDocentes, nomeDoPeriodo, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
-import { Ajuda, CampoNumero, RotuloMovel, Selecao, rotuloDoAmbiente, rotuloDoProfessor } from "../componentes/comuns";
+import { atualizarPelaMatriz, alunosDaOferta, novoProfessor, buscarComponente, componentesNaoOfertados, criarOferta, diferencasDaMatriz, juntarOfertas, manterDocentes, nomeDoPeriodo, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
+import { Ajuda, rotuloDoAmbiente, rotuloDoProfessor } from "../componentes/comuns";
+import { CampoNumero, Selecao } from "../componentes/campos";
+import { BotaoAdicionar } from "../componentes/lista";
+import { BotaoRemover, LinhaEditavel, RotuloEmpilhado, TabelaEditavel } from "../componentes/tabela";
 import type { Pendencia } from "../modelo/diagnostico";
 import { CampoDivisao } from "../componentes/CampoDivisao";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
-import { novoProfessor } from "./TelaProfessores";
 
 /** A aba "Aulas" da turma: as disciplinas dela, quem dá, quantas aulas, divisão e ambiente. */
 export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: ContextoDoProjeto & { turma: Turma }) {
@@ -50,20 +52,26 @@ export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: 
     const ambienteDaTurma = ambientes.find((a) => a.id === turma.ambienteId);
     const naoOfertadas = componentesNaoOfertados(projeto, turma, cursos);
     const incluir = (c?: Componente) => mudarProjeto((p) => criarOferta(p, turma.id, c).projeto);
-    const CAMPOS = { nome: "nome", aulasSemana: "aulas", divisao: "divisão" };
+    const CAMPOS = { nome: "nome", aulasSemana: "aulas" };
+    const colunas = cn(COLUNAS, comAmbiente && COM_AMBIENTE);
 
     return (
-        <div className="@container">
-            <div className="rounded-2xl border border-border">
-                <div className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground @4xl:grid")}>
-                    <span>Disciplina</span>
-                    <span>Professores</span>
-                    <span className="text-center">Aulas/sem.</span>
-                    <span title="Como as aulas se dividem em pedaços de aulas seguidas no mesmo dia">Divisão</span>
-                    {comAmbiente && <span>Ambiente</span>}
-                    <span />
-                </div>
-                {ofertas.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma disciplina nesta turma.</p>}
+        <div>
+            <TabelaEditavel
+                empilha
+                colunas={colunas}
+                cabecalho={
+                    <>
+                        <span>Disciplina</span>
+                        <span>Professores</span>
+                        <span className="text-center">Aulas/sem.</span>
+                        <span title="Como as aulas se dividem em pedaços de aulas seguidas no mesmo dia">Divisão</span>
+                        {comAmbiente && <span>Ambiente</span>}
+                        <span />
+                    </>
+                }
+                vazio={ofertas.length === 0 && "Nenhuma disciplina nesta turma ainda."}
+            >
                 {ofertas.map((o) => {
                     const componenteId = o.participacoes.find((x) => x.turmaId === turma.id)?.componenteId;
                     const componente = componenteId ? buscarComponente(cursos, componenteId) : undefined;
@@ -71,8 +79,8 @@ export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: 
                     const ambiente = ambientes.find((a) => a.id === (o.ambienteId ?? turma.ambienteId));
                     const alunos = alunosDaOferta(projeto, o);
                     return (
-                    <div key={o.id} className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "grid border-t border-border py-2 first:border-t-0 @4xl:first:border-t")}>
-                        <div className="col-span-5 @4xl:col-span-1">
+                    <LinhaEditavel key={o.id} colunas={colunas} className="py-2">
+                        <div className="col-span-5 @3xl:col-span-1">
                             <Input
                                 aria-label="Disciplina"
                                 className="h-8"
@@ -94,13 +102,11 @@ export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: 
                                 </p>
                             )}
                         </div>
-                        <div className="col-span-1 text-right @4xl:order-last">
-                            <Button size="icon-sm" variant="ghost" title="Remover disciplina da turma" className="text-destructive hover:text-destructive" onClick={() => remover(o)}>
-                                <Trash2 />
-                            </Button>
+                        <div className="col-span-1 grid @3xl:order-last">
+                            <BotaoRemover titulo="Remover disciplina da turma" onRemover={() => remover(o)} />
                         </div>
-                        <div className="col-span-6 @4xl:order-3 @4xl:col-span-1">
-                            <RotuloMovel>Professores</RotuloMovel>
+                        <div className="col-span-6 @3xl:order-3 @3xl:col-span-1">
+                            <RotuloEmpilhado>Professores</RotuloEmpilhado>
                             <SeletorProfessores
                                 professores={area.cadastros.professores}
                                 selecionados={o.professorIds}
@@ -112,17 +118,17 @@ export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: 
                                 }}
                             />
                         </div>
-                        <div className="col-span-2 @4xl:order-4 @4xl:col-span-1">
-                            <RotuloMovel>Aulas/sem.</RotuloMovel>
+                        <div className="col-span-2 @3xl:order-4 @3xl:col-span-1">
+                            <RotuloEmpilhado>Aulas/sem.</RotuloEmpilhado>
                             <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={o.aulasSemana} onChange={(n) => mudarOferta(o.id, { aulasSemana: n })} />
                         </div>
-                        <div className="col-span-4 @4xl:order-5 @4xl:col-span-1">
-                            <RotuloMovel>Divisão</RotuloMovel>
+                        <div className="col-span-4 @3xl:order-5 @3xl:col-span-1">
+                            <RotuloEmpilhado>Divisão</RotuloEmpilhado>
                             <CampoDivisao valor={o.divisao} aulasSemana={o.aulasSemana} onChange={(divisao) => mudarOferta(o.id, { divisao })} />
                         </div>
                         {comAmbiente && (
-                            <div className="col-span-6 @4xl:order-6 @4xl:col-span-1">
-                                <RotuloMovel>Ambiente</RotuloMovel>
+                            <div className="col-span-6 @3xl:order-6 @3xl:col-span-1">
+                                <RotuloEmpilhado>Ambiente</RotuloEmpilhado>
                                 <Selecao
                                     aria-label="Ambiente"
                                     className={cn("h-8 w-full", ambiente && alunos > ambiente.capacidade && "border-destructive text-destructive")}
@@ -137,16 +143,14 @@ export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: 
                                 </Selecao>
                             </div>
                         )}
-                    </div>
+                    </LinhaEditavel>
                     );
                 })}
-            </div>
+            </TabelaEditavel>
 
-            <div className="mt-3 space-y-3">
+            <div className="mt-2 space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="outline" onClick={() => incluir()}>
-                        <Plus /> Disciplina
-                    </Button>
+                    <BotaoAdicionar className="md:w-auto" onClick={() => incluir()}>Disciplina</BotaoAdicionar>
                     {cursos.length > 0 && <SeletorDaMatriz cursos={cursos} cursoInicial={turma.origem?.cursoId} onEscolher={incluir} />}
                 </div>
                 {naoOfertadas.length > 0 && (
@@ -207,10 +211,10 @@ export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: 
 /** Pendências que a aba já mostra no próprio campo: não entram na lista de avisos da turma. */
 export const JA_NA_TELA: NonNullable<Pendencia["codigo"]>[] = ["aulas-sobrando", "fora-da-matriz", "sem-professor"];
 
-/** Colunas da tabela de aulas no computador; no celular, 6 colunas em que os campos se empilham. */
-const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 @4xl:grid-cols-[minmax(9rem,1fr)_minmax(10rem,16rem)_5rem_12rem_2rem]";
+/** Colunas da tabela de aulas: larga, uma linha por disciplina; estreita, 6 colunas empilhadas (ver componentes/tabela.tsx). */
+const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 @3xl:grid-cols-[minmax(10rem,1fr)_minmax(9rem,14rem)_4.5rem_10rem_2rem]";
 /** Com ambientes cadastrados, a tabela ganha a coluna do ambiente. */
-const COM_AMBIENTE = "@4xl:grid-cols-[minmax(8rem,1fr)_minmax(9rem,14rem)_5rem_12rem_11rem_2rem]";
+const COM_AMBIENTE = "@3xl:grid-cols-[minmax(9rem,1fr)_minmax(8rem,12rem)_4.5rem_10rem_10rem_2rem]";
 
 /** "Da matriz…": inclui na turma uma disciplina de qualquer período de qualquer curso (oferta especial). */
 function SeletorDaMatriz({ cursos, cursoInicial, onEscolher }: { cursos: Curso[]; cursoInicial?: Id; onEscolher: (c: Componente) => void }) {
