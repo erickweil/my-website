@@ -6,12 +6,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import type { Cadastros, Id, ProjetoHorario, Turma } from "../modelo/modelo";
 import { aulasDaTurma, contarTempos, criarTurmaAvulsa, criarTurmaDePeriodo, nomeDoPeriodo, removerTurma, turnosDoQuadro } from "../modelo/operacoes";
-import { diagnosticar, type Pendencia } from "../modelo/diagnostico";
+import type { Pendencia } from "../modelo/diagnostico";
 import { Ajuda, Cabecalho, Vazio, rotuloDoAmbiente } from "../componentes/comuns";
 import { CampoNumero, Selecao } from "../componentes/campos";
 import { Abas } from "../componentes/escolha";
 import { BotaoAdicionar, GrupoDaLista, ItemDaLista, ListaComDetalhe } from "../componentes/lista";
-import { AvisosDaTela, marcaDe } from "../componentes/pendencias";
+import { AvisosDaTela, marcaDe, usePendencias } from "../componentes/pendencias";
 import { BotaoRemover } from "../componentes/tabela";
 import { GradeTempos, LegendaDaGrade, pintarHorarios, type EstadoDaGrade } from "../componentes/GradeTempos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
@@ -52,7 +52,7 @@ export function TelaTurmas({
 }: ContextoDoProjeto & { turmaAberta: Id | null; abrirTurma: (id: Id) => void; aba: AbaDaTurma; mudarAba: (aba: AbaDaTurma) => void }) {
     const { area, projeto, mudarProjeto } = contexto;
     const turma = projeto.turmas.find((t) => t.id === turmaAberta) ?? projeto.turmas[0];
-    const pendencias = diagnosticar(projeto, area.cadastros).filter(daTela);
+    const pendencias = usePendencias(projeto, area.cadastros).filter(daTela);
     const grupos = agruparPorCurso(projeto, area.cadastros);
 
     const mudar = (campos: Partial<Turma>, cosmetica = false) =>

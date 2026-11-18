@@ -4,6 +4,8 @@ use std::{collections::HashMap};
 use serde::Deserialize;
 
 use super::horario_divisao::{EntradaDivisao, RegraDivisao};
+use super::horario_inicial::EntradaAlocacao;
+use super::horario_qualidade::PesosQualidade;
 
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -174,6 +176,41 @@ pub struct EntradaHorario {
     /// que dependem de hora ficam desligadas.
     #[serde(default)]
     pub tempos: Vec<EntradaTempo>,
+    /// O horário de onde a busca parte, com as aulas fixas (ver `horario_inicial.rs`). Vazio = a
+    /// busca começa de um quadro sorteado.
+    #[serde(default)]
+    pub inicial: Vec<EntradaAlocacao>,
+    /// Configurações do projeto que mudam as regras.
+    #[serde(default)]
+    pub config: EntradaConfig,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct EntradaConfig {
+    /// O peso de cada regra, obrigatória ou de qualidade (ausente = o padrão).
+    #[serde(default)]
+    pub pesos: EntradaPesos,
+}
+
+/// Os pesos de todas as regras, como a página manda: os obrigatórios vão para
+/// [`super::PesosFitness`], os de qualidade para [`PesosQualidade`].
+#[derive(Deserialize, Debug, Clone)]
+#[serde(default)]
+pub struct EntradaPesos {
+    pub professor: f64,
+    pub conflito: f64,
+    pub unidas: f64,
+    pub agrupar: f64,
+    pub fixa: f64,
+    #[serde(flatten)]
+    pub qualidade: PesosQualidade,
+}
+
+impl Default for EntradaPesos {
+    fn default() -> Self {
+        let p = super::PesosFitness::PADRAO;
+        Self { professor: p.professor, conflito: p.conflito, unidas: p.unidas, agrupar: p.agrupar, fixa: p.fixa, qualidade: PesosQualidade::PADRAO }
+    }
 }
 
 #[derive(Clone)]
@@ -320,6 +357,12 @@ pub struct RegrasHorario {
     pub pesos: super::PesosFitness,
     /// Quais operadores o algoritmo genético usa (ver horario_genetic.rs).
     pub operadores: super::OperadoresGA,
+    /// Quanto pesa cada regra de qualidade (ver horario_qualidade.rs).
+    pub qualidade: PesosQualidade,
+    /// O quadro de onde a busca parte, se a página mandou um horário (ver horario_inicial.rs).
+    pub inicial: Option<QuadroHorario>,
+    /// As células com aula fixada e o valor que cada uma deve ter (ver horario_inicial.rs).
+    pub fixas: Vec<(usize, i32)>,
 }
 
 impl RegrasHorario {
@@ -398,8 +441,19 @@ impl RegrasHorario {
             turma.folga = (marcados - aulas).max(0);
         }
 
-        let mut regras = Self { turmas, disciplinas, professores, aulas, tempos, n_tempos, trechos: Vec::new(), trecho_de: Vec::new(), pesos: Default::default(), operadores: Default::default() };
+        let e = &entrada.config.pesos;
+        let mut regras = Self {
+            turmas, disciplinas, professores, aulas, tempos, n_tempos,
+            trechos: Vec::new(), trecho_de: Vec::new(),
+            pesos: super::PesosFitness { professor: e.professor, conflito: e.conflito, unidas: e.unidas, agrupar: e.agrupar, fixa: e.fixa, ..super::PesosFitness::PADRAO },
+            operadores: Default::default(),
+            qualidade: e.qualidade,
+            inicial: None, fixas: Vec::new(),
+        };
         regras.montar_trechos();
+        if !entrada.inicial.is_empty() {
+            regras.montar_inicial(&entrada.inicial);
+        }
         Ok(regras)
     }
 
@@ -551,6 +605,18 @@ mod tests {
         assert_eq!(r.professores[0].evitar.get(DiaSemana::Segunda, 1), 1);
         assert_eq!(r.professores[0].horarios.get(DiaSemana::Segunda, 1), 1);
         assert_eq!(r.professores[1].evitar.get(DiaSemana::Segunda, 1), 0);
+    }
+
+    #[test]
+    fn pesos_vem_da_configuracao() {
+        // Sem configuração: os padrões
+        let r = com("", "").unwrap();
+        assert_eq!(r.pesos, crate::horario::PesosFitness::PADRAO);
+        assert_eq!(r.qualidade, PesosQualidade::PADRAO);
+        // Só os que vieram mudam, obrigatórios e de qualidade no mesmo objeto
+        let r = com("\"recursos\": [\n", "\"config\": { \"pesos\": { \"professor\": 7, \"fixa\": 0, \"janela\": 40 } }, \"recursos\": [\n").unwrap();
+        assert_eq!((r.pesos.professor, r.pesos.fixa, r.pesos.conflito), (7.0, 0.0, crate::horario::PesosFitness::PADRAO.conflito));
+        assert_eq!((r.qualidade.janela, r.qualidade.evitar), (40.0, PesosQualidade::PADRAO.evitar));
     }
 
     #[test]

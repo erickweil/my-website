@@ -10,11 +10,11 @@
  * os outros são acrescentados.
  */
 
-import { VERSAO, type AreaDeTrabalho, type Id, type ProjetoHorario } from "./modelo.ts";
+import { VERSAO, type AreaDeTrabalho, type Cadastros, type DadosDoProjeto, type Id, type ProjetoHorario } from "./modelo.ts";
 import { novoId } from "./operacoes.ts";
 
 /** Os ids de cadastro que o projeto usa. */
-function referencias(projeto: ProjetoHorario) {
+function referencias(projeto: DadosDoProjeto) {
     const professores = new Set<Id>(projeto.docentes.map((d) => d.professorId));
     const ambientes = new Set<Id>();
     const cursos = new Set<Id>();
@@ -31,22 +31,21 @@ function referencias(projeto: ProjetoHorario) {
     return { professores, ambientes, cursos, componentes };
 }
 
+/** Os cursos, professores e ambientes que o projeto usa. */
+export function cadastrosUsados(cadastros: Cadastros, projeto: DadosDoProjeto): Cadastros {
+    const ref = referencias(projeto);
+    return {
+        cursos: cadastros.cursos.filter((c) => ref.cursos.has(c.id) || c.periodos.some((p) => p.componentes.some((x) => ref.componentes.has(x.id)))),
+        professores: cadastros.professores.filter((p) => ref.professores.has(p.id)),
+        ambientes: cadastros.ambientes.filter((a) => ref.ambientes.has(a.id)),
+    };
+}
+
 /** O arquivo de um projeto: ele e os cadastros que usa. */
 export function exportarProjeto(area: AreaDeTrabalho, projetoId: Id): AreaDeTrabalho {
     const projeto = area.projetos.find((p) => p.id === projetoId);
     if (!projeto) throw new Error(`Projeto ${projetoId} não encontrado`);
-    const ref = referencias(projeto);
-    const usaCurso = (c: AreaDeTrabalho["cadastros"]["cursos"][number]) =>
-        ref.cursos.has(c.id) || c.periodos.some((p) => p.componentes.some((x) => ref.componentes.has(x.id)));
-    return {
-        versao: VERSAO,
-        cadastros: {
-            cursos: area.cadastros.cursos.filter(usaCurso),
-            professores: area.cadastros.professores.filter((p) => ref.professores.has(p.id)),
-            ambientes: area.cadastros.ambientes.filter((a) => ref.ambientes.has(a.id)),
-        },
-        projetos: [projeto],
-    };
+    return { versao: VERSAO, cadastros: cadastrosUsados(area.cadastros, projeto), projetos: [projeto] };
 }
 
 const mesmoNome = (a: string, b: string) => a.trim().toLocaleLowerCase("pt-BR") === b.trim().toLocaleLowerCase("pt-BR");

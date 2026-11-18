@@ -161,12 +161,21 @@ const docenteNoProjeto = z.object({
     evitar: horariosPorDia,
 });
 
+/** Uma aula num dia e tempo do horário. */
+const aulaNoHorario = z.object({ ofertaId: id, dia, tempo: inteiro.min(1) });
+
 const horarioGerado = z.object({
     /** `revisao` do projeto quando foi gerado; menor que a atual = desatualizado. */
     revisao: inteiro,
     /** true = todas as aulas alocadas e nenhum problema. */
     completo: z.boolean(),
-    alocacoes: z.array(z.object({ ofertaId: id, dia, tempo: inteiro.min(1), fixada: z.boolean() })),
+    alocacoes: z.array(aulaNoHorario),
+    /**
+     * Aulas fixadas: cada uma deve ficar neste dia e tempo. Para o gerador é mais uma regra
+     * obrigatória, de peso alto (rust-wasm/src/horario/horario_inicial.rs): ele pode tirá-la do lugar
+     * se não achar coisa melhor, e então ela continua fixada aqui e aparece como problema.
+     */
+    fixadas: z.array(aulaNoHorario).default([]),
     problemas: z.array(z.object({
         mensagem: z.string(),
         ofertaId: id.optional(),
@@ -192,7 +201,8 @@ const horarioGerado = z.object({
     })).default([]),
 });
 
-const projetoHorario = z.object({
+/** O que define o horário de um projeto: quadro, turmas, aulas, docentes e o horário gerado. */
+const dadosDoProjeto = z.object({
     id,
     /** Ex.: "2027/1". */
     nome: z.string(),
@@ -203,6 +213,68 @@ const projetoHorario = z.object({
     horario: horarioGerado.nullable(),
     /** Sobe a cada edição dos dados que afetam o horário. */
     revisao: inteiro,
+});
+
+export const SOLVERS = ["local", "pencilmark", "genetic"] as const;
+
+/** As regras de qualidade que os solvers medem (`regra` em `horarioGerado.qualidade`). */
+export const REGRAS_DE_QUALIDADE = ["evitar", "jornada", "descanso", "intervalo", "turno", "janela", "espalhar"] as const;
+
+/** As regras obrigatórias que têm peso no custo da busca local e do genético. */
+export const REGRAS_OBRIGATORIAS = ["professor", "conflito", "unidas", "agrupar", "fixa"] as const;
+
+/**
+ * O peso padrão de cada regra: o que uma violação (obrigatória) ou uma ocorrência (qualidade; na
+ * jornada e no descanso, uma hora) soma ao custo. Os mesmos de `PesosFitness::PADRAO` e
+ * `PesosQualidade::PADRAO` (rust-wasm/src/horario/horario_genetic.rs e horario_qualidade.rs).
+ */
+export const PESOS_PADRAO: Record<Regra, number> = {
+    professor: 100,
+    conflito: 50,
+    unidas: 30,
+    agrupar: 20,
+    fixa: 100,
+    evitar: 0.002,
+    jornada: 0.004,
+    descanso: 0.003,
+    intervalo: 0.001,
+    turno: 0.002,
+    janela: 0.003,
+    espalhar: 0.001,
+};
+
+/** Como gerar o horário do projeto (tela de configuração). */
+const configDoProjeto = z.object({
+    /** Método que a tela do horário usa. */
+    solver: z.enum(SOLVERS).default("local"),
+    /** Algoritmo genético: várias populações em paralelo (modelo de ilhas). */
+    ilhas: z.boolean().default(true),
+    /** Busca local: buscas em paralelo; 0 = automático (metade dos núcleos, até 8). */
+    cadeias: inteiro.min(0).max(16).default(0),
+    /**
+     * O peso de cada regra no custo da busca local e do genético (0 = desligada). Regra ausente =
+     * [`PESOS_PADRAO`].
+     */
+    pesos: z.partialRecord(z.enum([...REGRAS_OBRIGATORIAS, ...REGRAS_DE_QUALIDADE]), z.number().min(0)).default({}),
+});
+
+/**
+ * Um horário salvo, com tudo o que é preciso para mostrá-lo e voltar a ele mesmo que o projeto e os
+ * cadastros mudem depois: os dados do projeto naquele momento e os cadastros que ele usava.
+ */
+const versaoDoHorario = z.object({
+    id,
+    nome: z.string(),
+    /** Data e hora (ISO). */
+    criadaEm: z.string(),
+    projeto: dadosDoProjeto,
+    cadastros,
+});
+
+const projetoHorario = dadosDoProjeto.extend({
+    config: configDoProjeto.prefault({}),
+    /** Horários salvos, do mais antigo ao mais novo. */
+    versoes: z.array(versaoDoHorario).default([]),
 });
 
 /** Versão do formato. A 2 tinha `distribuicao` no lugar de `divisao`; é convertida ao ler (armazenamento.ts). */
@@ -232,7 +304,20 @@ export type Turma = z.infer<typeof turma>;
 export type Oferta = z.infer<typeof oferta>;
 export type DocenteNoProjeto = z.infer<typeof docenteNoProjeto>;
 export type HorarioGerado = z.infer<typeof horarioGerado>;
+export type AulaNoHorario = z.infer<typeof aulaNoHorario>;
 export type ProjetoHorario = z.infer<typeof projetoHorario>;
+export type DadosDoProjeto = z.infer<typeof dadosDoProjeto>;
+export type ConfigDoProjeto = z.infer<typeof configDoProjeto>;
+export type VersaoDoHorario = z.infer<typeof versaoDoHorario>;
+export type RegraDeQualidade = (typeof REGRAS_DE_QUALIDADE)[number];
+export type RegraObrigatoria = (typeof REGRAS_OBRIGATORIAS)[number];
+export type Regra = RegraObrigatoria | RegraDeQualidade;
+
+/** O peso de uma regra no projeto (o padrão, se não foi mexido). */
+export const pesoDaRegra = (config: ConfigDoProjeto, regra: Regra) => config.pesos[regra] ?? PESOS_PADRAO[regra];
+export type Solver = (typeof SOLVERS)[number];
+
+export const configPadrao = (): ConfigDoProjeto => configDoProjeto.parse({});
 export type AreaDeTrabalho = z.infer<typeof esquemaAreaDeTrabalho>;
 
 export const areaDeTrabalhoVazia = (): AreaDeTrabalho => ({

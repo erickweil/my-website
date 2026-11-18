@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { carregar, lerAreaDeTrabalho, salvar } from "./armazenamento.ts";
 import { DIVISAO_LIVRE, DIVISAO_PADRAO, divisoesAceitas, personalizar, regrasDaDivisao } from "./divisao.ts";
-import { areaDeTrabalhoVazia, type Curso, type Divisao, type ProjetoHorario } from "./modelo.ts";
+import { PESOS_PADRAO, areaDeTrabalhoVazia, type Curso, type Divisao, type ProjetoHorario } from "./modelo.ts";
 import {
     alunosDaOferta,
     ambienteDaOferta,
@@ -33,7 +33,7 @@ import {
     trocarDias,
     trocarFaixas,
 } from "./operacoes.ts";
-import { doSolver, paraSolver } from "./para-solver.ts";
+import { doSolver, paraSolver, pontoDePartida } from "./para-solver.ts";
 import { lerInstanciaDoSolver, projetoDaFaculdade } from "./testes/instancia-antiga.ts";
 
 const curso = (): Curso => ({
@@ -230,7 +230,42 @@ test("paraSolver: aulas por id, com as turmas, os professores e o ambiente dispu
             { inicio: 1140, fim: 1185, turno: "noturno" },
             { inicio: 1185, fim: 1230, turno: "noturno" },
         ],
+        // Sem horário: a busca parte de um quadro sorteado
+        inicial: [],
+        // Todos os pesos, com os padrões
+        config: { pesos: PESOS_PADRAO },
     });
+});
+
+test("paraSolver: os pesos da configuração, com o padrão nas regras não mexidas", () => {
+    const p = novoProjeto("P");
+    const { pesos } = paraSolver({ ...p, config: { ...p.config, pesos: { janela: 5, professor: 0 } } }).config!;
+    assert.deepEqual(pesos, { ...PESOS_PADRAO, janela: 5, professor: 0 });
+});
+
+test("pontoDePartida: as fixadas primeiro, e o resto do horário se ele está em dia", () => {
+    const t = criarTurmaAvulsa(novoProjeto("P"), { nome: "A" });
+    const o = criarOferta(t.projeto, t.turma.id);
+    const aula = (dia: "seg" | "ter", tempo: number) => ({ ofertaId: o.oferta.id, dia, tempo });
+    // A fixada da terça foi tirada do lugar: está fixada, mas não está entre as alocações
+    const alocacoes = [aula("seg", 1), aula("seg", 2)];
+    const fixadas = [aula("seg", 2), aula("ter", 1)];
+    const p = { ...o.projeto, revisao: 4, horario: { revisao: 4, completo: false, alocacoes, fixadas, problemas: [], qualidade: [] } };
+    assert.equal(pontoDePartida({ ...p, horario: null }).length, 0);
+    const partida = pontoDePartida(p);
+    assert.deepEqual(partida, [
+        { ...aula("seg", 2), fixada: true },
+        { ...aula("ter", 1), fixada: true },
+        { ...aula("seg", 1), fixada: false },
+    ]);
+    // Regras mudaram: só as fixadas
+    assert.deepEqual(pontoDePartida({ ...p, revisao: 5 }), partida.slice(0, 2));
+    // Vai para o solver com a marca de fixa
+    assert.deepEqual(paraSolver(p, partida).inicial, [
+        { aula: o.oferta.id, dia: "seg", tempo: 2, fixa: true },
+        { aula: o.oferta.id, dia: "ter", tempo: 1, fixa: true },
+        { aula: o.oferta.id, dia: "seg", tempo: 1, fixa: false },
+    ]);
 });
 
 test("paraSolver: o quadro real, importado do formato antigo, dá a instância que o Rust testa", () => {
@@ -277,7 +312,8 @@ test("doSolver: alocações e problemas voltam com os ids do projeto", () => {
     assert.deepEqual(horario, {
         revisao: 7,
         completo: false,
-        alocacoes: [{ ofertaId: "oferta-1", dia: "seg", tempo: 1, fixada: false }],
+        alocacoes: [{ ofertaId: "oferta-1", dia: "seg", tempo: 1 }],
+        fixadas: [],
         problemas: [
             { mensagem: "Não foi possível completar" },
             { mensagem: "Este espaço não deveria estar vazio", ofertaId: undefined, turmaId: "turma-a", dia: "seg", tempo: 2 },
@@ -305,6 +341,13 @@ test("doSolver: alocações e problemas voltam com os ids do projeto", () => {
     // Sem quadro nenhum: incompleto, com a mensagem do solver
     const semQuadro = doSolver(p, { ...base, alocacoes: null, alguma_violacao: true, mensagem: "Sem solução" });
     assert.deepEqual([semQuadro.completo, semQuadro.alocacoes, semQuadro.problemas], [false, [], [{ mensagem: "Sem solução" }]]);
+
+    // As fixações do horário atual continuam, mesmo fora do lugar; as de aulas que não existem mais, não
+    const t = criarTurmaAvulsa(p, { nome: "A" });
+    const o = criarOferta(t.projeto, t.turma.id);
+    const fixadas = [{ ofertaId: o.oferta.id, dia: "ter" as const, tempo: 1 }, { ofertaId: "apagada", dia: "seg" as const, tempo: 1 }];
+    const comFixadas = { ...o.projeto, horario: { ...horario, fixadas } };
+    assert.deepEqual(doSolver(comFixadas, { ...base, alocacoes: [{ aula: o.oferta.id, dia: "seg", tempo: 1 }], alguma_violacao: true }).fixadas, [fixadas[0]]);
 });
 
 test("armazenamento: grava, lê e recusa conteúdo inválido sem apagar", () => {
@@ -325,6 +368,18 @@ test("armazenamento: grava, lê e recusa conteúdo inválido sem apagar", () => 
     assert.match(ruim.ok ? "" : ruim.erro, /capacidade/);
     assert.equal(lerAreaDeTrabalho("{").ok, false);
     assert.equal(lerAreaDeTrabalho(JSON.stringify({ versao: 1 })).ok, false);
+
+    // Salvo antes dos pesos e das fixações à parte: os multiplicadores e a marca nas alocações são descartados
+    const [projeto] = area.projetos;
+    const antigo = {
+        ...projeto,
+        config: { ...projeto.config, qualidade: { janela: 2 } },
+        horario: { revisao: 0, completo: true, alocacoes: [{ ofertaId: "x", dia: "seg", tempo: 1, fixada: true }], problemas: [], qualidade: [] },
+    };
+    const lido = lerAreaDeTrabalho(JSON.stringify({ ...area, projetos: [antigo] }));
+    assert.ok(lido.ok);
+    const p = lido.area.projetos[0];
+    assert.deepEqual([p.config.pesos, "qualidade" in p.config, p.horario?.alocacoes, p.horario?.fixadas], [{}, false, [{ ofertaId: "x", dia: "seg", tempo: 1 }], []]);
 });
 
 test("armazenamento: o formato 2 (distribuicao) é convertido para a divisão em pedaços", () => {
@@ -375,7 +430,7 @@ test("editar o quadro renumera os tempos sem perder as marcações", () => {
     p = manterDocentes({ ...o.projeto, ofertas: [{ ...o.oferta, professorIds: ["p1"] }] });
     p.docentes[0].disponibilidade = { seg: [1, 4, 5] };
     p.docentes[0].evitar = { seg: [5] };
-    p.horario = { revisao: 0, completo: true, alocacoes: [], problemas: [], qualidade: [] };
+    p.horario = { revisao: 0, completo: true, alocacoes: [], fixadas: [], problemas: [], qualidade: [] };
 
     // Só mudar a hora de uma aula não renumera nada e mantém o horário gerado
     const soHora = trocarFaixas(p, p.quadro.faixas.map((f, i) => (i === 0 ? { ...f, inicio: "07:00" } : f)));

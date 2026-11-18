@@ -232,3 +232,56 @@ espalhada, em outra ordem: com 2 cadeias entram 5000 e 2500, o melhor par da rod
    ~5,3 M/s sozinha (a mesma disputa de memória vista na população do genético). Num computador
    comum o ganho das cadeias deve ser maior que o medido aqui.
 4. **Aplicado:** `FATORES_DA_LISTA = [1, 0,5, 0,2, 4]`.
+
+## 9. Aulas fixadas (18/11/2026)
+
+A página permite fixar aulas no horário e continuar a busca a partir dele
+(`rust-wasm/src/horario/horario_inicial.rs`). Medido no técnico real v4 (19 turmas, 614 aulas), uma
+cadeia, 10 sementes, 20 s por semente (`examples/bench_busca_local.rs` e `examples/bench_fixadas.rs`;
+saídas em `~/claude/ferramentas-frontend/bench/`).
+
+| Cenário | Válidos | Mediana até válido |
+| :--- | :--- | :--- |
+| Motor antigo (commit `3193399`), sem fixadas | 9/10 | 2,35 s |
+| Motor com fixadas, sem fixadas | 9/10 | 2,30 s |
+| 10% fixadas de um quadro com violações (aquecimento de 2 s), resto ao acaso | 3/10 | 8,2 s |
+| 10% fixadas de um quadro com violações, continuando do quadro inteiro | 4/10 | 0,95 s |
+| 10% fixadas de um horário válido, resto ao acaso (aula a aula) | 3/9 | 5,3 s |
+| 10% fixadas de um horário válido, resto montado em blocos, rígidas | 6/9 | 3,0 s |
+| Idem, fixadas por peso 20 | 1/9 | 2,3 s |
+| Idem, fixadas por peso 100 | 5/9 | 2,0 s |
+| **Final** (peso 100, único modo), sem fixadas | 9/10 | 2,41 s (mesmos movimentos do antigo) |
+| **Final**, 10% fixadas de um horário válido, resto em blocos | 5/9 | 2,2 s |
+
+- Sem fixadas, o motor faz exatamente os mesmos movimentos que o antigo (mesmas sementes, mesmo
+  número de movimentos): as fixadas não custam nada quando não há nenhuma.
+- Fixar aulas de um quadro que ainda tem violações (bloco partido, por exemplo) pode tornar o
+  problema impossível: a busca fica presa em 2 a 6 violações.
+- O que mais pesava era a partida: completar o quadro aula a aula começava de um custo três vezes
+  maior. Agora o resto é montado em blocos, como no quadro sorteado (`completar_com_blocos`).
+- Mesmo de um horário válido, 10% fixadas deixam o problema mais difícil que o sem fixadas: o resto
+  precisa ser compatível com aquelas posições.
+
+**Decisão:** as fixadas são mais uma regra obrigatória, com peso alto (`PesosFitness::fixa = 100`, o
+mesmo do horário indisponível), e não uma proibição. A busca local e o genético funcionam do mesmo
+jeito com ou sem fixadas, sem nenhum movimento proibido: as fixadas ficam no lugar porque é onde o
+custo é menor, e o late acceptance pode tirá-las do lugar no caminho se isso levar a um horário
+melhor. Um horário só é válido com todas no lugar; uma que termina fora aparece como problema na
+célula dela, e a página guarda as fixações à parte das alocações, então a próxima geração tenta de
+novo. Peso 100 e rígidas ficaram no mesmo nível (5/9 contra 6/9, dentro do ruído com 9 sementes);
+peso 20 não devolveu as fixadas. O modo rígido foi removido para não haver dois modos de operação.
+
+## 10. Pesos na mão (18/11/2026)
+
+A busca local e o genético usam o mesmo custo, então a tela Configuração passou a mostrar o peso de
+cada regra, obrigatória ou de qualidade, como número (antes: só multiplicadores da qualidade,
+"Normal", "Alta"...). O usuário tem controle total: nada impede um peso de qualidade maior que um
+obrigatório.
+
+- A escala automática da qualidade (a soma de todas as penalidades de qualidade, no pior caso,
+  abaixo da menor obrigatória) saiu. Ela valia de 0,0003 (`grande`, técnico v4) a 0,002
+  (`faculdade-anonimizado`) por unidade de peso relativo.
+- Os padrões da qualidade são os pesos relativos antigos vezes 0,001 (`PesosQualidade::PADRAO`); os
+  obrigatórios não mudaram (`PesosFitness::PADRAO`).
+- Técnico v4, sem fixadas, 10 sementes, 20 s: **10/10** válidos, mediana 2,23 s (antes 9/10,
+  2,41 s), e a mesma qualidade no fim (25 a 27 aulas sozinhas no intervalo, antes 24 a 26).

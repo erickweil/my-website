@@ -5,6 +5,8 @@
  * entrada a partir do projeto (modelo/para-solver.ts).
  */
 
+import type { Regra } from "./modelo/modelo.ts";
+
 export const TODOS_OS_DIAS = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"] as const;
 export type HorarioDia = typeof TODOS_OS_DIAS[number];
 
@@ -74,6 +76,15 @@ export interface EntradaDoSolver {
      * qualidade de jornada, descanso e intervalo saem daqui.
      */
     tempos: { inicio: number; fim: number; turno: string }[];
+    /**
+     * O horário de onde a busca parte (busca local e genético), com as aulas fixadas (`fixa`: regra
+     * obrigatória de ficar ali). Vazio = quadro sorteado. Ver rust-wasm/src/horario/horario_inicial.rs.
+     */
+    inicial?: { aula: string; dia: HorarioDia; tempo: number; fixa: boolean }[];
+    config?: {
+        /** O peso de cada regra no custo (ver `PESOS_PADRAO` em modelo/modelo.ts). */
+        pesos: Record<Regra, number>;
+    };
 }
 
 /** Uma ocorrência de regra de qualidade num horário (`Ocorrencia` em horario_qualidade.rs). */

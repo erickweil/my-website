@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import type { WorkerResponseMsg } from "@/lib/workerRace";
 import type { HorarioWorkerTaskValue, ProgressoDoSolver, SolverHorario } from "../../horario-regras";
 import type { HorarioGerado, ProjetoHorario } from "../../modelo/modelo";
-import { doSolver, paraSolver } from "../../modelo/para-solver";
+import { doSolver, paraSolver, pontoDePartida } from "../../modelo/para-solver";
 import { alocacoesNovas } from "./quadros";
 
 export interface Progresso {
@@ -33,7 +33,12 @@ export function useGeracao(salvarHorario: (horario: HorarioGerado) => void) {
     const parar = useRef<(() => void) | null>(null);
     useEffect(() => () => parar.current?.(), []);
 
-    const gerar = (projeto: ProjetoHorario, solver: SolverHorario, ilhas: boolean) => {
+    /**
+     * Gera com o método escolhido e a configuração do projeto, partindo do horário atual (ver
+     * [`pontoDePartida`]), com as aulas fixadas como regra obrigatória.
+     */
+    const gerar = (projeto: ProjetoHorario, solver: SolverHorario) => {
+        const inicial = pontoDePartida(projeto);
         setErro(null);
         setParcial(null);
         setProgresso(null);
@@ -73,7 +78,8 @@ export function useGeracao(salvarHorario: (horario: HorarioGerado) => void) {
             encerrar();
         };
         parar.current = encerrar;
-        worker.postMessage({ action: "solucionarQuadroHorario", solver, entrada: paraSolver(projeto), ilhas });
+        const { ilhas, cadeias } = projeto.config;
+        worker.postMessage({ action: "solucionarQuadroHorario", solver, entrada: paraSolver(projeto, inicial), ilhas, cadeias });
     };
 
     return { gerando, parcial, progresso, novas, erro, gerar, parar: () => parar.current?.() };

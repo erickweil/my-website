@@ -7,6 +7,7 @@ import { DIVISAO_PADRAO, mesmaDivisao } from "./divisao.ts";
 import {
     DIAS,
     DURACAO_AULA_PADRAO,
+    configPadrao,
     type AreaDeTrabalho,
     type Componente,
     type Curso,
@@ -293,6 +294,8 @@ export function novoProjeto(nome: string): ProjetoHorario {
         docentes: [],
         horario: null,
         revisao: 0,
+        config: configPadrao(),
+        versoes: [],
     };
 }
 
@@ -435,7 +438,7 @@ export const turmasDoProfessor = (projeto: ProjetoHorario, professorId: Id) =>
     new Set(projeto.ofertas.filter((o) => o.professorIds.includes(professorId)).flatMap((o) => o.participacoes.map((p) => p.turmaId))).size;
 
 /** Ambiente em que a oferta acontece: o dela, ou o padrão da primeira turma. */
-export function ambienteDaOferta(projeto: ProjetoHorario, oferta: Oferta): Id | null {
+export function ambienteDaOferta(projeto: Pick<ProjetoHorario, "turmas">, oferta: Oferta): Id | null {
     if (oferta.ambienteId) return oferta.ambienteId;
     const turma = projeto.turmas.find((t) => t.id === oferta.participacoes[0]?.turmaId);
     return turma?.ambienteId ?? null;
@@ -524,12 +527,14 @@ export const aulasDoProfessor = (projeto: ProjetoHorario, professorId: Id) =>
     projeto.ofertas.filter((o) => o.professorIds.includes(professorId)).reduce((soma, o) => soma + o.aulasSemana, 0);
 
 /** Cópia do projeto (para começar um período letivo a partir de outro), sem o horário gerado. */
+/** Projeto novo com os mesmos dados e configuração; sem o horário gerado e sem as versões salvas. */
 export const duplicarProjeto = (projeto: ProjetoHorario, nome: string): ProjetoHorario => ({
     ...structuredClone(projeto),
     id: novoId(),
     nome,
     horario: null,
     revisao: 0,
+    versoes: [],
 });
 
 /** Tira o professor do cadastro e de todas as ofertas, em todos os projetos. */

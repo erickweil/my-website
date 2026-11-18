@@ -23,8 +23,9 @@
 //! Jornada, descanso e intervalo dependem das horas das aulas (`EntradaHorario::tempos`); sem elas
 //! ficam desligadas. Ambientes não têm jornada, descanso nem horários a evitar.
 //!
-//! Todas as penalidades de qualidade somadas valem menos que a menor penalidade obrigatória (ver
-//! [`TabelasQualidade::escala`]): uma regra obrigatória nunca é trocada por qualidade.
+//! Cada ocorrência custa o peso da regra ([`PesosQualidade`]), na mesma unidade dos pesos das
+//! regras obrigatórias ([`super::PesosFitness`]). Os padrões são pequenos perto das obrigatórias,
+//! mas nada impede um peso de qualidade maior que um obrigatório: o usuário tem controle total.
 
 use serde::Serialize;
 
@@ -35,14 +36,35 @@ pub const JORNADA_MAXIMA_MIN: i32 = 10 * 60;
 /// Descanso mínimo entre o fim de um dia e o começo do seguinte.
 pub const DESCANSO_MINIMO_MIN: i32 = 11 * 60;
 
-// Pesos relativos entre as regras de qualidade (a escala em relação às obrigatórias é calculada).
-const PESO_JORNADA_POR_HORA: f64 = 4.0;
-const PESO_DESCANSO_POR_HORA: f64 = 3.0;
-const PESO_EVITAR: f64 = 2.0;
-const PESO_TROCA_DE_TURNO: f64 = 2.0;
-const PESO_INTERVALO: f64 = 1.0;
-const PESO_JANELA: f64 = 3.0;
-const PESO_ESPALHAR: f64 = 1.0;
+/// Quanto custa cada ocorrência de cada regra de qualidade (jornada e descanso: por hora), na
+/// mesma unidade de [`super::PesosFitness`]. Vem da configuração do projeto (`config.pesos` na
+/// entrada); 0 desliga a regra.
+///
+/// Os padrões são os antigos pesos relativos (jornada 4, descanso 3, evitar 2, troca de turno 2,
+/// janela 3, intervalo 1, espalhar 1) vezes 0,001. Antes a soma da qualidade era escalada para ficar
+/// sempre abaixo da menor obrigatória, uma escala de 0,0003 a 0,002 por unidade nas instâncias de
+/// teste; 0,001 fica nessa faixa (docs/estudo-busca-local.md, §10).
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
+#[serde(default)]
+pub struct PesosQualidade {
+    pub evitar: f64,
+    pub jornada: f64,
+    pub descanso: f64,
+    pub intervalo: f64,
+    pub turno: f64,
+    pub janela: f64,
+    pub espalhar: f64,
+}
+
+impl PesosQualidade {
+    pub const PADRAO: Self = Self { evitar: 0.002, jornada: 0.004, descanso: 0.003, intervalo: 0.001, turno: 0.002, janela: 0.003, espalhar: 0.001 };
+}
+
+impl Default for PesosQualidade {
+    fn default() -> Self {
+        Self::PADRAO
+    }
+}
 
 /// O que separa um tempo do seguinte.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -120,9 +142,8 @@ pub struct TabelasQualidade {
     pub(super) tem_espalhar: bool,
     /// Valor de um horário vago no quadro ([`RegrasHorario::vago`]).
     vago: i32,
-    /// Fator que põe a soma de todas as penalidades de qualidade abaixo da menor penalidade
-    /// obrigatória: essa menor penalidade dividida pelo pior caso possível mais um.
-    escala: f64,
+    /// Peso de cada regra (ver [`PesosQualidade`]).
+    peso: PesosQualidade,
 }
 
 /// Buffers de trabalho da medição (para não alocar a cada quadro).
@@ -136,8 +157,7 @@ pub struct BuffersQualidade {
 const SEM_AULA: u8 = u8::MAX;
 
 impl TabelasQualidade {
-    /// `menor_obrigatoria`: a menor penalidade de uma regra obrigatória no fitness.
-    pub fn new(r: &RegrasHorario, menor_obrigatoria: f64) -> Self {
+    pub fn new(r: &RegrasHorario) -> Self {
         let n = r.n_tempos;
         let (mut ativas, mut linhas) = (Vec::new(), Vec::new());
         for turma in &r.turmas {
@@ -180,21 +200,13 @@ impl TabelasQualidade {
         let tem_evitar = evitar.iter().any(|&e| e);
         let tem_quebras = quebra.iter().any(|&q| q != Quebra::Nenhuma);
 
-        // Pior caso de cada regra, para a escala
-        let pessoas = pessoa.iter().filter(|&&p| p).count() as f64;
-        let pares: i32 = r.disciplinas.iter().map(|d| d.aulas.max(0) * d.professores.len() as i32).sum();
-        let pior = PESO_JORNADA_POR_HORA * pessoas * QUANTOS_DIAS as f64 * 24.0
-            + PESO_DESCANSO_POR_HORA * pessoas * QUANTOS_DIAS as f64 * (DESCANSO_MINIMO_MIN as f64 / 60.0)
-            + PESO_EVITAR * pares as f64
-            + PESO_TROCA_DE_TURNO * ativas.len() as f64
-            + PESO_JANELA * ativas.len() as f64
-            + PESO_ESPALHAR * ativas.len() as f64;
+        let pessoas = pessoa.iter().filter(|&&p| p).count();
         let tem_vagos = r.turmas.iter().any(|t| t.folga > 0);
         let espalhar: Vec<bool> = r.disciplinas.iter().map(|d| d.espalhar).collect();
         let tem_espalhar = espalhar.iter().any(|&e| e);
 
         Self {
-            ativa: tem_evitar || (tem_horas && pessoas > 0.0) || tem_quebras || tem_vagos || tem_espalhar,
+            ativa: tem_evitar || (tem_horas && pessoas > 0) || tem_quebras || tem_vagos || tem_espalhar,
             n_tempos: n,
             ativas,
             linhas,
@@ -212,7 +224,7 @@ impl TabelasQualidade {
             espalhar,
             tem_espalhar,
             vago: r.vago(),
-            escala: menor_obrigatoria / (pior + 1.0),
+            peso: r.qualidade,
         }
     }
 
@@ -221,16 +233,15 @@ impl TabelasQualidade {
         BuffersQualidade { primeiro: vec![SEM_AULA; n], ultimo: vec![SEM_AULA; n] }
     }
 
-    /// Penalidade no fitness: sempre menor que a menor penalidade obrigatória.
+    /// Penalidade no fitness: cada ocorrência vezes o peso da regra.
     pub fn custo(&self, q: &Qualidade) -> f64 {
-        self.escala
-            * (PESO_JORNADA_POR_HORA * q.jornada_min as f64 / 60.0
-                + PESO_DESCANSO_POR_HORA * q.descanso_min as f64 / 60.0
-                + PESO_EVITAR * q.evitar as f64
-                + PESO_INTERVALO * q.intervalo as f64
-                + PESO_TROCA_DE_TURNO * q.troca_de_turno as f64
-                + PESO_JANELA * q.janela as f64
-                + PESO_ESPALHAR * q.espalhar as f64)
+        self.peso.jornada * q.jornada_min as f64 / 60.0
+            + self.peso.descanso * q.descanso_min as f64 / 60.0
+            + self.peso.evitar * q.evitar as f64
+            + self.peso.intervalo * q.intervalo as f64
+            + self.peso.turno * q.troca_de_turno as f64
+            + self.peso.janela * q.janela as f64
+            + self.peso.espalhar * q.espalhar as f64
     }
 
     /// Mede a qualidade do quadro. Com `detalhe`, também lista cada ocorrência (mais lento: só
@@ -478,7 +489,7 @@ impl RegrasHorario {
     /// A qualidade de um quadro e as ocorrências, uma a uma. Para o resultado e os testes; o
     /// fitness do algoritmo genético usa [`TabelasQualidade::medir`] com tabelas já montadas.
     pub fn qualidade(&self, quadro: &[i32]) -> (Qualidade, Vec<Ocorrencia>) {
-        let tabelas = TabelasQualidade::new(self, 1.0);
+        let tabelas = TabelasQualidade::new(self);
         let mut ocorrencias = Vec::new();
         let q = tabelas.medir(self, quadro, &mut tabelas.buffers(), Some(&mut ocorrencias));
         (q, ocorrencias)
@@ -667,25 +678,29 @@ mod tests {
         assert_eq!(r.trechos.iter().filter(|t| t.dia == Segunda).count(), 2, "manhã e noite");
     }
 
-    /// Por pior que seja a qualidade, ela pesa menos que uma única violação obrigatória (peso 20).
+    /// O custo da qualidade é cada ocorrência vezes o peso da regra, sem escala: um peso de qualidade
+    /// pode até passar o de uma regra obrigatória.
     #[test]
-    fn qualidade_nunca_alcanca_uma_regra_obrigatoria() {
-        let r = regras(r#"{ "seg": [1, 2, 3, 4, 5, 6, 7, 8, 9], "ter": [1, 2, 3, 4, 5, 6, 7, 8, 9], "qua": [1, 2, 3, 4, 5, 6, 7, 8, 9] }"#);
+    fn custo_da_qualidade_e_o_peso_de_cada_ocorrencia() {
+        let mut r = regras(r#"{ "seg": [1, 2, 3, 4, 5, 6, 7, 8, 9], "ter": [1, 2, 3, 4, 5, 6, 7, 8, 9], "qua": [1, 2, 3, 4, 5, 6, 7, 8, 9] }"#);
         // "A" em ziguezague: manhã e noite todo dia, tudo a evitar, sozinha em todas as quebras
         let ruim: Vec<_> = [Segunda, Terca, Quarta].into_iter().flat_map(|d| [0, 2, 4, 5, 6, 8].map(|t| (d, t))).collect();
         let q = quadro(&r, &ruim);
-        let medida = r.qualidade(&q).0;
-        assert!(medida.evitar > 0 && medida.jornada_min > 0 && medida.descanso_min > 0 && medida.troca_de_turno > 0, "{medida:?}");
+        let m = r.qualidade(&q).0;
+        assert!(m.evitar > 0 && m.jornada_min > 0 && m.descanso_min > 0 && m.troca_de_turno > 0, "{m:?}");
 
-        let mut estado = r.initial_state();
-        let com = r.fitness_rapido(&mut estado, &q);
-        let mut sem_qualidade = r.clone();
-        sem_qualidade.tempos.clear();
-        sem_qualidade.professores[0].evitar.slots.fill(0);
-        let mut estado = sem_qualidade.initial_state();
-        let sem = sem_qualidade.fitness_rapido(&mut estado, &q);
-        assert!(com < sem, "a qualidade tem que pesar alguma coisa");
-        assert!(sem - com < 20.0, "e menos que a menor penalidade obrigatória: {}", sem - com);
+        let custo_da_qualidade = |r: &RegrasHorario| {
+            let sem = RegrasHorario { tempos: Vec::new(), professores: r.professores.iter().cloned().map(|mut p| { p.evitar.slots.fill(0); p }).collect(), ..r.clone() };
+            sem.fitness_rapido(&mut sem.initial_state(), &q) - r.fitness_rapido(&mut r.initial_state(), &q)
+        };
+        let p = PesosQualidade::PADRAO;
+        let esperado = p.jornada * m.jornada_min as f64 / 60.0 + p.descanso * m.descanso_min as f64 / 60.0 + p.evitar * m.evitar as f64
+            + p.intervalo * m.intervalo as f64 + p.turno * m.troca_de_turno as f64 + p.janela * m.janela as f64 + p.espalhar * m.espalhar as f64;
+        assert!((custo_da_qualidade(&r) - esperado).abs() < 1e-9, "{} != {esperado}", custo_da_qualidade(&r));
+
+        // Evitar com peso 50: uma ocorrência passa a valer mais que uma regra obrigatória de peso 20
+        r.qualidade.evitar = 50.0;
+        assert!(custo_da_qualidade(&r) >= 50.0 * m.evitar as f64);
     }
 
     /// P dá 2 aulas a uma turma que tem aula de manhã e à noite: o GA termina com as duas no mesmo

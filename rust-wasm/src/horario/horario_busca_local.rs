@@ -18,7 +18,8 @@
 //!   repetida nas turmas que participam.
 //! - **Custo**: o mesmo número do fitness do genético com o sinal trocado
 //!   ([`RegrasHorario::fitness_rapido`]), com as mesmas regras obrigatórias, as mesmas regras de
-//!   qualidade e os mesmos pesos. 0 = nada a melhorar.
+//!   qualidade e os mesmos pesos. 0 = nada a melhorar. As aulas fixadas são uma regra obrigatória
+//!   como as outras (ver [`PesosFitness::fixa`]): nenhum movimento é proibido.
 //! - **Avaliação incremental**: o fitness percorre o quadro inteiro; aqui cada regra guarda a sua
 //!   contagem e um movimento recalcula só o que tocou (os recursos das aulas movidas, as
 //!   disciplinas agrupadas, as linhas e os turnos das células). Os testes conferem, movimento a
@@ -153,7 +154,7 @@ struct Tabelas {
     /// Os valores 1..=n_disc no quadro são disciplinas; n_disc + 1 é o horário vago.
     n_disc: i32,
     pesos: PesosFitness,
-    /// A menor penalidade de uma regra obrigatória: abaixo dela, o custo é só qualidade.
+    /// A menor penalidade de uma regra obrigatória (maior que 0): a unidade da folga com violações.
     menor_obrigatoria: f64,
     tq: TabelasQualidade,
 
@@ -188,6 +189,8 @@ struct Tabelas {
     em_conjunto: Vec<bool>,
     /// Por turma: tem horários vagos (folga)?
     tem_folga: Vec<bool>,
+    /// Por célula: o valor da aula fixada ali (0 = célula livre). Vazio quando não há fixadas.
+    fixa: Vec<i32>,
 }
 
 impl Tabelas {
@@ -195,7 +198,10 @@ impl Tabelas {
         let r = regras;
         let n = r.n_tempos;
         let por_turma = QUANTOS_DIAS * n;
-        let menor_obrigatoria = r.pesos.professor.min(r.pesos.conflito).min(r.pesos.unidas).min(r.pesos.agrupar);
+        // A menor regra obrigatória que pesa alguma coisa (os pesos vêm do usuário e podem ser 0)
+        let p = r.pesos;
+        let fixa = if r.fixas.is_empty() { 0.0 } else { p.fixa };
+        let menor_obrigatoria = [p.professor, p.conflito, p.unidas, p.agrupar, fixa].into_iter().filter(|&x| x > 0.0).reduce(f64::min).unwrap_or(1.0);
 
         let (mut rec_de, mut rec) = (Vec::new(), Vec::new());
         let (mut unidas_de, mut unidas) = (Vec::new(), Vec::new());
@@ -255,7 +261,7 @@ impl Tabelas {
             n_disc: r.disciplinas.len() as i32,
             pesos: r.pesos,
             menor_obrigatoria,
-            tq: TabelasQualidade::new(r, menor_obrigatoria),
+            tq: TabelasQualidade::new(r),
             rec_de,
             rec,
             divisao: r.disciplinas.iter().map(|d| d.divisao.clone()).collect(),
@@ -272,6 +278,15 @@ impl Tabelas {
             grupo,
             em_conjunto,
             tem_folga: r.turmas.iter().map(|t| t.folga > 0).collect(),
+            fixa: if r.fixas.is_empty() {
+                Vec::new()
+            } else {
+                let mut fixa = vec![0; r.tamanho_quadro()];
+                for &(c, v) in &r.fixas {
+                    fixa[c] = v;
+                }
+                fixa
+            },
             regras: r.clone(),
         }
     }
@@ -303,6 +318,8 @@ struct Avaliacao {
     u_conflito: i64,
     u_unidas: i64,
     u_agrupar: i64,
+    /// Aulas fixadas fora do lugar.
+    u_fixas: i64,
     /// Por disciplina: a parte dela em `u_agrupar`.
     agr: Vec<i32>,
 
@@ -341,6 +358,7 @@ impl Avaliacao {
             u_conflito: 0,
             u_unidas: 0,
             u_agrupar: 0,
+            u_fixas: 0,
             agr: vec![0; t.divisao.len()],
             q: Qualidade::default(),
             primeiro: vec![SEM_AULA; n_rec * QUANTOS_DIAS],
@@ -363,6 +381,9 @@ impl Avaliacao {
             a.por(t, a.quadro[c], c % t.por_turma);
             a.u_unidas += a.unidas_da_celula(t, c);
         }
+        if !t.fixa.is_empty() {
+            a.u_fixas = (0..a.quadro.len()).filter(|&c| t.fixa[c] != 0 && a.quadro[c] != t.fixa[c]).count() as i64;
+        }
         a.disc_tocadas.extend((0..t.divisao.len() as u32).filter(|&d| t.divisao[d as usize].ativa));
         a.celulas_tocadas.extend(t.linhas.iter().copied());
         a.trechos_tocados.extend(0..t.regras.trechos.len() as u32);
@@ -384,6 +405,7 @@ impl Avaliacao {
             + self.u_conflito as f64 * t.pesos.conflito
             + self.u_unidas as f64 * t.pesos.unidas
             + self.u_agrupar as f64 * t.pesos.agrupar
+            + self.u_fixas as f64 * t.pesos.fixa
     }
 
     /// A parte do custo que vem das regras obrigatórias: nunca é maior que [`Self::custo`].
@@ -393,12 +415,13 @@ impl Avaliacao {
             + self.u_conflito as f64 * t.pesos.conflito
             + self.u_unidas as f64 * t.pesos.unidas
             + self.u_agrupar as f64 * t.pesos.agrupar
+            + self.u_fixas as f64 * t.pesos.fixa
     }
 
     /// Unidades de violação das regras obrigatórias (0 = horário válido).
     #[inline]
     fn violacoes(&self) -> i64 {
-        self.u_professor + self.u_conflito + self.u_unidas + self.u_agrupar
+        self.u_professor + self.u_conflito + self.u_unidas + self.u_agrupar + self.u_fixas
     }
 
     /// Acerta a contagem de professor quando o uso de um recurso numa posição muda.
@@ -490,6 +513,11 @@ impl Avaliacao {
 
         if em_conjunto {
             self.u_unidas -= self.unidas_na_posicao(t, turma, pa) + self.unidas_na_posicao(t, turma, pb);
+        }
+        if !t.fixa.is_empty() {
+            // Fixadas fora do lugar antes e depois da troca, nas duas células
+            let fora = |c: usize, v: i32| (t.fixa[c] != 0 && v != t.fixa[c]) as i64;
+            self.u_fixas += fora(a, vb) + fora(b, va) - fora(a, va) - fora(b, vb);
         }
         self.tirar(t, va, pa);
         self.tirar(t, vb, pb);
@@ -1085,6 +1113,17 @@ mod tests {
                 assert_eq!(conta(&c.atual.quadro), conta(&inicial), "{nome}: a turma {u} mudou de aulas");
             }
         }
+    }
+
+    /// Aulas fixadas, uma parte delas fora do lugar no começo.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn custo_incremental_com_fixadas() {
+        let mut regras = instancia("media");
+        fastrand::seed(3);
+        let outro = regras.genes_com_blocos();
+        regras.fixas = (0..outro.len()).step_by(5).filter(|&c| regras.disciplina_em(outro[c]).is_some()).map(|c| (c, outro[c])).collect();
+        assert!(!regras.fixas.is_empty());
+        conferir_incremental(&regras, 3000);
     }
 
     #[wasm_bindgen_test(unsupported = test)]

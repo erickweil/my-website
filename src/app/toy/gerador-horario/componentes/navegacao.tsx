@@ -5,13 +5,13 @@
 
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { ArrowLeft, BookOpen, CalendarDays, Clock, DoorOpen, FolderOpen, GraduationCap, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, UserCheck, Users, X } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarDays, Clock, DoorOpen, FolderOpen, GraduationCap, Menu, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sun, UserCheck, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProjetoHorario } from "../modelo/modelo";
 import { Selecao } from "./campos";
 
-export type Tela = "projetos" | "cursos" | "ambientes" | "professores" | "quadro" | "turmas" | "docentes" | "horario";
+export type Tela = "projetos" | "cursos" | "ambientes" | "professores" | "quadro" | "turmas" | "docentes" | "horario" | "configuracao";
 
 interface Item {
     id: Tela;
@@ -26,6 +26,7 @@ export const DO_PROJETO: Item[] = [
     { id: "turmas", rotulo: "Turmas", icone: GraduationCap, doProjeto: true },
     { id: "docentes", rotulo: "Docentes", icone: UserCheck, doProjeto: true },
     { id: "horario", rotulo: "Horário", icone: CalendarDays, doProjeto: true },
+    { id: "configuracao", rotulo: "Configuração", icone: Settings, doProjeto: true },
 ];
 const CADASTROS: Item[] = [
     { id: "cursos", rotulo: "Cursos", icone: BookOpen },
@@ -139,8 +140,8 @@ function GrupoDoMenu({ titulo, itens, recolhido, tela, ir, projetoAberto, errosP
 }
 
 export function BarraDoCelular({ tela, ir, projetoAberto, errosPorTela, maisAberto, setMaisAberto }: PropsDoMenu & { maisAberto: boolean; setMaisAberto: (v: boolean) => void }) {
-    const [quadro, turmas, docentes, horario] = DO_PROJETO;
-    const noMais = CADASTROS;
+    const [quadro, turmas, docentes, horario, configuracao] = DO_PROJETO;
+    const noMais = [configuracao, ...CADASTROS];
     const mais = noMais.some((i) => i.id === tela);
     return (
         <div className="md:hidden print:hidden">
@@ -148,13 +149,14 @@ export function BarraDoCelular({ tela, ir, projetoAberto, errosPorTela, maisAber
                 <>
                     <button type="button" aria-label="Fechar o menu" className="fixed inset-0 z-40 bg-black/30" onClick={() => setMaisAberto(false)} />
                     <div className="fixed inset-x-2 bottom-[4.5rem] z-50 rounded-2xl border border-border bg-background p-2 shadow-lg">
-                        <p className="px-3 pt-1 pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Cadastros</p>
-                        {noMais.map(({ id, rotulo, icone: Icone }) => (
+                        <p className="px-3 pt-1 pb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Mais opções</p>
+                        {noMais.map(({ id, rotulo, icone: Icone, doProjeto }) => (
                             <button
                                 key={id}
                                 type="button"
+                                disabled={doProjeto && !projetoAberto}
                                 onClick={() => ir(id)}
-                                className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium", tela === id ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+                                className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium disabled:opacity-40", tela === id ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
                             >
                                 <Icone className="size-5" /> {rotulo}
                             </button>

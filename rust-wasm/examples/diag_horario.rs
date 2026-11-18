@@ -97,6 +97,7 @@ fn main() {
             professor: p[0], unidas: p[1], agrupar: p[2],
             professor_por_movimentos: p[3] != 0.0,
             conflito: p.get(4).copied().unwrap_or(p[0]),
+            fixa: rust_wasm::horario::PesosFitness::PADRAO.fixa,
         };
     }
     let cfg = config_ga_horario(&regras);

@@ -9,8 +9,9 @@ use super::horario_divisao::{RegraDivisao, MAIOR_PEDACO};
 /// As regras de QUALIDADE não invalidam o horário, só dizem qual horário válido é melhor: horários
 /// a evitar, jornada e descanso do professor, grupos de aulas partidos pelo intervalo (ver
 /// `horario_qualidade.rs`). Elas entram no fitness, que o algoritmo genético maximiza e a busca
-/// local (`horario_busca_local.rs`) usa como custo; a busca exata as ignora. Para uma regra de qualidade nunca ser trocada por uma obrigatória, todas as penalidades
-/// de qualidade somadas valem menos que a menor penalidade obrigatória.
+/// local (`horario_busca_local.rs`) usa como custo; a busca exata as ignora. Os pesos da qualidade
+/// ([`PesosQualidade`](super::PesosQualidade)) são, por padrão, muito menores que os obrigatórios,
+/// mas vêm do usuário e podem até passá-los.
 ///
 /// Pesos de cada regra no fitness (pontos descontados por unidade de violação) e como as violações
 /// são medidas. O fitness é 0 exatamente quando o quadro não viola nenhuma regra, com quaisquer
@@ -43,6 +44,11 @@ pub struct PesosFitness {
     /// em que ele trabalha (conflito). `professor` fica sendo o peso da aula em horário em que ele
     /// não trabalha. Sem `professor_por_movimentos` os dois casos usam `professor`.
     pub conflito: f64,
+    /// Por aula fixada fora da célula em que foi fixada (ver horario_inicial.rs). As fixadas são
+    /// mais uma regra obrigatória: a busca pode tirá-las do lugar no caminho, a esse custo, e o
+    /// horário só é válido com todas no lugar. 100 (o mesmo do horário indisponível) ficou no nível
+    /// de proibir o movimento; 20 deixou a busca sem devolvê-las (docs/estudo-busca-local.md, §9).
+    pub fixa: f64,
 }
 
 impl PesosFitness {
@@ -53,6 +59,7 @@ impl PesosFitness {
         unidas: 30.0,
         agrupar: 20.0,
         professor_por_movimentos: true,
+        fixa: 100.0,
     };
 }
 
@@ -183,8 +190,7 @@ impl GAProblem for RegrasHorario {
     type State = HorarioGAState;
 
     fn initial_state(&self) -> Self::State { 
-        let menor_obrigatoria = self.pesos.professor.min(self.pesos.conflito).min(self.pesos.unidas).min(self.pesos.agrupar);
-        let qualidade = TabelasQualidade::new(self, menor_obrigatoria);
+        let qualidade = TabelasQualidade::new(self);
         HorarioGAState {
             // Capacidade = tamanho do slice de uma turma (pior caso do IPX)
             crossover_ipx: CrossoverIPX::new(QUANTOS_DIAS * self.n_tempos),
@@ -217,6 +223,10 @@ impl GAProblem for RegrasHorario {
     /// - Os horários que sobram (folga da turma) ficam vagos; as trocas da mutação os movem como
     ///   qualquer aula
     fn random_genes(&self) -> Self::Gene {
+        // Continuar de um horário: a população são variações dele (ver horario_inicial.rs)
+        if let Some(inicial) = &self.inicial {
+            return self.variacao_do_inicial(inicial);
+        }
         if self.operadores.blocos_iniciais {
             return self.genes_com_blocos();
         }
@@ -346,7 +356,7 @@ impl GAProblem for RegrasHorario {
                     parent_b_slice
                 );
             }
-        }        
+        }
     }
 }
 
@@ -387,8 +397,17 @@ impl RegrasHorario {
     /// possível; os horários vagos preenchem o resto, ao acaso. O multiconjunto de cada turma é o
     /// mesmo de `random_genes` sem blocos.
     pub fn genes_com_blocos(&self) -> QuadroHorario {
-        let n = self.n_tempos;
         let mut genes = self.get_quadro_vazio();
+        self.completar_com_blocos(&mut genes, &vec![0; self.disciplinas.len()]);
+        genes
+    }
+
+    /// Completa um quadro que já tem algumas aulas postas (as células com valor diferente de 0 ficam
+    /// como estão; `postas` diz quantas aulas de cada disciplina já estão nele), do mesmo jeito que
+    /// [`Self::genes_com_blocos`]: o que falta de cada disciplina, dividido em pedaços, nas células
+    /// livres. Usado para partir de um horário com aulas fixadas (ver horario_inicial.rs).
+    pub fn completar_com_blocos(&self, genes: &mut [i32], postas: &[i32]) {
+        let n = self.n_tempos;
         let pode_prof = |d: usize, celula: usize| {
             let (_, dia, tempo) = self.from_quadro_index(celula);
             self.disciplinas[d].professores.iter().all(|&p| self.professores[p].horarios.get(dia, tempo) == 1)
@@ -398,14 +417,19 @@ impl RegrasHorario {
             // (disciplina, tamanho) dos pedaços de mais de uma aula, e as aulas soltas
             let mut blocos: Vec<(usize, usize)> = Vec::new();
             let mut soltas: Vec<i32> = Vec::new();
+            let mut faltam_total = 0;
             for d in self.disciplinas.iter().filter(|d| d.turma_id == turma.id) {
-                let divisao = if d.divisao.agrupa() { d.divisao.sortear_divisao(d.aulas) } else { None };
-                let divisao = divisao.unwrap_or_else(|| vec![1; d.aulas.max(0) as usize]);
+                let faltam = (d.aulas - postas[d.id]).max(0);
+                faltam_total += faltam;
+                let divisao = if d.divisao.agrupa() { d.divisao.sortear_divisao(faltam) } else { None };
+                let divisao = divisao.unwrap_or_else(|| vec![1; faltam as usize]);
                 for t in divisao {
                     if t > 1 { blocos.push((d.id, t as usize)) } else { soltas.push(d.id as i32 + 1) }
                 }
             }
-            soltas.extend((0..turma.folga).map(|_| self.vago()));
+            // Os horários vagos: as células livres que sobram depois das aulas (no quadro vazio, a folga da turma)
+            let livres_no_inicio = (inicio..inicio + QUANTOS_DIAS * n).filter(|&c| genes[c] == 0).count() as i32;
+            soltas.extend((0..(livres_no_inicio - faltam_total).max(0)).map(|_| self.vago()));
             fastrand::shuffle(&mut blocos);
             blocos.sort_by_key(|&(_, k)| std::cmp::Reverse(k));
 
@@ -444,7 +468,6 @@ impl RegrasHorario {
                 genes[c] = v;
             }
         }
-        genes
     }
 
     /// Fitness do quadro: 0 quando não quebra nenhuma regra, obrigatória ou de qualidade; negativo
@@ -549,7 +572,10 @@ impl RegrasHorario {
             }
         }
 
-        // Regras de qualidade: sempre menos que a menor penalidade obrigatória
+        // Aulas fixadas fora do lugar
+        let u_fixas = self.fixas.iter().filter(|&&(c, v)| quadro[c] != v).count();
+
+        // Regras de qualidade (ver horario_qualidade.rs)
         let qualidade = if tabelas_q.ativa { tabelas_q.custo(&tabelas_q.medir(self, quadro, buffers_q, None)) } else { 0.0 };
 
         -(estrutura as f64 * 1000.0
@@ -557,7 +583,8 @@ impl RegrasHorario {
             + u_professor as f64 * pesos.professor
             + u_conflito as f64 * pesos.conflito
             + u_unidas as f64 * pesos.unidas
-            + u_agrupar as f64 * pesos.agrupar)
+            + u_agrupar as f64 * pesos.agrupar
+            + u_fixas as f64 * pesos.fixa)
     }
 }
 

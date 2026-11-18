@@ -7,7 +7,8 @@
 //! A validação usa as regras do Pencilmark só com as obrigatórias
 //! ([`HorarioRegrasPencilmark::so_obrigatorias`]): para cada célula preenchida, apaga o valor e
 //! confere se ele está entre as possibilidades daquela célula. Um horário vago também é conferido
-//! (a turma tem folga para ele?).
+//! (a turma tem folga para ele?). Por fim, cada aula fixada que não está na sua célula marca essa
+//! célula (as fixadas são uma regra obrigatória, ver horario_inicial.rs).
 
 use serde::Serialize;
 
@@ -21,6 +22,7 @@ pub const MSG_VAZIO: &str = "Este espaço não deveria estar vazio";
 pub const MSG_REGRA_FALHOU: &str = "Algo de errado não está certo";
 pub const MSG_MARCACAO_INVALIDA: &str = "Marcação não deveria estar aqui";
 pub const MSG_INCOMPLETO: &str = "Incompleto";
+pub const MSG_FIXADA_FORA: &str = "A aula fixada neste horário ficou em outro lugar";
 pub const MSG_SEM_SOLUCAO: &str = "Não foi possível encontrar uma solução viável para este horário com as restrições dadas.";
 pub const MSG_IMPOSSIVEL: &str = "Não existe horário que atenda a todas as restrições, contando os horários a evitar como indisponíveis e sem horário vago entre duas aulas do mesmo turno: todas as possibilidades foram testadas.";
 pub const MSG_COM_VIOLACOES: &str = "Não foi possível gerar um horário completo com as configurações fornecidas.";
@@ -89,6 +91,12 @@ pub fn validar(regras: &mut HorarioRegrasPencilmark, quadro: &[i32]) -> Validaca
         }
 
         quadro[i] = valor;
+    }
+
+    for &(c, v) in &regras.regras.fixas {
+        if quadro[c] != v && validacao.por_celula[c].is_none() {
+            validacao.por_celula[c] = Some(MSG_FIXADA_FORA);
+        }
     }
 
     validacao
@@ -238,6 +246,20 @@ mod tests {
         let r = ResultadoHorario::novo(&regras, Some((&quadro, &v)), 1.0, 0, true);
         assert!(!r.alguma_violacao);
         assert_eq!(r.mensagem, None);
+    }
+
+    /// Um horário que cumpre as outras regras, mas com uma aula fixada em outra célula, não é válido.
+    #[wasm_bindgen_test(unsupported = test)]
+    fn fixada_fora_do_lugar_e_violacao() {
+        fastrand::seed(1);
+        let mut regras = regras_pequenas();
+        let quadro = resolver(&regras);
+        let (c, outra) = (0..3).map(|t| idx_seg(&regras, t)).filter(|&i| quadro[i] > 0).zip((0..3).map(|t| idx_seg(&regras, t)).filter(|&i| quadro[i] > 0).skip(1)).find(|&(a, b)| quadro[a] != quadro[b]).unwrap();
+        // Fixa na célula `c` a aula que está em `outra`
+        regras.fixas = vec![(c, quadro[outra])];
+        let v = validar(&mut HorarioRegrasPencilmark::so_obrigatorias(regras.clone()), &quadro);
+        assert_eq!(v.por_celula[c], Some(MSG_FIXADA_FORA));
+        assert_eq!(v.por_celula.iter().filter(|m| m.is_some()).count(), 1);
     }
 
     #[wasm_bindgen_test(unsupported = test)]

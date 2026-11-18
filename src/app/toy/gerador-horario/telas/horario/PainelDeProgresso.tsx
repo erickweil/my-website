@@ -47,11 +47,11 @@ export function PainelDeProgresso({ progresso, gerando, horario }: {
         p.threads && plural(p.threads, "thread", "threads"),
     ].filter(Boolean);
     const violacoes = horario ? horario.problemas.filter((x) => x.turmaId).length : null;
-    // O custo junta as duas partes; as de qualidade, somadas, valem menos que uma obrigatória, por isso
-    // ele vai no title, com todas as casas
+    // O custo junta as regras obrigatórias e as de qualidade, com os pesos da configuração; vai no
+    // title, com todas as casas
     const titulo = p.custo === undefined
         ? undefined
-        : `Custo ${p.custo.toLocaleString("pt-BR", { maximumFractionDigits: 20 })} (0 = todas as regras atendidas). Cada violação de regra obrigatória vale ao menos 20; as observações de qualidade, todas somadas, valem menos que uma violação.`;
+        : `Custo ${p.custo.toLocaleString("pt-BR", { maximumFractionDigits: 20 })} (0 = todas as regras atendidas): a soma, em todas as regras, do peso vezes o que a regra deixou de atender. Os pesos ficam em Configuração.`;
 
     return (
         <div className={cn("mt-3 border-t border-border pt-3", !gerando && "text-muted-foreground")}>

@@ -105,11 +105,12 @@ test("ambiente: capacidade (somando as turmas juntas) e ocupação", () => {
 
 test("horário gerado: as ocorrências de qualidade viram frases, e quem está em choque", () => {
     const { p, a, calculo, fisica } = projetoQueFecha();
-    const aula = (ofertaId: string, dia: "seg" | "ter", tempo: number) => ({ ofertaId, dia, tempo, fixada: false });
+    const aula = (ofertaId: string, dia: "seg" | "ter", tempo: number) => ({ ofertaId, dia, tempo });
     const horario: HorarioGerado = {
         revisao: 0,
         completo: true,
         alocacoes: [aula(calculo, "seg", 1)],
+        fixadas: [],
         problemas: [],
         qualidade: [
             { regra: "evitar", professorId: "ana", turmaId: a, ofertaId: calculo, dia: "seg", minutos: 0 },

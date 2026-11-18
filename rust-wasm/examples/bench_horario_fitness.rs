@@ -45,6 +45,7 @@ fn main() {
                 professor_por_movimentos: p.get(3).is_some_and(|&x| x != 0.0),
                 // 5º campo opcional: peso do conflito (padrão: igual ao do professor)
                 conflito: p.get(4).copied().unwrap_or(p[0]),
+                fixa: rust_wasm::horario::PesosFitness::PADRAO.fixa,
             })
         })
         .collect();

@@ -6,7 +6,8 @@
  * O worker não interpreta a entrada: só repassa para o Rust, roda em blocos e encaminha o
  * resultado. Erros da entrada chegam aqui como `Error` com a mensagem pronta para o usuário.
  *
- *  - Recebe: { action: "solucionarQuadroHorario", solver, entrada, ilhas }
+ *  - Recebe: { action: "solucionarQuadroHorario", solver, entrada, ilhas, cadeias }
+ *    (`cadeias`: buscas em paralelo na busca local; 0 ou ausente = automático)
  *  - Envia type="message" a cada bloco de trabalho, com o progresso, e o quadro quando ele mudou
  *  - Envia type="success" ao terminar (custo 0, ou, na busca exata, horário achado ou impossível)
  *  - Envia type="error" em caso de falha
@@ -75,7 +76,7 @@ self.onmessage = async (message) => {
 
         // Todos rodam com o pool de threads desde o início: a busca exata divide a árvore de busca, o
         // GA as ilhas (e o sorteio da população), a busca local as cadeias (uma por thread).
-        const cadeias = solver === "local" ? numeroDeCadeias() : 0;
+        const cadeias = solver === "local" ? (data.cadeias > 0 ? data.cadeias : numeroDeCadeias()) : 0;
         const wasm = cadeias === 1
             ? await import("@/pkg/rust_wasm.js").then(async (w) => (await w.default(), w))
             : await iniciarWasmComThreads(solver === "local" ? cadeias : undefined);

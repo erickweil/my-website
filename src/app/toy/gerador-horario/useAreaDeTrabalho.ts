@@ -3,7 +3,7 @@
  * alteração, e qual projeto está aberto. Só roda no navegador (a página é carregada sem SSR).
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { carregar, salvar } from "./modelo/armazenamento";
 import { areaDeTrabalhoVazia, type AreaDeTrabalho, type HorarioGerado, type Id, type ProjetoHorario } from "./modelo/modelo";
 
@@ -33,10 +33,41 @@ export function useAreaDeTrabalho() {
     });
     const [projetoId, setProjetoId] = useState<Id | null>(() => localStorage.getItem(CHAVE_PROJETO_ABERTO));
 
-    // Com erro de leitura nada é gravado, para não apagar o que está salvo
+    /** O navegador recusou gravar (normalmente, espaço cheio: as versões salvas ocupam bastante). */
+    const [erroAoSalvar, setErroAoSalvar] = useState(false);
+    /** A área ainda não gravada. */
+    const pendente = useRef<AreaDeTrabalho | null>(null);
+    const gravarPendente = useCallback(() => {
+        if (!pendente.current) return;
+        let falhou = false;
+        try {
+            salvar(localStorage, pendente.current);
+        } catch {
+            falhou = true;
+        }
+        pendente.current = null;
+        setErroAoSalvar(falhou);
+    }, []);
+    // Grava 300 ms depois da última alteração (a área com as versões salvas pode ter alguns MB, e
+    // fixar aulas uma a uma não deve gravar tudo a cada clique). Com erro de leitura nada é gravado,
+    // para não apagar o que está salvo.
     useEffect(() => {
-        if (!estado.erroDeLeitura) salvar(localStorage, estado.area);
-    }, [estado]);
+        if (estado.erroDeLeitura) return;
+        pendente.current = estado.area;
+        const t = setTimeout(gravarPendente, 300);
+        return () => clearTimeout(t);
+    }, [estado, gravarPendente]);
+    // Ao esconder ou fechar a página, e ao sair da tela, grava o que estiver pendente
+    useEffect(() => {
+        const aoEsconder = () => document.visibilityState === "hidden" && gravarPendente();
+        window.addEventListener("pagehide", gravarPendente);
+        document.addEventListener("visibilitychange", aoEsconder);
+        return () => {
+            window.removeEventListener("pagehide", gravarPendente);
+            document.removeEventListener("visibilitychange", aoEsconder);
+            gravarPendente();
+        };
+    }, [gravarPendente]);
     useEffect(() => {
         if (projetoId) localStorage.setItem(CHAVE_PROJETO_ABERTO, projetoId);
     }, [projetoId]);
@@ -51,6 +82,7 @@ export function useAreaDeTrabalho() {
     return {
         area,
         erroDeLeitura,
+        erroAoSalvar,
         /** Começa do zero, descartando o conteúdo salvo que não pôde ser lido. */
         descartarSalvo: () => setEstado({ area: areaDeTrabalhoVazia(), erroDeLeitura: null }),
         projeto,

@@ -3,8 +3,7 @@ import type { DocenteNoProjeto, Id } from "../modelo/modelo";
 import { aulasDoProfessor, contarTempos, formatarHoras, limitarAoQuadro, minutosNosHorarios, turmasDoProfessor } from "../modelo/operacoes";
 import { Cabecalho, Vazio, plural } from "../componentes/comuns";
 import { ItemDaLista, ListaComDetalhe } from "../componentes/lista";
-import { AvisosDaTela, marcaDe } from "../componentes/pendencias";
-import { diagnosticar } from "../modelo/diagnostico";
+import { AvisosDaTela, marcaDe, usePendencias } from "../componentes/pendencias";
 import { GradeTempos, LegendaDaGrade, pintarHorarios, type EstadoDaGrade } from "../componentes/GradeTempos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
@@ -19,7 +18,7 @@ export function TelaDocentes({ area, projeto, mudarProjeto, professorInicial }: 
     const [pincel, setPincel] = useState("nao");
     const professorDe = (id: Id) => area.cadastros.professores.find((p) => p.id === id);
     const nomeDe = (id: Id) => professorDe(id)?.nome || "(sem nome)";
-    const pendencias = diagnosticar(projeto, area.cadastros).filter((p) => p.tela === "docentes");
+    const pendencias = usePendencias(projeto, area.cadastros).filter((p) => p.tela === "docentes");
     const docentes = [...projeto.docentes].sort((a, b) => nomeDe(a.professorId).localeCompare(nomeDe(b.professorId)));
     const docente = docentes.find((d) => d.professorId === selecionado) ?? docentes[0];
     const disponiveis = (d: DocenteNoProjeto) => contarTempos(limitarAoQuadro(d.disponibilidade, projeto.quadro));

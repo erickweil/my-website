@@ -3,13 +3,25 @@
  * Toda tela usa estes componentes, para a mesma cor e o mesmo ícone significarem a mesma coisa.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ArrowRight, ChevronDown, CircleAlert, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Pendencia } from "../modelo/diagnostico";
+import { diagnosticar, type Pendencia } from "../modelo/diagnostico";
+import type { Cadastros, ProjetoHorario } from "../modelo/modelo";
 import { ListaComLimite, plural } from "./comuns";
 
 export type Marca = "erro" | "aviso" | null;
+
+/**
+ * As pendências do projeto (ver modelo/diagnostico.ts). Só são recalculadas quando mudam os dados
+ * que o diagnóstico olha — não quando muda o horário gerado (fixar uma aula, uma atualização da
+ * busca), que é o que acontece o tempo todo na tela do horário.
+ */
+export function usePendencias(projeto: ProjetoHorario | null, cadastros: Cadastros): Pendencia[] {
+    const { quadro, turmas, ofertas, docentes } = projeto ?? {};
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- de propósito: o horário gerado não entra
+    return useMemo(() => (projeto ? diagnosticar(projeto, cadastros) : []), [quadro, turmas, ofertas, docentes, cadastros]);
+}
 
 /** A marca de um item (turma, professor…) a partir das pendências dele. */
 export const marcaDe = (pendencias: Pendencia[]): Marca =>

@@ -277,7 +277,8 @@ impl HorarioBuscaLocalRunner {
     /// `cadeias`: buscas independentes a partir do mesmo quadro inicial (0 ou 1 = uma só). Com pool
     /// de threads, cada uma roda numa thread.
     pub fn de_regras(regras: RegrasHorario, cadeias: usize) -> Self {
-        let inicial = regras.genes_com_blocos();
+        // O horário da página, se veio um (continuar a busca), ou um quadro sorteado
+        let inicial = regras.quadro_inicial();
         let mut validador = HorarioRegrasPencilmark::so_obrigatorias(regras.clone());
         let busca = BuscaLocal::new(&regras, &inicial, cadeias.max(1), LISTA_PADRAO);
         let validacao = validar(&mut validador, &inicial);

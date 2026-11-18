@@ -9,7 +9,7 @@
  * - `detalharProblema`: quem está em choque numa célula que o solver marcou com problema.
  */
 
-import { DIAS, type Cadastros, type Dia, type HorarioGerado, type Id, type Oferta, type ProjetoHorario, type Turma } from "./modelo.ts";
+import { DIAS, type Cadastros, type DadosDoProjeto, type Dia, type HorarioGerado, type Id, type Oferta, type ProjetoHorario, type Turma } from "./modelo.ts";
 import {
     alunosDaOferta,
     ambienteDaOferta,
@@ -177,7 +177,7 @@ const horas = (minutos: number) => `${Math.floor(minutos / 60)}h${minutos % 60 ?
  * As regras de qualidade que o horário não atende, em frases. A medição vem do solver
  * (`horario.qualidade`); aqui só entram os nomes.
  */
-export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, horario: HorarioGerado): string[] {
+export function observarHorario(projeto: DadosDoProjeto, cadastros: Cadastros, horario: HorarioGerado): string[] {
     const professor = (id?: Id) => nome(cadastros.professores.find((p) => p.id === id));
     const lista: string[] = [];
 
@@ -237,7 +237,7 @@ export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, h
  * Para uma aula num horário: quem mais está ocupado ali. Ajuda a entender uma célula que o solver
  * marcou com problema ("Prof. Ana também está em ADS 2").
  */
-export function detalharProblema(projeto: ProjetoHorario, cadastros: Cadastros, horario: HorarioGerado, ofertaId: Id, dia: Dia, tempo: number): string[] {
+export function detalharProblema(projeto: DadosDoProjeto, cadastros: Cadastros, horario: HorarioGerado, ofertaId: Id, dia: Dia, tempo: number): string[] {
     const oferta = projeto.ofertas.find((o) => o.id === ofertaId);
     if (!oferta) return [];
     const detalhes: string[] = [];
