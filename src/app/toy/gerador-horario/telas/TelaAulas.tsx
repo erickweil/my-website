@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import type { Componente, Curso, Id, Oferta, Professor } from "../modelo/modelo";
 import { atualizarPelaMatriz, aulasDaTurma, alunosDaOferta, buscarComponente, componentesNaoOfertados, contarTempos, criarOferta, diferencasDaMatriz, juntarOfertas, manterDocentes, nomeDoPeriodo, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
 import { Ajuda, CampoNumero, Cabecalho, RotuloMovel, Selecao, Vazio, rotuloDoProfessor } from "../componentes/comuns";
-import { CampoDistribuicao } from "../componentes/CampoDistribuicao";
+import { CampoDivisao } from "../componentes/CampoDivisao";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 import { novoProfessor } from "./TelaProfessores";
 import { ResumoDaTurma } from "./TelaTurmas";
@@ -65,7 +65,7 @@ export function TelaAulas({
     const ambienteDaTurma = ambientes.find((a) => a.id === turma.ambienteId);
     const naoOfertadas = componentesNaoOfertados(projeto, turma, cursos);
     const incluir = (c?: Componente) => mudarProjeto((p) => criarOferta(p, turma.id, c).projeto);
-    const CAMPOS = { nome: "nome", aulasSemana: "aulas", distribuicao: "agrupamento" };
+    const CAMPOS = { nome: "nome", aulasSemana: "aulas", divisao: "divisão" };
 
     return (
         <div>
@@ -98,7 +98,7 @@ export function TelaAulas({
                     <span>Disciplina</span>
                     <span>Professores</span>
                     <span className="text-center">Aulas/sem.</span>
-                    <span title="Aulas seguidas por bloco (2 = aulas duplas). 0 = sem agrupamento.">Agrupar</span>
+                    <span title="Como as aulas se dividem em pedaços de aulas seguidas no mesmo dia">Divisão</span>
                     {comAmbiente && <span>Ambiente</span>}
                     <span />
                 </div>
@@ -156,8 +156,8 @@ export function TelaAulas({
                             <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={o.aulasSemana} onChange={(n) => mudarOferta(o.id, { aulasSemana: n })} />
                         </div>
                         <div className="col-span-4 md:order-5 md:col-span-1">
-                            <RotuloMovel>Agrupar</RotuloMovel>
-                            <CampoDistribuicao valor={o.distribuicao} aulasSemana={o.aulasSemana} onChange={(distribuicao) => mudarOferta(o.id, { distribuicao })} />
+                            <RotuloMovel>Divisão</RotuloMovel>
+                            <CampoDivisao valor={o.divisao} aulasSemana={o.aulasSemana} onChange={(divisao) => mudarOferta(o.id, { divisao })} />
                         </div>
                         {comAmbiente && (
                             <div className="col-span-6 md:order-6 md:col-span-1">
@@ -206,7 +206,7 @@ export function TelaAulas({
                     Aulas em conjunto
                     <Ajuda>
                         Caso especial: uma disciplina dada para duas ou mais turmas ao mesmo tempo, na mesma sala. As disciplinas
-                        juntadas precisam ter o mesmo número de aulas e a mesma distribuição; os professores das duas ficam na aula.
+                        juntadas precisam ter o mesmo número de aulas e a mesma divisão; os professores das duas ficam na aula.
                     </Ajuda>
                 </h3>
                 <div className="space-y-2">

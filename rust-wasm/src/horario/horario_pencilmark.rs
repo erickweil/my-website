@@ -16,7 +16,7 @@
 use std::sync::Arc;
 
 use crate::{
-    horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario},
+    horario::{DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario, MAIOR_PEDACO},
     pencilmark::{Possib, RegrasQuadro},
 };
 
@@ -25,7 +25,8 @@ use crate::{
 pub const MOTIVO_OUTRA_TURMA: &str = "A disciplina é de outra turma";
 pub const MOTIVO_AULAS_DEMAIS: &str = "A disciplina tem mais aulas no horário do que o previsto";
 pub const MOTIVO_PROFESSOR: &str = "Professor ou ambiente indisponível neste horário, ou ocupado em outra turma";
-pub const MOTIVO_BLOCO: &str = "As aulas da disciplina não formam blocos do tamanho definido";
+pub const MOTIVO_PEDACO_GRANDE: &str = "As aulas seguidas da disciplina passam do maior pedaço permitido";
+pub const MOTIVO_DIVISAO: &str = "As aulas da disciplina não se dividem em pedaços como definido";
 pub const MOTIVO_CONJUNTA: &str = "A aula em conjunto não está no mesmo horário nas turmas que participam";
 pub const MOTIVO_EVITAR: &str = "O professor pediu para evitar este horário";
 pub const MOTIVO_SEM_FOLGA: &str = "A turma tem mais horários vagos do que a folga entre aulas e horários marcados";
@@ -147,40 +148,9 @@ impl HorarioRegrasPencilmark {
             }
         }
 
-        // As aulas devem ser agrupadas em blocos de G aulas consecutivas.
-        // dividir → cada bloco tem exatamente G; senão → blocos com tamanho múltiplo de G.
-        if disc.agrupar > 0 {
-            let g = disc.agrupar as isize;
-            let alvo = id_disc as i32 + 1;
-            let t = tempo as isize;
-
-            // Aulas consecutivas desta disciplina imediatamente à esquerda e à direita
-            let mut left_run: isize = 0;
-            while self.valor(quadro, id_turma, dia, t - left_run - 1) == alvo {
-                left_run += 1;
-            }
-            let mut right_run: isize = 0;
-            while self.valor(quadro, id_turma, dia, t + right_run + 1) == alvo {
-                right_run += 1;
-            }
-
-            let current_run = left_run + 1 + right_run;
-
-            // Com dividir, o bloco não pode passar de G (blocos não se tocam)
-            if disc.dividir && current_run > g {
-                return Some(MOTIVO_BLOCO);
-            }
-
-            // Bloco fechado dos dois lados (não pode mais crescer)? -1 (fora/sem aula) ou outra
-            // disciplina = bloqueado; 0 = célula livre, ainda pode crescer.
-            let left_blocked = self.valor(quadro, id_turma, dia, t - left_run - 1) != 0;
-            let right_blocked = self.valor(quadro, id_turma, dia, t + right_run + 1) != 0;
-            if left_blocked && right_blocked {
-                let invalido = if disc.dividir { current_run != g } else { current_run % g != 0 };
-                if invalido {
-                    return Some(MOTIVO_BLOCO);
-                }
-            }
+        // A divisão em pedaços (trechos de aulas seguidas)
+        if disc.divisao.ativa && let Some(m) = self.motivo_divisao(quadro, id_disc, id_turma, dia, tempo) {
+            return Some(m);
         }
 
         // Disciplinas unidas devem ser escolhidas juntas: nas turmas parceiras, o mesmo (dia, tempo)
@@ -206,6 +176,75 @@ impl HorarioRegrasPencilmark {
         }
 
         None
+    }
+
+    /// A divisão em pedaços impede a disciplina `id_disc` nesta célula? O pedaço que a contém não
+    /// pode passar do maior tamanho; quando ele se fecha (os dois vizinhos ocupados) ou quando é a
+    /// última aula da disciplina, confere os pedaços da semana (ver [`Self::pedacos_violam`]).
+    fn motivo_divisao(&self, quadro: &[i32], id_disc: usize, id_turma: usize, dia: DiaSemana, tempo: usize) -> Option<&'static str> {
+        let disc = &self.regras.disciplinas[id_disc];
+        let alvo = id_disc as i32 + 1;
+        let t = tempo as isize;
+        let mut esquerda: isize = 0;
+        while self.valor(quadro, id_turma, dia, t - esquerda - 1) == alvo {
+            esquerda += 1;
+        }
+        let mut direita: isize = 0;
+        while self.valor(quadro, id_turma, dia, t + direita + 1) == alvo {
+            direita += 1;
+        }
+        if esquerda + 1 + direita > disc.divisao.tam_max as isize {
+            return Some(MOTIVO_PEDACO_GRANDE);
+        }
+        // Fechado: o vizinho é outra disciplina, vago ou fora do horário (0 = ainda a escolher)
+        let fechado = self.valor(quadro, id_turma, dia, t - esquerda - 1) != 0 && self.valor(quadro, id_turma, dia, t + direita + 1) != 0;
+        let completa = self.cont_aulas[id_disc] + 1 >= disc.aulas;
+        if (fechado || completa) && self.pedacos_violam(quadro, id_disc, Some(self.regras.to_quadro_index(id_turma, dia, tempo)), completa) {
+            return Some(MOTIVO_DIVISAO);
+        }
+        None
+    }
+
+    /// Os pedaços da disciplina `id_disc` no quadro (com a célula `extra`, se dada, contando como
+    /// dela) já quebram a divisão? Só os pedaços fechados, que não mudam mais, contam para os
+    /// limites de cima; com `completa` (todas as aulas no quadro), todos contam, também para os de
+    /// baixo.
+    fn pedacos_violam(&self, quadro: &[i32], id_disc: usize, extra: Option<usize>, completa: bool) -> bool {
+        let disc = &self.regras.disciplinas[id_disc];
+        let regra = &disc.divisao;
+        let alvo = id_disc as i32 + 1;
+        let n = self.regras.n_tempos;
+        let valor = |i: usize| if Some(i) == extra { alvo } else { quadro[i] };
+        let mut contagem = [0u8; MAIOR_PEDACO + 1];
+        let mut quantidade = 0u8;
+        for dia in DiaSemana::TODOS {
+            let linha = self.regras.to_quadro_index(disc.turma_id, dia, 0);
+            let mut a = 0;
+            while a < n {
+                if valor(linha + a) != alvo {
+                    a += 1;
+                    continue;
+                }
+                let mut b = a + 1;
+                while b < n && valor(linha + b) == alvo {
+                    b += 1;
+                }
+                let fechado = completa || ((a == 0 || valor(linha + a - 1) != 0) && (b == n || valor(linha + b) != 0));
+                let tamanho = (b - a).min(MAIOR_PEDACO) as u8;
+                if tamanho > regra.tam_max || (fechado && tamanho < regra.tam_min) {
+                    return true;
+                }
+                if fechado {
+                    contagem[tamanho as usize] = contagem[tamanho as usize].saturating_add(1);
+                    quantidade = quantidade.saturating_add(1);
+                }
+                a = b;
+            }
+        }
+        if quantidade > regra.qtd_max || regra.por_tamanho.iter().any(|&(t, _, max)| contagem[t as usize] > max) {
+            return true;
+        }
+        completa && regra.desvio_da_semana(quantidade, &contagem) > 0
     }
 
     /// Checagem reversa: se uma disciplina já alocada em outra turma neste (dia, tempo) exige uma
@@ -282,43 +321,12 @@ impl RegrasQuadro for HorarioRegrasPencilmark {
             }
         }
 
-        // Consistência dos agrupamentos já definidos no quadro. Necessário pois o solver pode alocar
-        // uma disciplina isolada e só perceber depois (ao fechar os vizinhos) que o bloco não pode
-        // atingir o tamanho G.
+        // Consistência da divisão em pedaços já definida no quadro. Necessário pois o solver pode
+        // alocar uma aula isolada e só perceber depois (ao fechar os vizinhos) que o pedaço não
+        // atende às regras.
         for disc in &self.regras.disciplinas {
-            if disc.agrupar <= 0 {
-                continue;
-            }
-            let g = disc.agrupar;
-            let alvo = disc.id as i32 + 1;
-
-            for dia_idx in 0..QUANTOS_DIAS {
-                let dia = DiaSemana::from_index(dia_idx);
-                let mut run_start: Option<usize> = None;
-
-                for tempo in 0..=n_tempos {
-                    // Sentinela no fim do dia: força o fechamento do último bloco
-                    let v = if tempo < n_tempos { quadro[self.regras.to_quadro_index(disc.turma_id, dia, tempo)] } else { -1 };
-
-                    if v == alvo {
-                        run_start.get_or_insert(tempo);
-                    } else if let Some(inicio) = run_start.take() {
-                        let run_length = (tempo - inicio) as i32;
-
-                        // v != 0: fora dos limites, sem aula ou outra disciplina → bloqueado
-                        let right_blocked = v != 0;
-                        let left_v = if inicio > 0 { quadro[self.regras.to_quadro_index(disc.turma_id, dia, inicio - 1)] } else { -1 };
-                        let left_blocked = left_v != 0;
-
-                        if left_blocked && right_blocked {
-                            // dividir → exatamente G (blocos não se tocam); senão → múltiplo de G
-                            let invalido = if disc.dividir { run_length != g } else { run_length % g != 0 };
-                            if invalido {
-                                return false;
-                            }
-                        }
-                    }
-                }
+            if disc.divisao.ativa && self.pedacos_violam(quadro, disc.id, None, self.cont_aulas[disc.id] >= disc.aulas) {
+                return false;
             }
         }
 
@@ -377,7 +385,7 @@ mod tests {
         assert_eq!(regras.fitness(&mut state, quadro), 0.0, "solução do Pencilmark tem violações no GA");
     }
 
-    /// Quadro real de uma faculdade (3 turmas, agrupamentos, dividir e disciplinas unidas), com os
+    /// Quadro real de uma faculdade (3 turmas, divisão em pedaços e disciplinas unidas), com os
     /// nomes anonimizados. O Pencilmark resolve em milissegundos.
     #[wasm_bindgen_test(unsupported = test)]
     fn resolve_quadro_real_e_ga_concorda() {

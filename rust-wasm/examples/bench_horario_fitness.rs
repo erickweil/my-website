@@ -1,13 +1,13 @@
-//! Compara variantes do FITNESS do GA de horários (pesos das regras e medida do agrupamento).
+//! Compara variantes do FITNESS do GA de horários (pesos das regras e medida do professor).
 //!
 //! Todas as variantes usam o mesmo motor, a mesma configuração e o mesmo orçamento de avaliações.
 //! Como cada variante tem a sua escala de fitness, a comparação usa uma régua comum:
 //! - resolvidas: sementes que chegaram a um quadro sem nenhuma violação (fitness 0 em qualquer variante);
 //! - avaliações até resolver (mediana das resolvidas);
-//! - violações restantes: fitness ORIGINAL do melhor quadro de cada semente (mediana e média).
+//! - violações restantes: custo do melhor quadro de cada semente com os pesos padrão (mediana e média).
 //!
 //! Uso: cargo run --release --example bench_horario_fitness -- <instancia> [--sementes N] [--orcamento M]
-//!      [--ilhas N] [--variantes nome=professor:unidas:agrupar:movAgrupar:movProfessor[:conflito],...]   (mov = 0 ou 1)
+//!      [--ilhas N] [--variantes nome=professor:unidas:agrupar:movProfessor[:conflito],...]   (mov = 0 ou 1)
 
 use std::{env, time::Instant};
 
@@ -33,19 +33,18 @@ fn main() {
     let orcamento = (arg("--orcamento").map_or(5.0, |s| s.parse::<f64>().unwrap()) * 1e6) as u64;
     let ilhas: usize = arg("--ilhas").map_or(0, |s| s.parse().unwrap());
     let variantes: Vec<(String, PesosFitness)> = arg("--variantes")
-        .unwrap_or("original=50:30:20:0,movimentos=50:30:20:1".into())
+        .unwrap_or("por-aula=50:30:20:0,padrao=100:30:20:1:50".into())
         .split(',')
         .map(|v| {
-            let (nome, pesos) = v.split_once('=').expect("variante no formato nome=prof:unidas:agrupar:mov");
+            let (nome, pesos) = v.split_once('=').expect("variante no formato nome=prof:unidas:agrupar:movProfessor[:conflito]");
             let p: Vec<f64> = pesos.split(':').map(|x| x.parse().unwrap()).collect();
             (nome.to_string(), PesosFitness {
                 professor: p[0],
                 unidas: p[1],
                 agrupar: p[2],
-                agrupar_por_movimentos: p[3] != 0.0,
-                professor_por_movimentos: p.get(4).is_some_and(|&x| x != 0.0),
-                // 6º campo opcional: peso do conflito (padrão: igual ao do professor)
-                conflito: p.get(5).copied().unwrap_or(p[0]),
+                professor_por_movimentos: p.get(3).is_some_and(|&x| x != 0.0),
+                // 5º campo opcional: peso do conflito (padrão: igual ao do professor)
+                conflito: p.get(4).copied().unwrap_or(p[0]),
             })
         })
         .collect();
@@ -81,9 +80,9 @@ fn main() {
                 if info.generation == antes { break; }
             }
             if let Some(a) = resolveu { ate.push(a as f64); }
-            // Régua comum: violações do melhor quadro medidas pelo fitness original
+            // Régua comum: o melhor quadro medido com os pesos padrão
             let melhor = ga.get_info().best_genes.unwrap();
-            viol.push(-base.fitness_original(&mut estado, &melhor));
+            viol.push(-base.fitness_rapido(&mut estado, &melhor));
         }
         let seg = inicio.elapsed().as_secs_f64() / sementes as f64;
         let media = viol.iter().sum::<f64>() / viol.len() as f64;

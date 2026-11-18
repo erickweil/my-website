@@ -116,8 +116,10 @@
         "Professor C"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 2",
@@ -128,8 +130,17 @@
         "Professor B"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 4,
+        "porTamanho": [
+          {
+            "tamanho": 3,
+            "min": 0,
+            "max": 0
+          }
+        ]
+      }
     },
     {
       "id": "Disciplina 3",
@@ -140,8 +151,10 @@
         "Professor C"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 4",
@@ -152,8 +165,10 @@
         "Professor H"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 5",
@@ -164,8 +179,10 @@
         "Professor F"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 6",
@@ -176,8 +193,10 @@
         "Professor D"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 7",
@@ -188,8 +207,10 @@
         "Professor I"
       ],
       "aulasSemana": 4,
-      "bloco": 4,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 4,
+        "tamanhoMax": 4
+      }
     },
     {
       "id": "Disciplina 8",
@@ -200,8 +221,17 @@
         "Professor D"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 4,
+        "porTamanho": [
+          {
+            "tamanho": 3,
+            "min": 0,
+            "max": 0
+          }
+        ]
+      }
     },
     {
       "id": "Disciplina 9",
@@ -212,8 +242,10 @@
         "Professor A"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 10",
@@ -224,8 +256,17 @@
         "Professor E"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 4,
+        "porTamanho": [
+          {
+            "tamanho": 3,
+            "min": 0,
+            "max": 0
+          }
+        ]
+      }
     },
     {
       "id": "Disciplina 11",
@@ -236,8 +277,10 @@
         "Professor C"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 12",
@@ -248,8 +291,10 @@
         "Professor D"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 13",
@@ -260,8 +305,10 @@
         "Professor F"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 14",
@@ -272,8 +319,17 @@
         "Professor C"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 4,
+        "porTamanho": [
+          {
+            "tamanho": 3,
+            "min": 0,
+            "max": 0
+          }
+        ]
+      }
     },
     {
       "id": "Disciplina 15",
@@ -284,8 +340,10 @@
         "Professor G"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 16",
@@ -296,8 +354,10 @@
         "Professor F"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 17",
@@ -308,8 +368,10 @@
         "Professor H"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Disciplina 18",
@@ -320,8 +382,10 @@
         "Professor D"
       ],
       "aulasSemana": 4,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Grupo 1",
@@ -336,8 +400,10 @@
         "Professor J"
       ],
       "aulasSemana": 4,
-      "bloco": 4,
-      "emendar": true
+      "divisao": {
+        "tamanhoMin": 4,
+        "tamanhoMax": 4
+      }
     }
   ],
   "recursos": [

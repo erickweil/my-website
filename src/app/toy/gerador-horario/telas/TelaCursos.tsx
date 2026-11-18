@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { Componente, Curso, Id } from "../modelo/modelo";
 import { adicionarPeriodo, duplicarCurso, nomeDoPeriodo, novoComponente, novoCurso, removerCurso } from "../modelo/operacoes";
-import { CampoDistribuicao } from "../componentes/CampoDistribuicao";
+import { CampoDivisao } from "../componentes/CampoDivisao";
 import { CampoNumero, Cabecalho, ItemDaLista, ListaLateral, RotuloMovel, Selecao, Vazio, plural } from "../componentes/comuns";
 import type { Contexto } from "../useAreaDeTrabalho";
 
@@ -139,7 +139,7 @@ export function TelaCursos({ area, mudarArea }: Contexto) {
                                     <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
                                         <span>Disciplina</span>
                                         <span className="text-center">Aulas/sem.</span>
-                                        <span title="Aulas seguidas por bloco (2 = aulas duplas). 0 = sem agrupamento.">Agrupar</span>
+                                        <span title="Como as aulas se dividem em pedaços de aulas seguidas no mesmo dia">Divisão</span>
                                         <span />
                                     </div>
                                     {periodo.componentes.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma disciplina neste período.</p>}
@@ -156,8 +156,8 @@ export function TelaCursos({ area, mudarArea }: Contexto) {
                                                 <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={c.aulasSemana} onChange={(n) => mudarComponente(c.id, { aulasSemana: n })} />
                                             </div>
                                             <div className="col-span-4 md:col-span-1">
-                                                <RotuloMovel>Agrupar</RotuloMovel>
-                                                <CampoDistribuicao valor={c.distribuicao} aulasSemana={c.aulasSemana} onChange={(distribuicao) => mudarComponente(c.id, { distribuicao })} />
+                                                <RotuloMovel>Divisão</RotuloMovel>
+                                                <CampoDivisao valor={c.divisao} aulasSemana={c.aulasSemana} onChange={(divisao) => mudarComponente(c.id, { divisao })} />
                                             </div>
                                         </div>
                                     ))}

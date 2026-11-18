@@ -5,12 +5,13 @@
 
 import type { EntradaDoSolver, ResultadoDoSolver } from "../horario-regras.ts";
 import type { HorarioGerado, Id, Oferta, ProjetoHorario } from "./modelo.ts";
+import { regrasDaDivisao } from "./divisao.ts";
 import { ambienteDaOferta, aulasDoQuadro, horariosCheios, limitarAoQuadro } from "./operacoes.ts";
 
 /**
  * A entrada do solver para o projeto.
  *
- * - Cada oferta com aulas vira uma aula, com as turmas que participam.
+ * - Cada oferta com aulas vira uma aula, com as turmas que participam e as regras da divisão dela.
  * - Os recursos de uma aula são os professores dela e, se disputado, o ambiente. Só entram os
  *   ambientes usados por mais de uma turma: os outros não restringem nada.
  * - Disponibilidades e horários limitados aos dias e tempos do quadro.
@@ -41,8 +42,7 @@ export function paraSolver(projeto: ProjetoHorario): EntradaDoSolver {
             turmas: o.participacoes.map((p) => p.turmaId),
             recursos: [...o.professorIds, ...ambienteDisputado(o)],
             aulasSemana: o.aulasSemana,
-            bloco: o.distribuicao.tipo === "blocos" ? o.distribuicao.tamanho : 0,
-            emendar: o.distribuicao.tipo === "blocos" && o.distribuicao.emendar,
+            divisao: regrasDaDivisao(o.divisao, o.aulasSemana),
         })),
         recursos: [
             ...projeto.docentes

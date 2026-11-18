@@ -9,6 +9,7 @@
 // traz o nome de cada um. Dados reais ficam fora do git: use um nome que comece com `real`.
 
 import fs from "node:fs";
+import { lerAreaDeTrabalho } from "../../../src/app/toy/gerador-horario/modelo/armazenamento.ts";
 import { paraSolver } from "../../../src/app/toy/gerador-horario/modelo/para-solver.ts";
 
 const [origem, destino, nomeDoProjeto] = process.argv.slice(2);
@@ -16,7 +17,13 @@ if (!origem || !destino) {
     console.error("uso: node de-projeto.mjs <area-de-trabalho.json> <saida.json> [nome do projeto]");
     process.exit(2);
 }
-const area = JSON.parse(fs.readFileSync(origem, "utf8"));
+// Lido como a página lê um arquivo importado: validado e convertido do formato anterior
+const leitura = lerAreaDeTrabalho(fs.readFileSync(origem, "utf8"));
+if (!leitura.ok) {
+    console.error(`arquivo inválido: ${leitura.erro}`);
+    process.exit(1);
+}
+const area = leitura.area;
 const projeto = nomeDoProjeto ? area.projetos.find((p) => p.nome === nomeDoProjeto) : area.projetos[0];
 if (!projeto) {
     console.error(`projeto não encontrado. Projetos no arquivo: ${area.projetos.map((p) => p.nome).join(", ")}`);

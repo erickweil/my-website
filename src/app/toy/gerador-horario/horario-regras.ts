@@ -21,6 +21,23 @@ export const DIAS_SEMANA_MAP: Record<HorarioDia, string> = {
 /** Tempos marcados por dia; o tempo é o número da aula no dia, a partir de 1. */
 export type HorariosPorDia = Partial<Record<HorarioDia, number[]>>;
 
+/**
+ * Regras de divisão das aulas de uma disciplina em pedaços (trechos de aulas seguidas num dia),
+ * no estilo do XHSTT. Tudo opcional: sem nada, a divisão é livre.
+ */
+export interface EntradaDivisao {
+    /** Menor e maior pedaço (padrão: 1 e todas as aulas). */
+    tamanhoMin?: number;
+    tamanhoMax?: number;
+    /** Quantos pedaços na semana (padrão: de 1 a todas as aulas). */
+    quantidadeMin?: number;
+    quantidadeMax?: number;
+    /** Quantos pedaços de um tamanho. */
+    porTamanho?: { tamanho: number; min: number; max: number }[];
+    /** Regra de qualidade: no máximo um pedaço por dia. */
+    espalhar?: boolean;
+}
+
 /** O problema entregue ao solver. Tudo se referencia por id. */
 export interface EntradaDoSolver {
     turmas: {
@@ -36,10 +53,8 @@ export interface EntradaDoSolver {
         /** Professores e ambiente: cada um só pode estar numa aula por horário. */
         recursos: string[];
         aulasSemana: number;
-        /** Aulas seguidas por bloco; 0 = sem agrupamento. */
-        bloco: number;
-        /** Com `bloco`: dois blocos podem ficar encostados no mesmo dia. */
-        emendar: boolean;
+        /** Como as aulas se dividem em pedaços de aulas seguidas (ver modelo/divisao.ts). */
+        divisao: EntradaDivisao;
     }[];
     /** Professores e ambientes. */
     recursos: {
@@ -63,10 +78,10 @@ export interface EntradaDoSolver {
 
 /** Uma ocorrência de regra de qualidade num horário (`Ocorrencia` em horario_qualidade.rs). */
 export interface OcorrenciaDeQualidade {
-    regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno" | "janela";
+    regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno" | "janela" | "espalhar";
     /** O professor (evitar, jornada, descanso). */
     recurso: string | null;
-    /** A turma (evitar, intervalo, turno, janela) e a aula (evitar, intervalo, turno). */
+    /** A turma (evitar, intervalo, turno, janela, espalhar) e a aula (evitar, intervalo, turno, espalhar). */
     turma: string | null;
     aula: string | null;
     /** O dia; no descanso, o primeiro dos dois. */

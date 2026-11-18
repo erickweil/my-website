@@ -1,4 +1,5 @@
-use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{BuffersQualidade, DiaSemana, Horario, QUANTOS_DIAS, QuadroHorario, RegrasHorario, TabelasQualidade}, random::{random_bool, random_range, random_range_except}};
+use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poisson_knuth_sample}, problems::GAProblem}, horario::{BuffersQualidade, DiaSemana, QUANTOS_DIAS, QuadroHorario, RegrasHorario, TabelasQualidade}, random::{random_bool, random_range, random_range_except}};
+use super::horario_divisao::{RegraDivisao, MAIOR_PEDACO};
 
 /// # Regras obrigatórias e regras de qualidade
 ///
@@ -15,32 +16,25 @@ use crate::{console_log, genetic::{ga::GAConfig, operators::{CrossoverIPX, poiss
 /// são medidas. O fitness é 0 exatamente quando o quadro não viola nenhuma regra, com quaisquer
 /// pesos positivos: os pesos e as medidas só mudam o "relevo" que guia a busca.
 ///
-/// O padrão ([`PesosFitness::PADRAO`]) mede tudo em AULAS QUE PRECISAM MUDAR DE LUGAR. Medido em
-/// examples/bench_horario_fitness, com 100 sementes e 4 M de avaliações por semente:
-///
-/// | fitness            | quadro real de faculdade | instância pequena |
-/// |--------------------|--------------------------|-------------------|
-/// | original           | 3 resolvidas             | 26                |
-/// | padrão             | 38                       | 37                |
-///
-/// O que cada mudança fez (quadro real): contar o conflito de professor uma vez em vez de duas
-/// levou de 3 para ~15-28; dar ao conflito metade do peso do horário indisponível, para 38; medir
-/// o agrupamento por movimentos vale 38 contra 27 da medida original. Motivo: a mutação troca uma
-/// aula por vez, e mover um bloco para outro dia passa por estados com o bloco partido e com o
+/// O padrão ([`PesosFitness::PADRAO`]) mede o professor em AULAS QUE PRECISAM MUDAR DE LUGAR e o
+/// agrupamento pelo desvio das regras de divisão em pedaços (ver `horario_divisao.rs`). Contar o
+/// conflito de professor uma vez em vez de duas e dar a ele metade do peso do horário
+/// indisponível foi o que mais rendeu (examples/bench_horario_fitness). Motivo: a mutação troca
+/// uma aula por vez, e mover um bloco para outro dia passa por estados com o bloco partido e com o
 /// professor em duas turmas; se esses estados de passagem custam mais que o erro que está sendo
 /// consertado, a busca fica presa.
+///
+/// O peso do agrupamento em relação ao conflito importa: no técnico real v4, um bloco de 2 partido
+/// valendo o dobro de um conflito (2 unidades de 20 contra 50) levou a busca local de 5 para 18 de
+/// 20 sementes até um horário válido (ver `rust-wasm/estudos/divisao`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PesosFitness {
     /// Por aula e por professor: horário em que ele não trabalha, ou cada turma a mais no mesmo horário.
     pub professor: f64,
     /// Por aula de disciplina unida sem a parceira no mesmo horário.
     pub unidas: f64,
-    /// Por unidade de erro de agrupamento (ver `agrupar_por_movimentos`).
+    /// Por unidade de desvio das regras de divisão em pedaços (ver `horario_divisao.rs`).
     pub agrupar: f64,
-    /// Como medir o erro de agrupamento de uma disciplina:
-    /// - false: soma, bloco a bloco, da distância até o tamanho ideal (fitness original);
-    /// - true: número mínimo de aulas que precisam mudar de lugar para os blocos ficarem certos.
-    pub agrupar_por_movimentos: bool,
     /// Como medir o erro de professor num horário com N turmas dele:
     /// - false: cada uma das N aulas conta (N - disponível) — um conflito de 2 turmas vale 2 (fitness original);
     /// - true: conta só as aulas que precisam sair (N - disponível) — um conflito de 2 turmas vale 1.
@@ -52,24 +46,13 @@ pub struct PesosFitness {
 }
 
 impl PesosFitness {
-    /// Os pesos e a medida do fitness original.
-    /// O padrão: tudo medido em aulas a mover, conflito com metade do peso do horário indisponível.
+    /// Tudo medido em aulas a mover, conflito com metade do peso do horário indisponível.
     pub const PADRAO: Self = Self {
         professor: 100.0,
         conflito: 50.0,
         unidas: 30.0,
         agrupar: 20.0,
-        agrupar_por_movimentos: true,
         professor_por_movimentos: true,
-    };
-
-    pub const ORIGINAL: Self = Self {
-        professor: 50.0,
-        unidas: 30.0,
-        agrupar: 20.0,
-        agrupar_por_movimentos: false,
-        professor_por_movimentos: false,
-        conflito: 50.0,
     };
 }
 
@@ -124,11 +107,8 @@ struct TabelasFitness {
     inicio_turma: Vec<u32>,
     /// (valor esperado na célula da turma parceira, início da turma parceira no quadro)
     unidas: Vec<(i32, u32)>,
-    /// Por disciplina: tamanho do bloco (0 = sem agrupamento), se os blocos não podem se tocar,
-    /// e onde começam os seus restos em `HorarioGAState::restos`.
-    agrupar: Vec<i32>,
-    dividir: Vec<bool>,
-    restos_de: Vec<u32>,
+    /// Por disciplina: as regras de divisão em pedaços.
+    divisao: Vec<RegraDivisao>,
 }
 
 impl TabelasFitness {
@@ -156,8 +136,6 @@ impl TabelasFitness {
 
         let (mut prof_de, mut professores) = (Vec::new(), Vec::new());
         let (mut unidas_de, mut unidas) = (Vec::new(), Vec::new());
-        let mut restos_de = Vec::new();
-        let mut n_restos = 0u32;
         for d in &r.disciplinas {
             let ini = professores.len() as u32;
             professores.extend(d.professores.iter().map(|&p| p as u32));
@@ -166,12 +144,7 @@ impl TabelasFitness {
             let ini = unidas.len() as u32;
             unidas.extend(d.disciplinas_unidas.iter().map(|&u| (u as i32 + 1, (r.disciplinas[u].turma_id * por_turma) as u32)));
             unidas_de.push((ini, unidas.len() as u32));
-
-            // Uma disciplina tem no máximo um bloco por aula
-            restos_de.push(n_restos);
-            n_restos += d.aulas.max(1) as u32;
         }
-        restos_de.push(n_restos);
 
         Self {
             slots,
@@ -184,9 +157,7 @@ impl TabelasFitness {
             unidas_de,
             inicio_turma: r.disciplinas.iter().map(|d| (d.turma_id * por_turma) as u32).collect(),
             unidas,
-            agrupar: r.disciplinas.iter().map(|d| d.agrupar.max(0)).collect(),
-            dividir: r.disciplinas.iter().map(|d| d.dividir).collect(),
-            restos_de,
+            divisao: r.disciplinas.iter().map(|d| d.divisao.clone()).collect(),
         }
     }
 }
@@ -194,20 +165,12 @@ impl TabelasFitness {
 #[derive(Clone)]
 pub struct HorarioGAState {
     crossover_ipx: CrossoverIPX<i32>,
-
-    //  -1 = não dá aula
-    //   0 = não está definido
-    // > 0 = Índice da disciplina
-    prof_matriz: Vec<Horario>,
-
     tabelas: TabelasFitness,
     /// Por professor e horário: disponibilidade menos o número de turmas alocadas (buffer de trabalho).
     ocupacao: Vec<i32>,
-    /// Restos dos blocos de cada disciplina (tamanho do bloco módulo G), e quantos há (buffers de trabalho).
-    restos: Vec<u8>,
-    n_restos: Vec<u8>,
-    /// Por disciplina: aulas que precisam sair de onde estão (blocos grudados, com `dividir`).
-    sobras: Vec<u16>,
+    /// Por disciplina: pedaços na semana e pedaços de cada tamanho (buffers de trabalho).
+    pedacos: Vec<u8>,
+    por_tamanho: Vec<u8>,
     /// Regras de qualidade (ver `horario_qualidade.rs`).
     qualidade: TabelasQualidade,
     buffers_qualidade: BuffersQualidade,
@@ -226,11 +189,9 @@ impl GAProblem for RegrasHorario {
             // Capacidade = tamanho do slice de uma turma (pior caso do IPX)
             crossover_ipx: CrossoverIPX::new(QUANTOS_DIAS * self.n_tempos),
             // Pré-aloca e pré-popula para evitar alocações no hot path do fitness
-            prof_matriz: self.professores.iter().map(|p| p.horarios.clone()).collect(),
             ocupacao: vec![0; self.professores.len() * QUANTOS_DIAS * self.n_tempos],
-            restos: vec![0; self.disciplinas.iter().map(|d| d.aulas.max(1) as usize).sum()],
-            n_restos: vec![0; self.disciplinas.len()],
-            sobras: vec![0; self.disciplinas.len()],
+            pedacos: vec![0; self.disciplinas.len()],
+            por_tamanho: vec![0; self.disciplinas.len() * (MAIOR_PEDACO + 1)],
             tabelas: TabelasFitness::new(self),
             buffers_qualidade: qualidade.buffers(),
             qualidade,
@@ -327,7 +288,7 @@ impl GAProblem for RegrasHorario {
             else { continue };
 
             // Aula de disciplina agrupada: às vezes move o trecho inteiro em vez de só a aula
-            if troca_de_blocos > 0.0 && self.disciplina_em(quadro[idx]).is_some_and(|d| self.disciplinas[d].agrupar > 0)
+            if troca_de_blocos > 0.0 && self.disciplina_em(quadro[idx]).is_some_and(|d| self.disciplinas[d].divisao.agrupa())
                 && fastrand::f64() < troca_de_blocos
                 && self.trocar_trecho(quadro, idx)
             {
@@ -418,12 +379,13 @@ impl RegrasHorario {
         false
     }
 
-    /// Quadro inicial com as aulas agrupadas já em blocos: para cada turma, os blocos (do maior para
-    /// o menor) vão para posições sorteadas entre as que cabem, de preferência onde os professores
-    /// estão disponíveis e, com "não emendar", sem encostar em outro bloco da mesma disciplina. Se um
-    /// bloco não cabe em lugar nenhum, as aulas dele entram soltas. Depois as aulas sem agrupamento
-    /// e os horários vagos preenchem o resto, ao acaso. O multiconjunto de cada turma é o mesmo de
-    /// `random_genes` sem blocos.
+    /// Quadro inicial com as aulas já divididas em pedaços: para cada disciplina, uma divisão
+    /// sorteada entre as que atendem às regras dela; os pedaços (do maior para o menor) vão para
+    /// posições sorteadas entre as que cabem, de preferência onde os professores estão disponíveis
+    /// e sem encostar em outro pedaço da mesma disciplina (os dois virariam um só). Um pedaço que
+    /// não cabe em lugar nenhum entra com as aulas soltas, assim como as disciplinas sem divisão
+    /// possível; os horários vagos preenchem o resto, ao acaso. O multiconjunto de cada turma é o
+    /// mesmo de `random_genes` sem blocos.
     pub fn genes_com_blocos(&self) -> QuadroHorario {
         let n = self.n_tempos;
         let mut genes = self.get_quadro_vazio();
@@ -433,14 +395,15 @@ impl RegrasHorario {
         };
         for turma in &self.turmas {
             let inicio = turma.id * QUANTOS_DIAS * n;
-            // (disciplina, tamanho) dos blocos, e as peças soltas
+            // (disciplina, tamanho) dos pedaços de mais de uma aula, e as aulas soltas
             let mut blocos: Vec<(usize, usize)> = Vec::new();
             let mut soltas: Vec<i32> = Vec::new();
             for d in self.disciplinas.iter().filter(|d| d.turma_id == turma.id) {
-                let g = d.agrupar.max(0);
-                let (n_blocos, resto) = if g > 0 { (d.aulas / g, d.aulas % g) } else { (0, d.aulas) };
-                blocos.extend((0..n_blocos).map(|_| (d.id, g as usize)));
-                soltas.extend((0..resto).map(|_| d.id as i32 + 1));
+                let divisao = if d.divisao.agrupa() { d.divisao.sortear_divisao(d.aulas) } else { None };
+                let divisao = divisao.unwrap_or_else(|| vec![1; d.aulas.max(0) as usize]);
+                for t in divisao {
+                    if t > 1 { blocos.push((d.id, t as usize)) } else { soltas.push(d.id as i32 + 1) }
+                }
             }
             soltas.extend((0..turma.folga).map(|_| self.vago()));
             fastrand::shuffle(&mut blocos);
@@ -455,8 +418,7 @@ impl RegrasHorario {
                     for t in 0..n.saturating_sub(k - 1) {
                         let ini = linha + t;
                         if genes[ini..ini + k].iter().any(|&x| x != 0) { continue; }
-                        let encosta = self.disciplinas[d].dividir
-                            && ((t > 0 && genes[ini - 1] == valor) || (t + k < n && genes[ini + k] == valor));
+                        let encosta = (t > 0 && genes[ini - 1] == valor) || (t + k < n && genes[ini + k] == valor);
                         let bom = !encosta && (ini..ini + k).all(|c| pode_prof(d, c));
                         candidatos.push((ini, bom));
                     }
@@ -485,134 +447,13 @@ impl RegrasHorario {
         genes
     }
 
-    /// Fitness original, em várias passadas pelo quadro. Mantido como referência: os testes
-    /// conferem que `fitness_rapido` com os pesos originais dá exatamente o mesmo valor.
-    pub fn fitness_original(&self, state: &mut HorarioGAState, quadro: &[i32]) -> f64 {
-        // Começa 0, para cada coisa errada subtrai
-        let mut fitness: f64 = 0.0;
-
-        // Reseta as matrizes de disponibilidade dos professores para contagem de fitness
-        // Reset in-place: sem alocação (copy_from_slice sobre Vec já existente)
-        for (state_prof, prof) in state.prof_matriz.iter_mut().zip(self.professores.iter()) {
-            state_prof.slots.copy_from_slice(&prof.horarios.slots);
-        }
-
-        // Pass 1: conta quantas turmas precisam de cada (prof, dia, tempo).
-        // Isso evita o viés em que a turma com id menor sempre "ganha" o professor.
-        for turma in &self.turmas {
-            for dia_idx in 0..QUANTOS_DIAS {
-                let dia = DiaSemana::from_index(dia_idx);
-                for tempo in 0..self.n_tempos {
-                    // Slots inativos: nada a verificar
-                    if turma.horarios.get(dia, tempo) != 1 { continue; }
-
-                    let Some(id_disciplina) = self.disciplina_em(quadro[self.to_quadro_index(turma.id, dia, tempo)]) else { continue }; // vago ou não resolvido
-
-                    let disciplina = &self.disciplinas[id_disciplina];
-
-                    // prof_matriz começa como cópia de prof.horarios (0, 1)
-                    // Para cada disciplina alocada, decrementa a disponibilidade dos professores daquela disciplina
-                    for &prof_id in &disciplina.professores {
-                        state.prof_matriz[prof_id].desmarcar(dia, tempo);
-                    }
-                }
-            }
-        }
-
-        // Pass 2: conta a pontuação de cada slot com base na disponibilidade dos professores e nas disciplinas unidas
-        for turma in &self.turmas {
-            for dia_idx in 0..QUANTOS_DIAS {
-                let dia = DiaSemana::from_index(dia_idx);
-                for tempo in 0..self.n_tempos {
-                    let index = self.to_quadro_index(turma.id, dia, tempo);
-
-                    if turma.horarios.get(dia, tempo) != 1 {
-                        // Deveria ser vazio
-                        if quadro[index] != -1 {
-                            fitness -= 1000.0;
-                        }
-                        continue;
-                    }
-
-                    if quadro[index] <= 0 {
-                        // Deveria ter uma disciplina alocada (ou ficar vago)
-                        fitness -= 1000.0;
-                        continue; // slot vazio
-                    }
-                    let Some(id_disciplina) = self.disciplina_em(quadro[index]) else { continue }; // vago
-
-                    let disciplina = &self.disciplinas[id_disciplina];
-
-                    // Regra: Disponibilidade do professor e sem conflito entre turmas
-                    for &prof_id in &disciplina.professores {
-                        let disponibilidade = state.prof_matriz[prof_id].get(dia, tempo);
-                        // Penaliza proporcional ao Nº de conflitos
-                        if disponibilidade <= 0 {
-                            fitness += disponibilidade as f64 * 50.0;
-                        }
-                    }
-
-                    // Regra: Disciplinas unidas devem ocupar o mesmo (dia, tempo)
-                    for &unida_id in &disciplina.disciplinas_unidas {
-                        let unida_turma_id = self.disciplinas[unida_id].turma_id;
-                        let valor = quadro[self.to_quadro_index(unida_turma_id, dia, tempo)];
-                        // Penaliza disciplinas que não estão juntas quando deveriam
-                        if valor != unida_id as i32 + 1 {
-                            fitness -= 30.0;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Regra: Agrupamento em blocos de G aulas consecutivas
-        for disc in &self.disciplinas {
-            if disc.agrupar <= 0 { continue; }
-            let g = disc.agrupar;
-            let turma_id = disc.turma_id;
-
-            for dia_idx in 0..QUANTOS_DIAS {
-                let dia = DiaSemana::from_index(dia_idx);
-                let mut run_start: i32 = -1;
-
-                for tempo in 0..=self.n_tempos {
-                    // Sentinela no final do dia: força o fechamento do último run
-                    let v = if tempo < self.n_tempos {
-                        quadro[self.to_quadro_index(turma_id, dia, tempo)]
-                    } else {
-                        -1
-                    };
-
-                    if v == disc.id as i32 + 1 {
-                        if run_start == -1 { run_start = tempo as i32; }
-                    } else if run_start != -1 {
-                        let run_length = tempo as i32 - run_start;
-
-                        // Penalizar proporcional ao quanto o run se aproxima do ideal (multiplo de G, ou igual a G se dividir)
-                        let ideal = if disc.dividir {
-                            g
-                        } else {
-                            ((run_length as f64 / g as f64).round() as i32) * g
-                        };
-                        let diff = (run_length - ideal).abs();
-                        fitness -= diff as f64 * 20.0;
-
-                        run_start = -1;
-                    }
-                }
-            }
-        }
-
-        fitness
-    }
-
     /// Fitness do quadro: 0 quando não quebra nenhuma regra, obrigatória ou de qualidade; negativo
     /// proporcional às violações (ver [`PesosFitness`]). Um quadro VÁLIDO (sem violação obrigatória)
     /// tem fitness entre 0 e menos a menor penalidade obrigatória, exclusive. Faz uma passada pelas células ativas para a ocupação dos professores,
     /// outra para as penalidades de professor e de disciplinas unidas, e uma pelos dias com aula
-    /// para os blocos.
+    /// para os pedaços de cada disciplina.
     pub fn fitness_rapido(&self, state: &mut HorarioGAState, quadro: &[i32]) -> f64 {
-        let HorarioGAState { tabelas: t, ocupacao, restos, n_restos, sobras, qualidade: tabelas_q, buffers_qualidade: buffers_q, .. } = state;
+        let HorarioGAState { tabelas: t, ocupacao, pedacos, por_tamanho, qualidade: tabelas_q, buffers_qualidade: buffers_q, .. } = state;
         let pesos = self.pesos;
 
         // Ocupação de cada professor em cada horário: disponibilidade (1 ou 0) menos uma por turma.
@@ -672,9 +513,11 @@ impl RegrasHorario {
                 estrutura += 1; // deveria estar vazio
             }
         }
-        // Agrupamento: percorre cada dia uma vez, bloco a bloco
-        n_restos.fill(0);
-        sobras.fill(0);
+        // Divisão em pedaços: percorre cada dia uma vez, pedaço a pedaço. O tamanho se confere na
+        // hora; a quantidade e os pedaços por tamanho, no fim, disciplina a disciplina.
+        const K: usize = MAIOR_PEDACO + 1;
+        pedacos.fill(0);
+        por_tamanho.fill(0);
         let mut u_agrupar = 0i32;
         for &(inicio, fim) in &t.linhas {
             let (mut i, fim) = (inicio as usize, fim as usize);
@@ -689,47 +532,20 @@ impl RegrasHorario {
                     j += 1;
                 }
                 let d = (v - 1) as usize;
-                let g = t.agrupar[d];
-                if g > 0 {
-                    let tamanho = (j - i) as i32;
-                    if !pesos.agrupar_por_movimentos {
-                        // Distância do bloco ao tamanho ideal: G com dividir, senão o múltiplo de G mais próximo
-                        let ideal = if t.dividir[d] { g } else { ((tamanho as f64 / g as f64).round() as i32) * g };
-                        u_agrupar += (tamanho - ideal).abs();
-                    } else {
-                        let (blocos, resto) = (tamanho / g, tamanho % g);
-                        if t.dividir[d] && blocos >= 1 {
-                            // Blocos não podem se tocar: os blocos a mais e o resto têm que sair daqui
-                            sobras[d] += ((blocos - 1) * g + resto) as u16;
-                        } else if resto > 0 {
-                            // Pedaço que pode ser completado por outras aulas ou desfeito: decide abaixo
-                            let k = n_restos[d] as usize;
-                            let ini = t.restos_de[d] as usize;
-                            if ini + k < t.restos_de[d + 1] as usize {
-                                restos[ini + k] = resto as u8;
-                                n_restos[d] += 1;
-                            }
-                        }
-                    }
+                let regra = &t.divisao[d];
+                if regra.ativa {
+                    let tamanho = (j - i).min(MAIOR_PEDACO) as u8;
+                    u_agrupar += regra.desvio_do_pedaco(tamanho);
+                    pedacos[d] = pedacos[d].saturating_add(1);
+                    let c = &mut por_tamanho[d * K + tamanho as usize];
+                    *c = c.saturating_add(1);
                 }
                 i = j;
             }
         }
-        if pesos.agrupar_por_movimentos {
-            // Menor número de aulas a mover. Há R aulas fora de bloco: as que sobram de blocos
-            // grudados (têm que sair) e as que estão em pedaços. Elas formam R / G blocos; vale mais
-            // completar os pedaços maiores e desfazer os menores. Movem-se as sobras e as aulas dos
-            // pedaços desfeitos — as dos pedaços completados ficam onde estão.
-            for d in 0..n_restos.len() {
-                let k = n_restos[d] as usize;
-                if k == 0 && sobras[d] == 0 { continue; }
-                let ini = t.restos_de[d] as usize;
-                let pedacos = &mut restos[ini..ini + k];
-                pedacos.sort_unstable_by(|a, b| b.cmp(a));
-                let total: i32 = sobras[d] as i32 + pedacos.iter().map(|&r| r as i32).sum::<i32>();
-                let completos = (total / t.agrupar[d]) as usize;
-                let ficam: i32 = pedacos.iter().take(completos).map(|&r| r as i32).sum();
-                u_agrupar += total - ficam;
+        for (d, regra) in t.divisao.iter().enumerate() {
+            if regra.ativa {
+                u_agrupar += regra.desvio_da_semana(pedacos[d], &por_tamanho[d * K..(d + 1) * K]);
             }
         }
 
@@ -887,7 +703,7 @@ mod tests {
         fastrand::seed(22);
         let regras = RegrasHorario::from_json(r#"{
             "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4, 5], "ter": [1, 2, 3] } }],
-            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": 4, "bloco": 2 }, { "id": "B", "turmas": ["T"], "recursos": [], "aulasSemana": 1 }],
+            "aulas": [{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": 4, "divisao": { "tamanhoMin": 2 } }, { "id": "B", "turmas": ["T"], "recursos": [], "aulasSemana": 1 }],
             "recursos": []
         }"#).unwrap();
         for _ in 0..50 {
@@ -937,101 +753,52 @@ mod tests {
         quadros
     }
 
-    /// O fitness em uma passada tem que dar EXATAMENTE o valor do fitness original.
+    /// O fitness zera exatamente nos mesmos quadros com quaisquer pesos e medidas do professor:
+    /// os pesos só mudam o relevo. Inclui soluções válidas do Pencilmark e versões com poucas trocas.
     #[test]
-    fn fitness_rapido_igual_ao_original() {
-        for nome in ["pequena", "media", "faculdade-anonimizado", "inviavel"] {
-            fastrand::seed(11);
-            let mut regras = carregar(nome);
-            regras.pesos = PesosFitness::ORIGINAL;
-            let mut estado = regras.initial_state();
-            let quadros = quadros_de_teste(&regras, 40);
-            let mut distintos = std::collections::HashSet::new();
-            for q in &quadros {
-                let original = regras.fitness_original(&mut estado, q);
-                assert_eq!(regras.fitness_rapido(&mut estado, q), original, "{nome}");
-                distintos.insert(original as i64);
-            }
-            assert!(distintos.len() > 10, "{nome}: os quadros de teste deveriam ter fitness variados");
-
-            // Estrutura quebrada também é penalizada do mesmo jeito
-            let mut q = quadros[0].clone();
-            let ativa = q.iter().position(|&v| v > 0).unwrap();
-            q[ativa] = 0;
-            if let Some(inativa) = q.iter().position(|&v| v == -1) {
-                q[inativa] = 1;
-            }
-            assert_eq!(regras.fitness_rapido(&mut estado, &q), regras.fitness_original(&mut estado, &q), "{nome}: estrutura");
-        }
-    }
-
-    /// Medir o agrupamento por movimentos muda os valores, mas não o que é um quadro válido:
-    /// vale 0 exatamente nos mesmos quadros, e nunca penaliza mais que a medida original.
-    #[test]
-    fn agrupar_por_movimentos_zera_nos_mesmos_quadros() {
+    fn fitness_zera_nos_mesmos_quadros_com_quaisquer_pesos() {
         for nome in ["pequena", "media", "faculdade-anonimizado"] {
             fastrand::seed(12);
-            let mut original = carregar(nome);
-            original.pesos = PesosFitness::ORIGINAL;
-            let mut movimentos = original.clone();
-            movimentos.pesos.agrupar_por_movimentos = true;
-            // Só o agrupamento, para comparar as duas medidas isoladas
-            let so_agrupar = |r: &RegrasHorario| { let mut r = r.clone(); r.pesos.professor = 0.0; r.pesos.unidas = 0.0; r };
-            let (ag_original, ag_movimentos) = (so_agrupar(&original), so_agrupar(&movimentos));
-            let mut estado = original.initial_state();
-
-            let mut quadros = quadros_de_teste(&original, 40);
-            // Soluções válidas do Pencilmark e versões com poucas trocas (quase válidas)
+            let regras = carregar(nome);
+            let mut estado = regras.initial_state();
+            let mut quadros = quadros_de_teste(&regras, 40);
             for semente in 1..=3 {
                 fastrand::seed(semente);
-                let pm = crate::horario::HorarioRegrasPencilmark::new(original.clone());
+                let pm = crate::horario::HorarioRegrasPencilmark::new(regras.clone());
                 let (vazio, n) = (pm.quadro_vazio(), pm.n_possibs());
                 let mut exec = crate::pencilmark::ExecucaoPencilmark::new(pm, vazio, n, 1, Some(10));
                 exec.executar(200_000);
                 let Some(sol) = exec.solver.solucoes.first() else { continue };
-                assert_eq!(original.fitness_rapido(&mut estado, sol), 0.0, "{nome}: solução do Pencilmark");
-                assert_eq!(movimentos.fitness_rapido(&mut estado, sol), 0.0, "{nome}: solução do Pencilmark (movimentos)");
+                assert!(regras.fitness_rapido(&mut estado, sol) > -regras.pesos.agrupar, "{nome}: solução do Pencilmark sem violação obrigatória");
                 let mut q = sol.clone();
                 let uma_troca = 1.0 / q.len() as f64;
                 for _ in 0..6 {
-                    original.mutate(&mut estado, &mut q, uma_troca);
+                    regras.mutate(&mut estado, &mut q, uma_troca);
                     quadros.push(q.clone());
                 }
             }
-
-            let mut diferentes = 0;
             for q in &quadros {
-                let (a, b) = (ag_original.fitness_rapido(&mut estado, q), ag_movimentos.fitness_rapido(&mut estado, q));
-                assert_eq!(a == 0.0, b == 0.0, "{nome}: original {a}, movimentos {b}");
-                assert!(b >= a, "{nome}: movimentos ({b}) penalizou mais que o original ({a})");
-                diferentes += (a != b) as usize;
-                // E o fitness completo zera junto, em qualquer combinação das duas medidas e de pesos
-                let zero = original.fitness_rapido(&mut estado, q) == 0.0;
-                for (mov_agrupar, mov_professor, peso_professor) in [(true, false, 50.0), (false, true, 50.0), (true, true, 50.0), (true, true, 300.0)] {
-                    let mut r = original.clone();
-                    r.pesos = PesosFitness { agrupar_por_movimentos: mov_agrupar, professor_por_movimentos: mov_professor, professor: peso_professor, conflito: peso_professor / 3.0, ..r.pesos };
+                let zero = regras.fitness_rapido(&mut estado, q) == 0.0;
+                for (mov_professor, peso_professor, peso_agrupar) in [(false, 50.0, 20.0), (true, 300.0, 20.0), (true, 100.0, 5.0)] {
+                    let mut r = regras.clone();
+                    r.pesos = PesosFitness { professor_por_movimentos: mov_professor, professor: peso_professor, conflito: peso_professor / 3.0, agrupar: peso_agrupar, ..r.pesos };
                     let f = r.fitness_rapido(&mut estado, q);
-                    assert_eq!(f == 0.0, zero, "{nome}: movimentos agrupar={mov_agrupar} professor={mov_professor}: {f}");
+                    assert_eq!(f == 0.0, zero, "{nome}: professor por movimentos={mov_professor}: {f}");
                     assert!(f <= 0.0);
                 }
-                // Professor por movimentos nunca penaliza mais que o original (mesmo peso)
-                let mut r = original.clone();
-                r.pesos.professor_por_movimentos = true;
-                assert!(r.fitness_rapido(&mut estado, q) >= original.fitness_rapido(&mut estado, q));
             }
-            assert!(diferentes > 0, "{nome}: as duas medidas deveriam diferir em algum quadro");
         }
     }
 
-    /// Casos calculados à mão da medida por movimentos (uma turma, um dia de 8 tempos, uma disciplina
-    /// agrupada "A" e disciplinas soltas para preencher).
+    /// Desvio das regras de divisão calculado à mão (uma turma, um dia de 8 tempos, uma disciplina
+    /// "A" e disciplinas soltas para preencher), em unidades.
     #[test]
-    fn agrupar_por_movimentos_casos() {
-        let caso = |g: i32, dividir: bool, dia: &str| -> (f64, f64) {
+    fn divisao_casos() {
+        let caso = |divisao: &str, dia: &str| -> f64 {
             let aulas_a = dia.matches('A').count() as i32;
             let tempos: Vec<i32> = (1..=dia.len() as i32).collect();
-            // Cada "." é uma disciplina diferente de 1 aula, sem agrupamento
-            let mut aulas = vec![format!(r#"{{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": {aulas_a}, "bloco": {g}, "emendar": {} }}"#, !dividir)];
+            // Cada "." é uma disciplina diferente de 1 aula, livre
+            let mut aulas = vec![format!(r#"{{ "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": {aulas_a}, "divisao": {divisao} }}"#)];
             for i in 0..dia.matches('.').count() {
                 aulas.push(format!(r#"{{ "id": "x{i}", "turmas": ["T"], "recursos": [], "aulasSemana": 1 }}"#));
             }
@@ -1045,29 +812,24 @@ mod tests {
                 let i = regras.to_quadro_index(0, DiaSemana::Segunda, t);
                 quadro[i] = if c == 'A' { 1 } else { solta += 1; solta - 1 };
             }
-            let mut regras = regras;
-            regras.pesos = PesosFitness::ORIGINAL;
             let mut estado = regras.initial_state();
-            let mut mov = regras.clone();
-            mov.pesos.agrupar_por_movimentos = true;
-            // Em unidades (peso 20)
-            (-regras.fitness_rapido(&mut estado, &quadro) / 20.0, -mov.fitness_rapido(&mut estado, &quadro) / 20.0)
+            -regras.fitness_rapido(&mut estado, &quadro) / regras.pesos.agrupar
         };
-        // (G, dividir, dia) -> (original, movimentos)
-        assert_eq!(caso(2, false, "AA.."), (0.0, 0.0));
-        assert_eq!(caso(2, false, "A.A."), (2.0, 1.0), "bloco de 2 partido: move 1 aula");
-        assert_eq!(caso(2, false, "AAA.A..."), (2.0, 1.0), "3 + 1: move 1 aula");
-        assert_eq!(caso(2, false, "A.A.A.A."), (4.0, 2.0), "1+1+1+1 com G=2: move 2");
-        assert_eq!(caso(2, false, "AAAA...."), (0.0, 0.0), "4 seguidas valem sem dividir");
-        assert_eq!(caso(2, true, "AAAA...."), (2.0, 2.0), "com dividir, um bloco de 2 tem que sair");
-        assert_eq!(caso(2, true, "AA.AA..."), (0.0, 0.0));
-        assert_eq!(caso(2, true, "AAA.A..."), (2.0, 1.0), "dividir, 3 + 1: a sobra do 3 completa o 1");
-        assert_eq!(caso(4, false, "A.A.A.A."), (4.0, 3.0), "1+1+1+1 com G=4: move 3");
-        assert_eq!(caso(4, false, "AA.AA..."), (4.0, 2.0), "2 + 2 com G=4: move 2");
-        assert_eq!(caso(4, false, "AAA.A..."), (2.0, 1.0), "3 + 1 com G=4: move 1");
-        assert_eq!(caso(4, false, "AA.A.A.."), (4.0, 2.0), "2 + 1 + 1 com G=4: move 2");
-        assert_eq!(caso(4, false, "AAAA...."), (0.0, 0.0));
-        assert_eq!(caso(2, true, "AAAA.A.A"), (4.0, 2.0), "dividir, 4 + 1 + 1: o bloco a mais completa os dois pedaços");
-        assert_eq!(caso(2, true, "AAAAAA.."), (4.0, 4.0), "dividir, 6 seguidas: dois blocos têm que sair");
+        // Blocos de 2, podendo emendar: tamanho a partir de 2, sem pedaços de tamanho ímpar
+        let duplas = r#"{ "tamanhoMin": 2, "porTamanho": [{ "tamanho": 3, "min": 0, "max": 0 }] }"#;
+        assert_eq!(caso(duplas, "AA.."), 0.0);
+        assert_eq!(caso(duplas, "A.A."), 2.0, "bloco de 2 partido: dois pedaços de 1");
+        assert_eq!(caso(duplas, "AAA.A..."), 2.0, "3 + 1: um pedaço de 3 e um abaixo do mínimo");
+        assert_eq!(caso(duplas, "AAAA...."), 0.0, "4 seguidas valem");
+        // Blocos de 2, sem emendar
+        let so_duplas = r#"{ "tamanhoMin": 2, "tamanhoMax": 2 }"#;
+        assert_eq!(caso(so_duplas, "AAAA...."), 2.0, "um pedaço de 4: 2 aulas acima do máximo");
+        assert_eq!(caso(so_duplas, "AA.AA..."), 0.0);
+        // 3 aulas, 2 + 1 ou 3: no máximo 2 pedaços
+        let duas_vezes = r#"{ "quantidadeMax": 2 }"#;
+        assert_eq!(caso(duas_vezes, "AA.A...."), 0.0);
+        assert_eq!(caso(duas_vezes, "A.A.A..."), 1.0, "três pedaços: um a mais");
+        // Livre: nada a medir
+        assert_eq!(caso("{}", "A.A.A..."), 0.0);
     }
 }

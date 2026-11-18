@@ -1,6 +1,8 @@
 // Converte uma instância do formato antigo do formulário (disciplinas por turma, professores com a
 // lista de disciplinas, grupos de "unidas") para a entrada do solver: turmas, aulas e recursos,
 // ligados por id (ver `EntradaHorario` em src/horario/horario_regras.rs).
+
+import { regrasDaDivisao } from "../../../src/app/toy/gerador-horario/modelo/divisao.ts";
 //
 // O gerador de instâncias (gerar.mjs) ainda monta as instâncias no formato antigo, que é mais
 // simples de gerar, e passa por aqui antes de gravar.
@@ -25,12 +27,14 @@ export function paraEntrada(f) {
         const id = grupo ? grupo.grupo : d.nome;
         for (const nome of nomes) aulaDaDisciplina.set(nome, id);
         const bloco = d.agrupar || 0;
+        // Blocos de N (emendando, sem "dividir"), com as mesmas regras que a página manda ao solver
+        const { espalhar, ...divisao } = regrasDaDivisao({ pedacos: { tipo: "blocos", tamanho: bloco, emendar: !d.dividir }, espalhar: false }, d.aulas);
         aulas.push({
             id,
             turmas: nomes.map((nome) => disciplina(nome).turma),
             recursos: f.professores.filter((p) => p.disciplinas.some((x) => nomes.includes(x))).map((p) => p.nome),
             aulasSemana: d.aulas,
-            ...(bloco >= 2 ? { bloco, emendar: !d.dividir } : {}),
+            ...(bloco >= 2 ? { divisao } : {}),
         });
     }
 

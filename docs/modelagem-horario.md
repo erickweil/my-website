@@ -83,37 +83,48 @@ interface Componente {
   nome: string;
   aulasSemana: number;          // o que o solver usa
   cargaHoraria?: number;        // horas totais do PPC; só informativo
-  distribuicao: Distribuicao;
+  divisao: Divisao;
 }
 ```
 
-- **`nivel`** só escolhe padrões da tela. Ex.: no integrado, a distribuição padrão tende a "no
-  máximo um bloco por dia"; no superior, a blocos longos.
+- **`nivel`** só escolhe padrões da tela. Ex.: no integrado, a divisão padrão tende a "no
+  máximo um pedaço por dia"; no superior, a blocos longos.
 - **A matriz não fala de ambiente.** O ambiente é decidido no projeto: a turma tem um ambiente
   padrão e cada oferta pode trocar (§4.2 e §4.3).
 - **Cada PPC é um curso novo** ("ADS — matriz 2024"), criado por "duplicar curso". As turmas
   antigas continuam apontando para a matriz antiga.
 
-### 3.2 Distribuição das aulas na semana
+### 3.2 Divisão das aulas em pedaços
+
+Um **pedaço** é um trecho de aulas seguidas da disciplina num dia (duas duplas coladas formam um
+pedaço de 4). O modelo guarda a escolha do usuário; o solver recebe as regras correspondentes, no
+estilo das restrições do XHSTT (`modelo/divisao.ts` e `rust-wasm/src/horario/horario_divisao.rs`).
 
 ```ts
-type Distribuicao =
-  | { tipo: "livre" }
-  | { tipo: "blocos"; tamanho: number; emendar: boolean };
+interface Divisao {
+  pedacos:
+    | { tipo: "livre" }
+    | { tipo: "blocos"; tamanho: number; emendar: boolean }
+    | { tipo: "regras"; tamanhoMin: number; tamanhoMax: number | null;      // null = sem limite
+        quantidadeMin: number; quantidadeMax: number | null;
+        porTamanho: { tamanho: number; min: number; max: number }[] };
+  espalhar: boolean;   // preferência: no máximo um pedaço por dia
+}
 ```
 
-| Na tela | Modelo | Solver hoje (`agrupar`, `dividir`) |
-| :--- | :--- | :--- |
-| Livre | `livre` | 0, — |
-| Aulas duplas (geminadas) | `blocos`, 2, não emenda | 2, sim |
-| Em blocos de N | `blocos`, N, não emenda | N, sim |
-| Em blocos de N, podendo emendar | `blocos`, N, emenda | N, não |
+| Na tela | Regras para o solver | 3 aulas | 4 aulas | 5 aulas |
+| :--- | :--- | :--- | :--- | :--- |
+| Livre | nenhuma | qualquer | qualquer | qualquer |
+| Blocos de 2 | pedaços de 2; o resto num pedaço menor | 2+1 | 2+2 | 2+2+1 |
+| Blocos de 2, emendando (padrão) | o mesmo, e blocos podem se juntar | 2+1 | 2+2, 4 | 2+2+1, 4+1 |
+| Personalizada | tamanho e quantidade de pedaços (mín.–máx.), pedaços por tamanho | — | — | — |
 
-Ao passar a agrupar, "emendar blocos" vem marcado. Com o bloco do tamanho de todas as aulas da
-semana só há um bloco, e a opção fica desativada (não se aplica).
+As regras de tamanho, quantidade e por tamanho são obrigatórias; "espalhar" é regra de qualidade.
+A tela mostra as divisões que cada escolha aceita, e o diagnóstico acusa quando nenhuma divisão
+atende às regras ou quando o maior pedaço não cabe nos horários seguidos da turma.
 
-Para o integrado vão fazer falta, mais adiante, "no máximo N aulas por dia" e "espalhar na semana".
-Entram como campos opcionais de `Distribuicao` quando o solver souber tratá-los.
+O formato 2 do arquivo tinha `distribuicao` (`livre` ou `blocos` com `emendar`); ao ler, vira a
+divisão em blocos equivalente, sem espalhar (`atualizarFormato` em `armazenamento.ts`).
 
 ### 3.3 Ambientes
 
@@ -219,7 +230,7 @@ interface Oferta {
   participacoes: { turmaId: Id; componenteId: Id | null; nome?: string }[];
   nome: string;                  // copiado do componente; editável
   aulasSemana: number;
-  distribuicao: Distribuicao;
+  divisao: Divisao;
   ambienteId: Id | null;         // null = o ambiente padrão da turma
   professorIds: Id[];            // mais de um = professores em conjunto
 }
@@ -290,7 +301,7 @@ projeto, a tela avisa que o horário está desatualizado.
 
 ```ts
 interface AreaDeTrabalho {
-  versao: 2;
+  versao: 3;
   cadastros: Cadastros;
   projetos: ProjetoHorario[];
 }
@@ -309,7 +320,7 @@ interface AreaDeTrabalho {
 | Entrada do solver | Vem de |
 | :--- | :--- |
 | `turmas[]` | as turmas, com os horários limitados ao quadro |
-| `aulas[]` | uma por oferta com aulas: turmas que participam, aulas por semana, bloco e emendar |
+| `aulas[]` | uma por oferta com aulas: turmas que participam, aulas por semana e as regras da divisão |
 | `aulas[].recursos` | os professores da oferta e, se disputado, o ambiente |
 | `recursos[]` | um por docente (disponibilidade e horários a evitar) e um por ambiente disputado |
 
@@ -355,7 +366,7 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 | Regra | Dado que usa |
 | :--- | :--- |
 | Janelas do professor medidas em minutos reais | `inicio` e `duracaoMin` das faixas |
-| Máximo de aulas por dia, espalhar a disciplina na semana | campos novos em `Distribuicao` |
+| Máximo de aulas por dia, evitar dias seguidos | campos novos nas regras de divisão |
 | Fixar aulas e gerar o resto | `alocacoes[].fixada` |
 
 ---

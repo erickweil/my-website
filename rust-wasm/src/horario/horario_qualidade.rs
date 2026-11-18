@@ -17,6 +17,8 @@
 //! - **Janela**: horário vago da turma entre duas aulas do mesmo turno. Quando a turma tem mais
 //!   horários marcados que aulas, os vagos devem ficar no começo ou no fim do turno. Conta um por
 //!   horário vago.
+//! - **Espalhar**: disciplina marcada para espalhar com mais de um pedaço (trecho de aulas seguidas)
+//!   no mesmo dia. Conta um por pedaço a mais.
 //!
 //! Jornada, descanso e intervalo dependem das horas das aulas (`EntradaHorario::tempos`); sem elas
 //! ficam desligadas. Ambientes não têm jornada, descanso nem horários a evitar.
@@ -40,6 +42,7 @@ const PESO_EVITAR: f64 = 2.0;
 const PESO_TROCA_DE_TURNO: f64 = 2.0;
 const PESO_INTERVALO: f64 = 1.0;
 const PESO_JANELA: f64 = 3.0;
+const PESO_ESPALHAR: f64 = 1.0;
 
 /// O que separa um tempo do seguinte.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -64,16 +67,18 @@ pub struct Qualidade {
     pub troca_de_turno: u32,
     /// Horários vagos de turmas entre duas aulas do mesmo turno.
     pub janela: u32,
+    /// Pedaços a mais no mesmo dia, nas disciplinas marcadas para espalhar.
+    pub espalhar: u32,
 }
 
 /// Uma ocorrência de regra de qualidade, para a página mostrar. Os ids são os da entrada.
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct Ocorrencia {
-    /// `"evitar"`, `"jornada"`, `"descanso"`, `"intervalo"`, `"turno"` ou `"janela"`.
+    /// `"evitar"`, `"jornada"`, `"descanso"`, `"intervalo"`, `"turno"`, `"janela"` ou `"espalhar"`.
     pub regra: &'static str,
     /// O professor (evitar, jornada, descanso).
     pub recurso: Option<String>,
-    /// A turma (evitar, intervalo, turno, janela) e a aula (evitar, intervalo, turno).
+    /// A turma (evitar, intervalo, turno, janela, espalhar) e a aula (evitar, intervalo, turno, espalhar).
     pub turma: Option<String>,
     pub aula: Option<String>,
     /// O dia; no descanso, o primeiro dos dois.
@@ -109,6 +114,10 @@ pub struct TabelasQualidade {
     pub(super) tem_quebras: bool,
     /// Alguma turma tem horários vagos (folga).
     pub(super) tem_vagos: bool,
+    /// Por disciplina: no máximo um pedaço por dia?
+    espalhar: Vec<bool>,
+    /// Alguma disciplina tem a regra de espalhar.
+    pub(super) tem_espalhar: bool,
     /// Valor de um horário vago no quadro ([`RegrasHorario::vago`]).
     vago: i32,
     /// Fator que põe a soma de todas as penalidades de qualidade abaixo da menor penalidade
@@ -178,11 +187,14 @@ impl TabelasQualidade {
             + PESO_DESCANSO_POR_HORA * pessoas * QUANTOS_DIAS as f64 * (DESCANSO_MINIMO_MIN as f64 / 60.0)
             + PESO_EVITAR * pares as f64
             + PESO_TROCA_DE_TURNO * ativas.len() as f64
-            + PESO_JANELA * ativas.len() as f64;
+            + PESO_JANELA * ativas.len() as f64
+            + PESO_ESPALHAR * ativas.len() as f64;
         let tem_vagos = r.turmas.iter().any(|t| t.folga > 0);
+        let espalhar: Vec<bool> = r.disciplinas.iter().map(|d| d.espalhar).collect();
+        let tem_espalhar = espalhar.iter().any(|&e| e);
 
         Self {
-            ativa: tem_evitar || (tem_horas && pessoas > 0.0) || tem_quebras || tem_vagos,
+            ativa: tem_evitar || (tem_horas && pessoas > 0.0) || tem_quebras || tem_vagos || tem_espalhar,
             n_tempos: n,
             ativas,
             linhas,
@@ -197,6 +209,8 @@ impl TabelasQualidade {
             tem_horas,
             tem_quebras,
             tem_vagos,
+            espalhar,
+            tem_espalhar,
             vago: r.vago(),
             escala: menor_obrigatoria / (pior + 1.0),
         }
@@ -215,7 +229,8 @@ impl TabelasQualidade {
                 + PESO_EVITAR * q.evitar as f64
                 + PESO_INTERVALO * q.intervalo as f64
                 + PESO_TROCA_DE_TURNO * q.troca_de_turno as f64
-                + PESO_JANELA * q.janela as f64)
+                + PESO_JANELA * q.janela as f64
+                + PESO_ESPALHAR * q.espalhar as f64)
     }
 
     /// Mede a qualidade do quadro. Com `detalhe`, também lista cada ocorrência (mais lento: só
@@ -337,6 +352,28 @@ impl TabelasQualidade {
             }
         }
 
+        // Mais de um pedaço da mesma disciplina no dia
+        if self.tem_espalhar {
+            for &linha in &self.linhas {
+                let linha = linha as usize;
+                self.pedacos_a_mais(quadro, linha, |v| {
+                    q.espalhar += 1;
+                    if let Some(lista) = detalhe.as_deref_mut() {
+                        let disc = &r.disciplinas[(v - 1) as usize];
+                        let (_, dia, _) = r.from_quadro_index(linha);
+                        lista.push(Ocorrencia {
+                            regra: "espalhar",
+                            recurso: None,
+                            turma: Some(r.turmas[disc.turma_id].nome.clone()),
+                            aula: Some(disc.nome.clone()),
+                            dia: dia.sigla(),
+                            minutos: 0,
+                        });
+                    }
+                });
+            }
+        }
+
         q
     }
 
@@ -384,6 +421,34 @@ impl TabelasQualidade {
                     achou(v, self.quebra[k] == Quebra::TrocaDeTurno);
                 }
                 inicio_do_trecho = k + 1;
+            }
+            a = b;
+        }
+    }
+
+    /// Espalhar numa linha do quadro (um dia de uma turma): chama `achou(valor da disciplina)` para
+    /// cada pedaço de uma disciplina marcada para espalhar que não é o primeiro dela no dia.
+    pub(super) fn pedacos_a_mais(&self, quadro: &[i32], linha: usize, mut achou: impl FnMut(i32)) {
+        let n = self.n_tempos;
+        // Disciplinas que já tiveram um pedaço no dia (um dia tem poucos pedaços)
+        let mut vistas = [0i32; 64];
+        let mut n_vistas = 0;
+        let mut a = 0;
+        while a < n {
+            let v = quadro[linha + a];
+            let mut b = a + 1;
+            if v <= 0 || v == self.vago || !self.espalhar[(v - 1) as usize] {
+                a = b;
+                continue;
+            }
+            while b < n && quadro[linha + b] == v {
+                b += 1;
+            }
+            if vistas[..n_vistas].contains(&v) {
+                achou(v);
+            } else if n_vistas < vistas.len() {
+                vistas[n_vistas] = v;
+                n_vistas += 1;
             }
             a = b;
         }
@@ -550,6 +615,32 @@ mod tests {
 
     /// Janela é vago ENTRE aulas do mesmo turno: nas pontas da manhã ou da noite não conta, e a
     /// troca de turno separa os trechos.
+    #[test]
+    fn espalhar_conta_os_pedacos_a_mais_no_dia() {
+        let r = RegrasHorario::from_json(r#"{
+            "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4, 5, 6], "ter": [1, 2] } }],
+            "aulas": [
+                { "id": "A", "turmas": ["T"], "recursos": [], "aulasSemana": 4, "divisao": { "espalhar": true } },
+                { "id": "B", "turmas": ["T"], "recursos": [], "aulasSemana": 4 }
+            ],
+            "recursos": []
+        }"#).unwrap();
+        let montar = |seg: [i32; 6], ter: [i32; 2]| {
+            let mut q = r.get_quadro_vazio();
+            for (t, &v) in seg.iter().enumerate() { q[r.to_quadro_index(0, DiaSemana::Segunda, t)] = v; }
+            for (t, &v) in ter.iter().enumerate() { q[r.to_quadro_index(0, DiaSemana::Terca, t)] = v; }
+            q
+        };
+        // Segunda: A | B | A A | B B → dois pedaços de A no dia; B não está marcada
+        let (q, oc) = r.qualidade(&montar([1, 2, 1, 1, 2, 2], [1, 2]));
+        assert_eq!(q.espalhar, 1);
+        assert_eq!(oc.iter().filter(|o| o.regra == "espalhar").count(), 1);
+        // Três pedaços de A na segunda: dois a mais
+        assert_eq!(r.qualidade(&montar([1, 2, 1, 2, 1, 2], [1, 2])).0.espalhar, 2);
+        // Um pedaço por dia
+        assert_eq!(r.qualidade(&montar([1, 1, 1, 2, 2, 2], [1, 2])).0.espalhar, 0);
+    }
+
     #[test]
     fn janela_e_vago_entre_aulas_do_mesmo_turno() {
         let r = regras("{}");

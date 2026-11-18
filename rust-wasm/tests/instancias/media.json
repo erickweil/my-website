@@ -471,8 +471,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física unida",
@@ -485,8 +487,10 @@
         "Prof. Ed. Física 6"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 1º A",
@@ -497,8 +501,10 @@
         "Prof. Redação 4"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 1º B",
@@ -569,8 +575,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 1º B",
@@ -581,8 +589,10 @@
         "Prof. Redação 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 1º C",
@@ -653,8 +663,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 1º C",
@@ -665,8 +677,10 @@
         "Prof. Ed. Física 5"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 1º C",
@@ -677,8 +691,10 @@
         "Prof. Redação 3"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 1º D",
@@ -749,8 +765,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 1º D",
@@ -761,8 +779,10 @@
         "Prof. Ed. Física 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 1º D",
@@ -773,8 +793,10 @@
         "Prof. Redação 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 2º A",
@@ -845,8 +867,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 2º A",
@@ -857,8 +881,10 @@
         "Prof. Ed. Física 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 2º A",
@@ -869,8 +895,10 @@
         "Prof. Redação 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 2º B",
@@ -941,8 +969,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 2º B",
@@ -953,8 +983,10 @@
         "Prof. Ed. Física 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 2º B",
@@ -965,8 +997,10 @@
         "Prof. Redação 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 2º C",
@@ -1037,8 +1071,10 @@
         "Prof. Artes 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 2º C",
@@ -1049,8 +1085,10 @@
         "Prof. Ed. Física 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 2º C",
@@ -1061,8 +1099,10 @@
         "Prof. Redação 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 2º D",
@@ -1133,8 +1173,10 @@
         "Prof. Artes 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 2º D",
@@ -1145,8 +1187,10 @@
         "Prof. Ed. Física 3"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 2º D",
@@ -1157,8 +1201,10 @@
         "Prof. Redação 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 3º A",
@@ -1229,8 +1275,10 @@
         "Prof. Artes 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 3º A",
@@ -1241,8 +1289,10 @@
         "Prof. Ed. Física 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 3º A",
@@ -1253,8 +1303,10 @@
         "Prof. Redação 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Português 3º B",
@@ -1325,8 +1377,10 @@
         "Prof. Artes 2"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Ed. Física 3º B",
@@ -1337,8 +1391,10 @@
         "Prof. Ed. Física 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     },
     {
       "id": "Redação 3º B",
@@ -1349,8 +1405,10 @@
         "Prof. Redação 1"
       ],
       "aulasSemana": 2,
-      "bloco": 2,
-      "emendar": false
+      "divisao": {
+        "tamanhoMin": 2,
+        "tamanhoMax": 2
+      }
     }
   ],
   "recursos": [

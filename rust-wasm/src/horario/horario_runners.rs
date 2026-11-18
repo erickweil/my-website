@@ -595,7 +595,7 @@ mod tests {
         let entrada = r#"{
             "turmas": [{ "id": "T", "horarios": { "seg": [1, 2, 3, 4, 5], "ter": [1, 2, 3, 4, 5] } }],
             "aulas": [
-                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2, "bloco": 2 },
+                { "id": "A", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2, "divisao": { "tamanhoMin": 2 } },
                 { "id": "B", "turmas": ["T"], "recursos": ["Q"], "aulasSemana": 3 },
                 { "id": "C", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2 }
             ],

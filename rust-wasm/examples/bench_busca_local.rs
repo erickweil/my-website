@@ -108,12 +108,12 @@ fn main() {
             tempos.push(t);
         }
         let q = regras.qualidade(busca.melhor()).0;
-        println!("{:>7} {:>10.2} {:>12} {:>14} {:>10.4} {:>11.2}s {:>10.2}   evitar {} jornada {}min descanso {}min intervalo {} turno {} janela {}",
+        println!("{:>7} {:>10.2} {:>12} {:>14} {:>10.4} {:>11.2}s {:>10.2}   evitar {} jornada {}min descanso {}min intervalo {} turno {} janela {} espalhar {}",
             semente, partida,
             valido_em.map_or("-".to_string(), |(t, _)| format!("{t:.2}s")),
             valido_em.map_or("-".to_string(), |(_, n)| n.to_string()),
             busca.melhor_custo(), melhor_em, busca.iteracoes as f64 / total / 1e6,
-            q.evitar, q.jornada_min, q.descanso_min, q.intervalo, q.troca_de_turno, q.janela);
+            q.evitar, q.jornada_min, q.descanso_min, q.intervalo, q.troca_de_turno, q.janela, q.espalhar);
     }
     tempos.sort_by(|a, b| a.total_cmp(b));
     println!("válidos: {validos}/{sementes}{}", if tempos.is_empty() { String::new() } else { format!(" | tempo até válido: mediana {:.2}s, pior {:.2}s", tempos[tempos.len() / 2], tempos[tempos.len() - 1]) });

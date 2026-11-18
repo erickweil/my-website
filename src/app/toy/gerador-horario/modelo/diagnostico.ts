@@ -4,8 +4,8 @@
  * - `diagnosticar`: o que impede ou ameaça um horário completo, antes de gerar. Cada pendência diz
  *   em que tela se corrige.
  * - `observarHorario`: como um horário já gerado se sai nas regras de qualidade (horários a evitar,
- *   jornada, descanso, intervalo, horário vago entre aulas), que a busca local e o algoritmo genético
- *   tentam atender.
+ *   jornada, descanso, intervalo, horário vago entre aulas, disciplina em mais de um trecho no dia),
+ *   que a busca local e o algoritmo genético tentam atender.
  * - `detalharProblema`: quem está em choque numa célula que o solver marcou com problema.
  */
 
@@ -22,6 +22,7 @@ import {
     nomeNaTurma,
     numeroDeTempos,
 } from "./operacoes.ts";
+import { divisoesAceitas, regrasDaDivisao } from "./divisao.ts";
 
 /** Os limites das regras de qualidade (os mesmos de rust-wasm/src/horario/horario_qualidade.rs). */
 export const JORNADA_MAXIMA_MIN = 10 * 60;
@@ -111,15 +112,16 @@ export function diagnosticar(projeto: ProjetoHorario, cadastros: Cadastros): Pen
         const turmaId = o.participacoes[0].turmaId;
         if (o.professorIds.length === 0) aviso({ tela: "aulas", turmaId, mensagem: `${rotulo(o)} está sem professor.` });
 
-        if (o.distribuicao.tipo === "blocos") {
-            const { tamanho } = o.distribuicao;
-            if (o.aulasSemana % tamanho !== 0) {
-                erro({ tela: "aulas", turmaId, mensagem: `${rotulo(o)} tem ${o.aulasSemana} aulas, que não fecham em blocos de ${tamanho}.` });
-            }
+        // Divisão em pedaços: alguma divisão atende às regras, e o menor dos maiores pedaços cabe
+        const divisoes = divisoesAceitas(regrasDaDivisao(o.divisao, o.aulasSemana), o.aulasSemana);
+        if (divisoes.length === 0) {
+            erro({ tela: "aulas", turmaId, mensagem: `${rotulo(o)} tem ${o.aulasSemana} aulas, e nenhuma divisão em pedaços atende às regras escolhidas.` });
+        } else {
+            const maiorPedaco = Math.min(...divisoes.map((d) => d[0]));
             for (const p of o.participacoes) {
                 const t = turma(p.turmaId);
-                if (t && maiorSequencia(t, projeto) < tamanho) {
-                    erro({ tela: "turmas", turmaId: t.id, mensagem: `${rotulo(o)} pede blocos de ${tamanho} aulas seguidas, e a turma ${nome(t)} não tem ${tamanho} horários seguidos em nenhum dia.` });
+                if (t && maiorSequencia(t, projeto) < maiorPedaco) {
+                    erro({ tela: "turmas", turmaId: t.id, mensagem: `${rotulo(o)} pede ${maiorPedaco} aulas seguidas, e a turma ${nome(t)} não tem ${maiorPedaco} horários seguidos em nenhum dia.` });
                 }
             }
         }
@@ -193,6 +195,21 @@ export function observarHorario(projeto: ProjetoHorario, cadastros: Cadastros, h
             const disciplina = (oferta && turma && nomeNaTurma(oferta, turma.id)) || "(sem nome)";
             lista.push(`${disciplina} (${nome(turma)}), ${dia}: uma aula fica sozinha de um lado ${o.regra === "turno" ? "da troca de turno" : "do intervalo"}.`);
         }
+    }
+
+    // Mais de um pedaço da disciplina no dia: uma frase por disciplina, turma e dia
+    const espalhar = new Map<string, { ofertaId?: Id; turmaId?: Id; dia: Dia; n: number }>();
+    for (const o of horario.qualidade) {
+        if (o.regra !== "espalhar") continue;
+        const chave = `${o.ofertaId}|${o.turmaId}|${o.dia}`;
+        const atual = espalhar.get(chave) ?? { ofertaId: o.ofertaId, turmaId: o.turmaId, dia: o.dia, n: 0 };
+        espalhar.set(chave, { ...atual, n: atual.n + 1 });
+    }
+    for (const { ofertaId, turmaId, dia, n } of espalhar.values()) {
+        const oferta = projeto.ofertas.find((x) => x.id === ofertaId);
+        const turma = projeto.turmas.find((t) => t.id === turmaId);
+        const disciplina = (oferta && turma && nomeNaTurma(oferta, turma.id)) || "(sem nome)";
+        lista.push(`${disciplina} (${nome(turma)}), ${NOME_DO_DIA[dia]}: aulas em ${n + 1} trechos separados no mesmo dia.`);
     }
 
     // Horários vagos entre aulas: uma frase por turma e dia

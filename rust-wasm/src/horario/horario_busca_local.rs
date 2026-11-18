@@ -31,7 +31,7 @@ use std::sync::Arc;
 use rayon::prelude::*;
 
 use crate::{
-    horario::{DiaSemana, PesosFitness, Qualidade, QuadroHorario, RegrasHorario, TabelasQualidade, QUANTOS_DIAS},
+    horario::{DiaSemana, PesosFitness, Qualidade, QuadroHorario, RegraDivisao, RegrasHorario, TabelasQualidade, MAIOR_PEDACO, QUANTOS_DIAS},
     paralelo::pool_disponivel,
 };
 
@@ -160,9 +160,10 @@ struct Tabelas {
     /// Por disciplina: intervalo em `rec` (os recursos dela).
     rec_de: Vec<(u32, u32)>,
     rec: Vec<u32>,
-    /// Por disciplina: tamanho do bloco (0 = sem agrupamento) e se os blocos não podem se tocar.
-    agrupar: Vec<i32>,
-    dividir: Vec<bool>,
+    /// Por disciplina: as regras de divisão em pedaços, e se ela tem pedaços de mais de uma aula
+    /// para mover inteiros.
+    divisao: Vec<RegraDivisao>,
+    agrupa: Vec<bool>,
     /// Por disciplina: a turma dela.
     turma_de: Vec<u32>,
     /// Por disciplina: intervalo em `unidas`, com (valor esperado na célula da turma parceira,
@@ -257,8 +258,8 @@ impl Tabelas {
             tq: TabelasQualidade::new(r, menor_obrigatoria),
             rec_de,
             rec,
-            agrupar: r.disciplinas.iter().map(|d| d.agrupar.max(0)).collect(),
-            dividir: r.disciplinas.iter().map(|d| d.dividir).collect(),
+            divisao: r.disciplinas.iter().map(|d| d.divisao.clone()).collect(),
+            agrupa: r.disciplinas.iter().map(|d| d.divisao.agrupa()).collect(),
             turma_de: r.disciplinas.iter().map(|d| d.turma_id as u32).collect(),
             unidas_de,
             unidas,
@@ -313,8 +314,10 @@ struct Avaliacao {
     ultimo: Vec<u8>,
     jornada: Vec<u32>,
     descanso: Vec<u32>,
-    /// Por linha do quadro (turma, dia): a parte dela em `q.intervalo` e `q.troca_de_turno`.
+    /// Por linha do quadro (turma, dia): a parte dela em `q.intervalo` e `q.troca_de_turno`, e em
+    /// `q.espalhar`.
     quebras: Vec<(u16, u16)>,
+    espalhados: Vec<u16>,
     /// Por trecho: a parte dele em `q.janela`.
     janelas: Vec<u16>,
 
@@ -325,8 +328,6 @@ struct Avaliacao {
     celulas_tocadas: Vec<u32>,
     trechos_tocados: Vec<u32>,
     dias_tocados: Vec<(u32, u8)>,
-    /// Rascunho de `agrupar_de`.
-    restos: Vec<u8>,
 }
 
 impl Avaliacao {
@@ -340,20 +341,20 @@ impl Avaliacao {
             u_conflito: 0,
             u_unidas: 0,
             u_agrupar: 0,
-            agr: vec![0; t.agrupar.len()],
+            agr: vec![0; t.divisao.len()],
             q: Qualidade::default(),
             primeiro: vec![SEM_AULA; n_rec * QUANTOS_DIAS],
             ultimo: vec![SEM_AULA; n_rec * QUANTOS_DIAS],
             jornada: vec![0; n_rec * QUANTOS_DIAS],
             descanso: vec![0; n_rec * QUANTOS_DIAS],
             quebras: vec![(0, 0); quadro.len() / t.n.max(1)],
+            espalhados: vec![0; quadro.len() / t.n.max(1)],
             janelas: vec![0; t.regras.trechos.len()],
             disc_tocadas: Vec::new(),
             agr_antes: Vec::new(),
             celulas_tocadas: Vec::new(),
             trechos_tocados: Vec::new(),
             dias_tocados: Vec::new(),
-            restos: Vec::new(),
             quadro,
         };
         for i in 0..t.ativas.len() {
@@ -362,7 +363,7 @@ impl Avaliacao {
             a.por(t, a.quadro[c], c % t.por_turma);
             a.u_unidas += a.unidas_da_celula(t, c);
         }
-        a.disc_tocadas.extend((0..t.agrupar.len() as u32).filter(|&d| t.agrupar[d as usize] > 0));
+        a.disc_tocadas.extend((0..t.divisao.len() as u32).filter(|&d| t.divisao[d as usize].ativa));
         a.celulas_tocadas.extend(t.linhas.iter().copied());
         a.trechos_tocados.extend(0..t.regras.trechos.len() as u32);
         a.dias_tocados.clear();
@@ -500,11 +501,11 @@ impl Avaliacao {
         }
 
         for v in [va, vb] {
-            if let Some(d) = t.disciplina(v) && t.agrupar[d] > 0 {
+            if let Some(d) = t.disciplina(v) && t.divisao[d].ativa {
                 self.disc_tocadas.push(d as u32);
             }
         }
-        if t.tq.tem_quebras {
+        if t.tq.tem_quebras || t.tq.tem_espalhar {
             self.celulas_tocadas.extend([a as u32, b as u32]);
         }
         // A janela só muda quando um horário vago troca de lugar
@@ -520,12 +521,12 @@ impl Avaliacao {
         self.acertar_qualidade(t);
     }
 
-    /// Primeira etapa de [`Self::acertar`]: o agrupamento das disciplinas tocadas (professores e
+    /// Primeira etapa de [`Self::acertar`]: a divisão em pedaços das disciplinas tocadas (professores e
     /// aulas em conjunto já foram contados nas trocas).
     fn acertar_obrigatorias(&mut self, t: &Tabelas) {
         self.agr_antes.clear();
         while let Some(d) = self.disc_tocadas.pop() {
-            let novo = self.agrupar_de(t, d as usize);
+            let novo = self.divisao_de(t, d as usize);
             let antes = self.agr[d as usize];
             self.agr_antes.push((d, antes));
             self.u_agrupar += (novo - antes) as i64;
@@ -551,12 +552,20 @@ impl Avaliacao {
     fn acertar_qualidade(&mut self, t: &Tabelas) {
         while let Some(c) = self.celulas_tocadas.pop() {
             let linha = c as usize / t.n;
-            let (mut intervalo, mut turno) = (0u16, 0u16);
-            t.tq.grupos_partidos(&self.quadro, linha * t.n, |_, troca| if troca { turno += 1 } else { intervalo += 1 });
-            let (i0, t0) = self.quebras[linha];
-            self.q.intervalo = self.q.intervalo + intervalo as u32 - i0 as u32;
-            self.q.troca_de_turno = self.q.troca_de_turno + turno as u32 - t0 as u32;
-            self.quebras[linha] = (intervalo, turno);
+            if t.tq.tem_quebras {
+                let (mut intervalo, mut turno) = (0u16, 0u16);
+                t.tq.grupos_partidos(&self.quadro, linha * t.n, |_, troca| if troca { turno += 1 } else { intervalo += 1 });
+                let (i0, t0) = self.quebras[linha];
+                self.q.intervalo = self.q.intervalo + intervalo as u32 - i0 as u32;
+                self.q.troca_de_turno = self.q.troca_de_turno + turno as u32 - t0 as u32;
+                self.quebras[linha] = (intervalo, turno);
+            }
+            if t.tq.tem_espalhar {
+                let mut a_mais = 0u16;
+                t.tq.pedacos_a_mais(&self.quadro, linha * t.n, |_| a_mais += 1);
+                self.q.espalhar = self.q.espalhar + a_mais as u32 - self.espalhados[linha] as u32;
+                self.espalhados[linha] = a_mais;
+            }
         }
         while let Some(k) = self.trechos_tocados.pop() {
             if k == u32::MAX { continue; }
@@ -594,15 +603,16 @@ impl Avaliacao {
         }
     }
 
-    /// Erro de agrupamento de uma disciplina: a mesma conta de `fitness_rapido`, só para ela.
-    fn agrupar_de(&mut self, t: &Tabelas, d: usize) -> i32 {
-        let g = t.agrupar[d];
-        if g <= 0 { return 0; }
+    /// Desvio das regras de divisão de uma disciplina: a mesma conta de `fitness_rapido`, só para
+    /// ela, percorrendo os dias da turma dela.
+    fn divisao_de(&self, t: &Tabelas, d: usize) -> i32 {
+        let regra = &t.divisao[d];
+        if !regra.ativa { return 0; }
         let v = d as i32 + 1;
         let n = t.n;
         let (ini, fim) = t.linhas_de[t.turma_de[d] as usize];
-        let (mut erro, mut sobras) = (0i32, 0i32);
-        self.restos.clear();
+        let mut contagem = [0u8; MAIOR_PEDACO + 1];
+        let (mut quantidade, mut desvio) = (0u8, 0i32);
         for &linha in &t.linhas[ini as usize..fim as usize] {
             let dia = &self.quadro[linha as usize..linha as usize + n];
             let mut i = 0;
@@ -615,29 +625,14 @@ impl Avaliacao {
                 while j < n && dia[j] == v {
                     j += 1;
                 }
-                let tamanho = (j - i) as i32;
-                if !t.pesos.agrupar_por_movimentos {
-                    let ideal = if t.dividir[d] { g } else { ((tamanho as f64 / g as f64).round() as i32) * g };
-                    erro += (tamanho - ideal).abs();
-                } else {
-                    let (blocos, resto) = (tamanho / g, tamanho % g);
-                    if t.dividir[d] && blocos >= 1 {
-                        sobras += (blocos - 1) * g + resto;
-                    } else if resto > 0 {
-                        self.restos.push(resto as u8);
-                    }
-                }
+                let tamanho = (j - i).min(MAIOR_PEDACO) as u8;
+                desvio += regra.desvio_do_pedaco(tamanho);
+                contagem[tamanho as usize] = contagem[tamanho as usize].saturating_add(1);
+                quantidade = quantidade.saturating_add(1);
                 i = j;
             }
         }
-        if t.pesos.agrupar_por_movimentos && (sobras > 0 || !self.restos.is_empty()) {
-            self.restos.sort_unstable_by(|a, b| b.cmp(a));
-            let total = sobras + self.restos.iter().map(|&r| r as i32).sum::<i32>();
-            let completos = (total / g) as usize;
-            let ficam: i32 = self.restos.iter().take(completos).map(|&r| r as i32).sum();
-            erro += total - ficam;
-        }
-        erro
+        desvio + regra.desvio_da_semana(quantidade, &contagem)
     }
 }
 
@@ -712,7 +707,7 @@ impl Cadeia {
                 // Cadeia de Kempe a partir da turma sorteada. Com `kempe_de_blocos` e a aula sorteada
                 // num grupo de aulas seguidas de disciplina agrupada, a cadeia troca o grupo inteiro
                 // (uma janela de k horários) com a janela do mesmo tamanho que começa em `b`.
-                let agrupada = t.disciplina(va).is_some_and(|d| t.agrupar[d] > 0);
+                let agrupada = t.disciplina(va).is_some_and(|d| t.agrupa[d]);
                 let (ja, jb, k) = if self.p.kempe_de_blocos && agrupada && self.rng.f64() < self.p.p_bloco {
                     let linha = a - a % n;
                     let (mut x, mut y) = (a, a + 1);
@@ -772,7 +767,7 @@ impl Cadeia {
             return !self.trocas.is_empty();
         }
 
-        let agrupada = t.disciplina(va).is_some_and(|d| t.agrupar[d] > 0);
+        let agrupada = t.disciplina(va).is_some_and(|d| t.agrupa[d]);
         if agrupada && self.rng.f64() < self.p.p_bloco {
             // O grupo de aulas seguidas que contém `a` troca com o trecho do mesmo tamanho que começa em `b`
             let linha = a - a % n;
@@ -1097,10 +1092,22 @@ mod tests {
         conferir_incremental_com(&instancia("pequena"), 3000, AtualizacaoDaLista::Classica);
     }
 
+    /// Espalhar (regra de qualidade por linha) em todas as disciplinas.
     #[wasm_bindgen_test(unsupported = test)]
-    fn custo_incremental_igual_ao_fitness_com_os_pesos_originais() {
+    fn custo_incremental_com_espalhar() {
+        for nome in ["faculdade-anonimizado", "pequena", "media"] {
+            let mut regras = instancia(nome);
+            for d in &mut regras.disciplinas {
+                d.espalhar = d.aulas > 1;
+            }
+            conferir_incremental(&regras, 3000);
+        }
+    }
+
+    #[wasm_bindgen_test(unsupported = test)]
+    fn custo_incremental_igual_ao_fitness_com_o_professor_por_aula() {
         let mut regras = instancia("pequena");
-        regras.pesos = PesosFitness::ORIGINAL;
+        regras.pesos = PesosFitness { professor_por_movimentos: false, professor: 50.0, ..PesosFitness::PADRAO };
         conferir_incremental(&regras, 3000);
     }
 
@@ -1118,10 +1125,10 @@ mod tests {
                 {{ "id": "B", "horarios": {{ "seg": {todos}, "ter": [1, 2, 3, 4, 7, 8], "qua": {todos} }} }}
             ],
             "aulas": [
-                {{ "id": "Mat A", "turmas": ["A"], "recursos": ["P1", "S"], "aulasSemana": 6, "bloco": 2 }},
+                {{ "id": "Mat A", "turmas": ["A"], "recursos": ["P1", "S"], "aulasSemana": 6, "divisao": {{ "tamanhoMin": 2, "tamanhoMax": 2 }} }},
                 {{ "id": "Port A", "turmas": ["A"], "recursos": ["P2"], "aulasSemana": 5 }},
-                {{ "id": "Fis", "turmas": ["A", "B"], "recursos": ["P3", "S"], "aulasSemana": 3, "bloco": 3, "emendar": true }},
-                {{ "id": "Mat B", "turmas": ["B"], "recursos": ["P1"], "aulasSemana": 8, "bloco": 2, "emendar": true }},
+                {{ "id": "Fis", "turmas": ["A", "B"], "recursos": ["P3", "S"], "aulasSemana": 3, "divisao": {{ "tamanhoMin": 3 }} }},
+                {{ "id": "Mat B", "turmas": ["B"], "recursos": ["P1"], "aulasSemana": 8, "divisao": {{ "tamanhoMin": 2, "porTamanho": [{{ "tamanho": 3, "min": 0, "max": 0 }}, {{ "tamanho": 5, "min": 0, "max": 0 }}, {{ "tamanho": 7, "min": 0, "max": 0 }}], "espalhar": true }} }},
                 {{ "id": "Port B", "turmas": ["B"], "recursos": ["P2", "P3"], "aulasSemana": 6 }}
             ],
             "recursos": [

@@ -3,6 +3,8 @@ use std::{collections::HashMap};
 // Tipo a ser serializado-deserializado para comunicação com o frontend
 use serde::Deserialize;
 
+use super::horario_divisao::{EntradaDivisao, RegraDivisao};
+
 pub const QUANTOS_DIAS: usize = 7; // Domingo a Sábado
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
@@ -123,7 +125,7 @@ pub struct EntradaTurma {
 
 /// Uma disciplina sendo dada: para quais turmas, usando quais recursos, quantas vezes por semana.
 #[derive(Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EntradaAula {
     pub id: String,
     /// Mais de uma = turmas juntas, sempre no mesmo horário.
@@ -131,12 +133,10 @@ pub struct EntradaAula {
     /// Professores e ambiente: cada um só pode estar numa aula por horário.
     pub recursos: Vec<String>,
     pub aulas_semana: i32,
-    /// Aulas seguidas por bloco; 0 = sem agrupamento.
+    /// Como as aulas se dividem em pedaços de aulas seguidas (ver `horario_divisao.rs`). Sem ela,
+    /// a divisão é livre.
     #[serde(default)]
-    pub bloco: i32,
-    /// Com `bloco`: dois blocos podem ficar encostados no mesmo dia.
-    #[serde(default)]
-    pub emendar: bool,
+    pub divisao: EntradaDivisao,
 }
 
 /// Uma aula do quadro de horários: quando começa e termina, e o turno. Só as regras de qualidade
@@ -287,9 +287,11 @@ pub struct Disciplina {
     pub aula: usize,
 
     pub aulas: i32,
-    pub agrupar: i32,
-    pub dividir: bool,
-    
+    /// Regras obrigatórias de divisão em pedaços (ver `horario_divisao.rs`).
+    pub divisao: RegraDivisao,
+    /// Regra de qualidade: no máximo um pedaço por dia.
+    pub espalhar: bool,
+
     pub turma_id: usize,
     pub disciplinas_unidas: Vec<usize>,
     pub professores: Vec<usize>,
@@ -372,8 +374,8 @@ impl RegrasHorario {
                     nome: a.id.clone(),
                     aula,
                     aulas: a.aulas_semana.max(0),
-                    agrupar: if a.bloco >= 2 { a.bloco } else { 0 },
-                    dividir: a.bloco >= 2 && !a.emendar,
+                    divisao: RegraDivisao::new(&a.divisao, a.aulas_semana),
+                    espalhar: a.divisao.espalhar && a.aulas_semana > 1,
                     turma_id,
                     disciplinas_unidas: ids.iter().copied().filter(|&d| d != primeira + k).collect(),
                     professores: if k == 0 { recursos.clone() } else { Vec::new() },
@@ -520,8 +522,8 @@ mod tests {
         let base = r#"{
             "turmas": [{ "id": "T", "horarios": { "seg": [1, 2] } }, { "id": "U", "horarios": { "seg": [1, 2] } }],
             "aulas": [
-                { "id": "a", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2, "bloco": 2 },
-                { "id": "b", "turmas": ["T", "U"], "recursos": ["P", "sala"], "aulasSemana": 1, "bloco": 2, "emendar": true }
+                { "id": "a", "turmas": ["T"], "recursos": ["P"], "aulasSemana": 2, "divisao": { "tamanhoMin": 2, "espalhar": true } },
+                { "id": "b", "turmas": ["T", "U"], "recursos": ["P", "sala"], "aulasSemana": 1 }
             ],
             "recursos": [
                 { "id": "P", "disponibilidade": { "seg": [1, 2] }, "evitar": { "seg": [2] } },
@@ -537,8 +539,9 @@ mod tests {
         let r = com("", "").unwrap();
         assert_eq!(r.n_tempos, 2);
         assert_eq!(r.aulas, ["a", "b"]);
-        let d: Vec<_> = r.disciplinas.iter().map(|d| (d.aula, d.turma_id, d.aulas, d.agrupar, d.dividir)).collect();
-        assert_eq!(d, [(0, 0, 2, 2, true), (1, 0, 1, 2, false), (1, 1, 1, 2, false)]);
+        let d: Vec<_> = r.disciplinas.iter().map(|d| (d.aula, d.turma_id, d.aulas, d.divisao.ativa, d.espalhar)).collect();
+        assert_eq!(d, [(0, 0, 2, true, true), (1, 0, 1, false, false), (1, 1, 1, false, false)]);
+        assert_eq!((r.disciplinas[0].divisao.tam_min, r.disciplinas[0].divisao.tam_max), (2, 2));
         // A aula em conjunto: as duas disciplinas unidas, e os recursos só na primeira
         assert_eq!(r.disciplinas[1].disciplinas_unidas, [2]);
         assert_eq!(r.disciplinas[2].disciplinas_unidas, [1]);
@@ -578,6 +581,10 @@ mod tests {
         // Campo com o tipo errado: a mensagem diz qual campo
         let erro = com(r#""aulasSemana": 2"#, r#""aulasSemana": "duas""#).err().unwrap().to_string();
         assert!(erro.starts_with(r#"Dados inválidos: campo aulas[0].aulasSemana: invalid type: string "duas", expected i32"#), "{erro}");
+
+        // O formato antigo do agrupamento não é mais aceito
+        let erro = com(r#""aulasSemana": 1 }"#, r#""aulasSemana": 1, "bloco": 2 }"#).err().unwrap().to_string();
+        assert!(erro.contains("unknown field `bloco`"), "{erro}");
     }
 
     #[test]

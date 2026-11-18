@@ -3,6 +3,7 @@
  * receberam. A página só chama estas funções; não monta turmas e ofertas à mão.
  */
 
+import { DIVISAO_PADRAO, mesmaDivisao } from "./divisao.ts";
 import {
     DIAS,
     DURACAO_AULA_PADRAO,
@@ -301,7 +302,7 @@ const ofertaDoComponente = (c: Componente, turmaId: Id): Oferta => ({
     participacoes: [{ turmaId, componenteId: c.id }],
     nome: c.nome,
     aulasSemana: c.aulasSemana,
-    distribuicao: { ...c.distribuicao },
+    divisao: structuredClone(c.divisao),
     ambienteId: null,
     professorIds: [],
 });
@@ -354,7 +355,7 @@ export function criarOferta(projeto: ProjetoHorario, turmaId: Id, componente?: C
             participacoes: [{ turmaId, componenteId: null }],
             nome: "",
             aulasSemana: 2,
-            distribuicao: { tipo: "livre" },
+            divisao: DIVISAO_PADRAO,
             ambienteId: null,
             professorIds: [],
         };
@@ -376,11 +377,6 @@ export const ofertasDaTurma = (projeto: ProjetoHorario, turmaId: Id): Oferta[] =
 export const aulasDaTurma = (projeto: ProjetoHorario, turmaId: Id) =>
     ofertasDaTurma(projeto, turmaId).reduce((soma, o) => soma + o.aulasSemana, 0);
 
-const mesmaDistribuicao = (a: Oferta["distribuicao"], b: Oferta["distribuicao"]) =>
-    a.tipo === "livre" || b.tipo === "livre"
-        ? a.tipo === b.tipo
-        : a.tamanho === b.tamanho && a.emendar === b.emendar;
-
 /**
  * Junta duas ofertas numa só, dada às turmas das duas ao mesmo tempo. Vale a oferta `ficaId`
  * (nome, ambiente); os professores das duas são somados. Devolve o motivo, se não puder juntar.
@@ -392,8 +388,8 @@ export function juntarOfertas(projeto: ProjetoHorario, ficaId: Id, saiId: Id): {
     if (fica.participacoes.some((a) => sai.participacoes.some((b) => a.turmaId === b.turmaId))) {
         return { erro: "As duas ofertas são da mesma turma." };
     }
-    if (fica.aulasSemana !== sai.aulasSemana || !mesmaDistribuicao(fica.distribuicao, sai.distribuicao)) {
-        return { erro: "Para juntar, as duas ofertas precisam ter o mesmo número de aulas e a mesma distribuição." };
+    if (fica.aulasSemana !== sai.aulasSemana || !mesmaDivisao(fica.divisao, sai.divisao)) {
+        return { erro: "Para juntar, as duas ofertas precisam ter o mesmo número de aulas e a mesma divisão." };
     }
     // Cada turma continua chamando a disciplina pelo nome que tinha
     const comNome = (o: Oferta) => o.participacoes.map((p) => ({ ...p, nome: p.nome ?? o.nome }));
@@ -460,11 +456,11 @@ export function buscarComponente(cursos: Curso[], componenteId: Id): Componente 
 }
 
 /** Campos em que a oferta difere do componente de onde veio (vazio = igual à matriz). */
-export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("nome" | "aulasSemana" | "distribuicao")[] {
+export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("nome" | "aulasSemana" | "divisao")[] {
     const dif: ReturnType<typeof diferencasDaMatriz> = [];
     if (oferta.nome !== componente.nome) dif.push("nome");
     if (oferta.aulasSemana !== componente.aulasSemana) dif.push("aulasSemana");
-    if (!mesmaDistribuicao(oferta.distribuicao, componente.distribuicao)) dif.push("distribuicao");
+    if (!mesmaDivisao(oferta.divisao, componente.divisao)) dif.push("divisao");
     return dif;
 }
 
@@ -473,7 +469,7 @@ export const atualizarPelaMatriz = (oferta: Oferta, componente: Componente): Ofe
     ...oferta,
     nome: componente.nome,
     aulasSemana: componente.aulasSemana,
-    distribuicao: { ...componente.distribuicao },
+    divisao: structuredClone(componente.divisao),
 });
 
 /** Componentes do período da turma que não têm oferta nela. */
@@ -497,7 +493,7 @@ export function duplicarCurso(curso: Curso, nome = `${curso.nome} (cópia)`): Cu
         periodos: curso.periodos.map((p) => ({
             ...p,
             id: novoId(),
-            componentes: p.componentes.map((c) => ({ ...c, id: novoId(), distribuicao: { ...c.distribuicao } })),
+            componentes: p.componentes.map((c) => ({ ...c, id: novoId(), divisao: structuredClone(c.divisao) })),
         })),
     };
 }
@@ -574,7 +570,7 @@ export const novoCurso = (nome: string): Curso => ({
     periodos: [{ id: novoId(), numero: 1, componentes: [] }],
 });
 
-export const novoComponente = (): Componente => ({ id: novoId(), nome: "", aulasSemana: 2, distribuicao: { tipo: "livre" } });
+export const novoComponente = (): Componente => ({ id: novoId(), nome: "", aulasSemana: 2, divisao: DIVISAO_PADRAO });
 
 /** Acrescenta ao curso o período seguinte ao último. */
 export const adicionarPeriodo = (curso: Curso): Curso => ({

@@ -5,6 +5,7 @@
  */
 
 import { DIAS, type Dia, type HorariosPorDia, type Id, type Professor, type ProjetoHorario } from "./modelo.ts";
+import { DIVISAO_LIVRE } from "./divisao.ts";
 import { PALETA_CORES, criarOferta, criarTurmaAvulsa, gerarFaixas, juntarOfertas, manterDocentes, novoId, novoProjeto } from "./operacoes.ts";
 
 /** O formulário da versão anterior: disciplinas por turma, ligadas a professores e a grupos pelo NOME. */
@@ -63,7 +64,7 @@ export function projetoDoFormatoAntigo(
             ...r.oferta,
             nome: d.nome,
             aulasSemana: d.aulas || 0,
-            distribuicao: agrupar > 1 ? { tipo: "blocos" as const, tamanho: agrupar, emendar: !d.dividir } : { tipo: "livre" as const },
+            divisao: agrupar > 1 ? { pedacos: { tipo: "blocos" as const, tamanho: agrupar, emendar: !d.dividir }, espalhar: false } : DIVISAO_LIVRE,
             professorIds: f.professores.flatMap((p, i) => (p.disciplinas.includes(d.nome) ? [professores[i].id] : [])),
         };
         projeto = { ...r.projeto, ofertas: r.projeto.ofertas.map((o) => (o.id === oferta.id ? oferta : o)) };

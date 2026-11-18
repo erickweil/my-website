@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { carregar, lerAreaDeTrabalho, salvar } from "./armazenamento.ts";
-import { areaDeTrabalhoVazia, type Curso, type ProjetoHorario } from "./modelo.ts";
+import { DIVISAO_LIVRE, DIVISAO_PADRAO, divisoesAceitas, personalizar, regrasDaDivisao } from "./divisao.ts";
+import { areaDeTrabalhoVazia, type Curso, type Divisao, type ProjetoHorario } from "./modelo.ts";
 import {
     alunosDaOferta,
     ambienteDaOferta,
@@ -45,11 +46,11 @@ const curso = (): Curso => ({
             id: "ads-1",
             numero: 1,
             componentes: [
-                { id: "alg", nome: "Algoritmos", aulasSemana: 4, distribuicao: { tipo: "blocos", tamanho: 2, emendar: false } },
-                { id: "mat", nome: "Matemática", aulasSemana: 2, distribuicao: { tipo: "livre" } },
+                { id: "alg", nome: "Algoritmos", aulasSemana: 4, divisao: { pedacos: { tipo: "blocos", tamanho: 2, emendar: false }, espalhar: true } },
+                { id: "mat", nome: "Matemática", aulasSemana: 2, divisao: DIVISAO_LIVRE },
             ],
         },
-        { id: "ads-2", numero: 2, componentes: [{ id: "bd", nome: "Banco de Dados", aulasSemana: 4, distribuicao: { tipo: "livre" } }] },
+        { id: "ads-2", numero: 2, componentes: [{ id: "bd", nome: "Banco de Dados", aulasSemana: 4, divisao: DIVISAO_LIVRE }] },
     ],
 });
 
@@ -122,8 +123,8 @@ test("duplicar curso dá ids novos e mantém o conteúdo", () => {
     assert.notEqual(copia.id, c.id);
     assert.notEqual(copia.periodos[0].componentes[0].id, "alg");
     assert.deepEqual(copia.periodos.map((p) => p.componentes.map((x) => x.nome)), [["Algoritmos", "Matemática"], ["Banco de Dados"]]);
-    copia.periodos[0].componentes[0].distribuicao = { tipo: "livre" };
-    assert.equal(c.periodos[0].componentes[0].distribuicao.tipo, "blocos", "a cópia não divide objetos com o original");
+    copia.periodos[0].componentes[0].divisao.pedacos = { tipo: "livre" };
+    assert.equal(c.periodos[0].componentes[0].divisao.pedacos.tipo, "blocos", "a cópia não divide objetos com o original");
 });
 
 test("juntar, separar e remover turma", () => {
@@ -195,7 +196,7 @@ test("paraSolver: aulas por id, com as turmas, os professores e o ambiente dispu
         ...o,
         professorIds: ["p1"],
         aulasSemana: o.id === semAula.oferta.id ? 0 : o.aulasSemana,
-        distribuicao: o.id === lab.oferta.id ? { tipo: "blocos", tamanho: 2, emendar: true } : o.distribuicao,
+        divisao: o.id === lab.oferta.id ? { pedacos: { tipo: "blocos" as const, tamanho: 2, emendar: true }, espalhar: false } : DIVISAO_LIVRE,
         // A oferta de laboratório da turma B usa a sala da turma A
         ambienteId: o.id === lab.oferta.id ? "sala-a" : null,
     }));
@@ -212,8 +213,8 @@ test("paraSolver: aulas por id, com as turmas, os professores e o ambiente dispu
         ],
         aulas: [
             // A aula em conjunto é uma só, com as duas turmas; a de zero aulas não entra
-            { id: oa.oferta.id, turmas: [a.turma.id, b.turma.id], recursos: ["p1", "sala-a"], aulasSemana: 2, bloco: 0, emendar: false },
-            { id: lab.oferta.id, turmas: [b.turma.id], recursos: ["p1", "sala-a"], aulasSemana: 2, bloco: 2, emendar: true },
+            { id: oa.oferta.id, turmas: [a.turma.id, b.turma.id], recursos: ["p1", "sala-a"], aulasSemana: 2, divisao: { espalhar: false } },
+            { id: lab.oferta.id, turmas: [b.turma.id], recursos: ["p1", "sala-a"], aulasSemana: 2, divisao: { tamanhoMin: 2, tamanhoMax: 2, espalhar: false } },
         ],
         recursos: [
             // Limitados ao quadro: sem domingo, sem sábado e sem o tempo 99
@@ -243,7 +244,11 @@ test("paraSolver: o quadro real, importado do formato antigo, dá a instância q
     assert.deepEqual(entrada.turmas.map((t) => ({ id: turma(t.id), horarios: t.horarios })), doRust.turmas);
     // No formato antigo a aula em conjunto ficava na posição da última disciplina do grupo; aqui, na da primeira
     const forma = (aulas: typeof doRust.aulas, nome: (id: string) => string, deTurma: (id: string) => string) =>
-        aulas.map((x) => JSON.stringify([x.turmas.map(deTurma), x.recursos.map(nome).sort(), x.aulasSemana, x.bloco ?? 0, x.emendar ?? false])).sort();
+        aulas.map((x) => {
+            // Sem "espalhar: false", que é o padrão (a instância do Rust não o escreve)
+            const { espalhar, ...divisao } = x.divisao ?? {};
+            return JSON.stringify([x.turmas.map(deTurma), x.recursos.map(nome).sort(), x.aulasSemana, espalhar ? { ...divisao, espalhar } : divisao]);
+        }).sort();
     assert.deepEqual(forma(entrada.aulas, recurso, turma), forma(doRust.aulas, (x) => x, (x) => x));
     assert.equal(entrada.aulas.length, 19, "20 disciplinas antigas, duas delas numa aula em conjunto");
     // Os docentes saem na ordem em que aparecem nas aulas, e dia sem horário não é listado
@@ -320,6 +325,47 @@ test("armazenamento: grava, lê e recusa conteúdo inválido sem apagar", () => 
     assert.match(ruim.ok ? "" : ruim.erro, /capacidade/);
     assert.equal(lerAreaDeTrabalho("{").ok, false);
     assert.equal(lerAreaDeTrabalho(JSON.stringify({ versao: 1 })).ok, false);
+});
+
+test("armazenamento: o formato 2 (distribuicao) é convertido para a divisão em pedaços", () => {
+    const v2 = {
+        versao: 2,
+        cadastros: {
+            cursos: [{ ...curso(), periodos: [{ id: "p1", numero: 1, componentes: [{ id: "c", nome: "Cálculo", aulasSemana: 4, distribuicao: { tipo: "blocos", tamanho: 2, emendar: true } }] }] }],
+            professores: [],
+            ambientes: [],
+        },
+        projetos: [{ ...projetoDoisTurnos(), ofertas: [{ id: "o", participacoes: [{ turmaId: "t", componenteId: null }], nome: "Física", aulasSemana: 3, distribuicao: { tipo: "livre" }, ambienteId: null, professorIds: [] }] }],
+    };
+    const lido = lerAreaDeTrabalho(JSON.stringify(v2));
+    assert.ok(lido.ok, lido.ok ? "" : lido.erro);
+    assert.equal(lido.area.versao, 3);
+    assert.deepEqual(lido.area.cadastros.cursos[0].periodos[0].componentes[0].divisao, { pedacos: { tipo: "blocos", tamanho: 2, emendar: true }, espalhar: false });
+    assert.deepEqual(lido.area.projetos[0].ofertas[0].divisao, DIVISAO_LIVRE);
+    assert.ok(!("distribuicao" in lido.area.projetos[0].ofertas[0]));
+});
+
+test("divisão: regras de cada escolha e as divisões que elas aceitam", () => {
+    const aceitas = (d: Divisao, aulas: number) => divisoesAceitas(regrasDaDivisao(d, aulas), aulas).map((x) => x.join("+"));
+    const blocos = (tamanho: number, emendar: boolean): Divisao => ({ pedacos: { tipo: "blocos", tamanho, emendar }, espalhar: true });
+    // Blocos de 2 emendando (o padrão): o que sobra vira um pedaço de 1, e duplas podem se juntar
+    assert.deepEqual(aceitas(blocos(2, true), 2), ["2"]);
+    assert.deepEqual(aceitas(blocos(2, true), 3), ["2+1"]);
+    assert.deepEqual(aceitas(blocos(2, true), 4), ["4", "2+2"]);
+    assert.deepEqual(aceitas(blocos(2, true), 5), ["4+1", "2+2+1"]);
+    assert.deepEqual(aceitas(blocos(2, false), 4), ["2+2"]);
+    assert.deepEqual(aceitas(blocos(3, false), 5), ["3+2"]);
+    assert.deepEqual(aceitas(DIVISAO_PADRAO, 1), ["1"]);
+    assert.deepEqual(regrasDaDivisao(DIVISAO_PADRAO, 1), { espalhar: false }, "uma aula só não tem divisão nem o que espalhar");
+    // Livre: todas
+    assert.deepEqual(aceitas(DIVISAO_LIVRE, 3), ["3", "2+1", "1+1+1"]);
+    // Personalizada: 5 aulas em 3+2 ou 2+2+1
+    const regras: Divisao = { pedacos: { tipo: "regras", tamanhoMin: 1, tamanhoMax: 3, quantidadeMin: 2, quantidadeMax: 3, porTamanho: [{ tamanho: 1, min: 0, max: 1 }] }, espalhar: false };
+    assert.deepEqual(aceitas(regras, 5), ["3+2", "2+2+1"]);
+    // Personalizar parte das regras equivalentes
+    assert.deepEqual(aceitas(personalizar(blocos(2, true), 5), 5), aceitas(blocos(2, true), 5));
+    // Nenhuma divisão possível
+    assert.deepEqual(aceitas({ pedacos: { tipo: "regras", tamanhoMin: 2, tamanhoMax: 2, quantidadeMin: 1, quantidadeMax: null, porTamanho: [] }, espalhar: false }, 3), []);
 });
 
 test("editar o quadro renumera os tempos sem perder as marcações", () => {

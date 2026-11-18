@@ -29,17 +29,35 @@ const inteiro = z.number().int();
  */
 const horariosPorDia = z.partialRecord(dia, z.array(inteiro.min(1)));
 
-/** Como as aulas da disciplina se dispõem na semana. */
-const distribuicao = z.discriminatedUnion("tipo", [
-    z.object({ tipo: z.literal("livre") }),
-    z.object({
-        tipo: z.literal("blocos"),
-        /** Aulas consecutivas por bloco (2 = aulas duplas). */
-        tamanho: inteiro.min(2),
-        /** true = dois blocos podem ficar encostados no mesmo dia (bloco com múltiplo do tamanho). */
-        emendar: z.boolean(),
-    }),
-]);
+/**
+ * Como as aulas da disciplina se dividem em pedaços (trechos de aulas seguidas num dia). O solver
+ * recebe as regras correspondentes: ver modelo/divisao.ts.
+ */
+const divisao = z.object({
+    pedacos: z.discriminatedUnion("tipo", [
+        /** Qualquer divisão. */
+        z.object({ tipo: z.literal("livre") }),
+        z.object({
+            tipo: z.literal("blocos"),
+            /** Aulas seguidas por bloco (2 = aulas duplas); o que sobra vira um pedaço menor. */
+            tamanho: inteiro.min(2),
+            /** true = blocos podem se juntar num pedaço maior (2+2 = 4). */
+            emendar: z.boolean(),
+        }),
+        z.object({
+            tipo: z.literal("regras"),
+            tamanhoMin: inteiro.min(1),
+            /** null = sem limite. */
+            tamanhoMax: inteiro.min(1).nullable(),
+            quantidadeMin: inteiro.min(1),
+            quantidadeMax: inteiro.min(1).nullable(),
+            /** Quantos pedaços de um tamanho. */
+            porTamanho: z.array(z.object({ tamanho: inteiro.min(1), min: inteiro.min(0), max: inteiro.min(0) })),
+        }),
+    ]),
+    /** Preferência (regra de qualidade): no máximo um pedaço por dia. */
+    espalhar: z.boolean(),
+});
 
 // ── Cadastros permanentes ────────────────────────────────────────────────────────────────────
 
@@ -49,7 +67,7 @@ const componente = z.object({
     aulasSemana: inteiro.min(0),
     /** Horas totais do PPC; só informativo. */
     cargaHoraria: z.number().min(0).optional(),
-    distribuicao,
+    divisao,
 });
 
 const periodo = z.object({
@@ -127,7 +145,7 @@ const oferta = z.object({
     participacoes: z.array(z.object({ turmaId: id, componenteId: id.nullable(), nome: z.string().optional() })).min(1),
     nome: z.string(),
     aulasSemana: inteiro.min(0),
-    distribuicao,
+    divisao,
     /** null = o ambiente padrão da turma (da primeira, se houver várias). */
     ambienteId: id.nullable(),
     /** Mais de um = professores em conjunto. */
@@ -158,11 +176,12 @@ const horarioGerado = z.object({
     })),
     /**
      * Num horário completo: onde ele deixa a desejar nas regras de qualidade (horários a evitar,
-     * jornada e descanso do professor, grupo de aulas partido pelo intervalo). Só o algoritmo
-     * genético tenta atendê-las; a busca exata as ignora.
+     * jornada e descanso do professor, grupo de aulas partido pelo intervalo, mais de um pedaço da
+     * disciplina no dia). A busca local e o algoritmo genético tentam atendê-las; a busca exata as
+     * ignora.
      */
     qualidade: z.array(z.object({
-        regra: z.enum(["evitar", "jornada", "descanso", "intervalo", "turno", "janela"]),
+        regra: z.enum(["evitar", "jornada", "descanso", "intervalo", "turno", "janela", "espalhar"]),
         professorId: id.optional(),
         turmaId: id.optional(),
         ofertaId: id.optional(),
@@ -186,8 +205,11 @@ const projetoHorario = z.object({
     revisao: inteiro,
 });
 
+/** Versão do formato. A 2 tinha `distribuicao` no lugar de `divisao`; é convertida ao ler (armazenamento.ts). */
+export const VERSAO = 3;
+
 export const esquemaAreaDeTrabalho = z.object({
-    versao: z.literal(2),
+    versao: z.literal(VERSAO),
     cadastros,
     projetos: z.array(projetoHorario),
 });
@@ -196,7 +218,7 @@ export type Id = string;
 export type Dia = (typeof DIAS)[number];
 export type Turno = (typeof TURNOS)[number];
 export type HorariosPorDia = z.infer<typeof horariosPorDia>;
-export type Distribuicao = z.infer<typeof distribuicao>;
+export type Divisao = z.infer<typeof divisao>;
 export type Componente = z.infer<typeof componente>;
 export type Periodo = z.infer<typeof periodo>;
 export type Curso = z.infer<typeof curso>;
@@ -214,7 +236,7 @@ export type ProjetoHorario = z.infer<typeof projetoHorario>;
 export type AreaDeTrabalho = z.infer<typeof esquemaAreaDeTrabalho>;
 
 export const areaDeTrabalhoVazia = (): AreaDeTrabalho => ({
-    versao: 2,
+    versao: VERSAO,
     cadastros: { cursos: [], professores: [], ambientes: [] },
     projetos: [],
 });

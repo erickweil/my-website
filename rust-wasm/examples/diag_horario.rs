@@ -24,8 +24,8 @@ struct Violacoes {
     prof_conflito: Vec<(String, String, Vec<String>)>,
     /// Disciplina unida sem a parceira no mesmo horário
     unidas: Vec<String>,
-    /// Bloco de tamanho errado: (disciplina, tamanho do bloco, G)
-    agrupar: Vec<(String, usize, i32)>,
+    /// Divisão em pedaços que quebra as regras: (disciplina, pedaços da semana, desvio)
+    divisao: Vec<(String, String, i32)>,
 }
 
 fn analisar(r: &RegrasHorario, q: &[i32]) -> Violacoes {
@@ -59,21 +59,24 @@ fn analisar(r: &RegrasHorario, q: &[i32]) -> Violacoes {
             }
         }
     }
-    for d in r.disciplinas.iter().filter(|d| d.agrupar > 0) {
+    for d in r.disciplinas.iter().filter(|d| d.divisao.ativa) {
+        let mut pedacos: Vec<u8> = Vec::new();
         for dia in DiaSemana::TODOS {
-            let mut run = 0usize;
+            let mut run = 0u8;
             for t in 0..=r.n_tempos {
-                let igual = t < r.n_tempos && q[r.to_quadro_index(d.turma_id, dia, t)] == d.id as i32 + 1;
-                if igual {
+                if t < r.n_tempos && q[r.to_quadro_index(d.turma_id, dia, t)] == d.id as i32 + 1 {
                     run += 1;
                 } else if run > 0 {
-                    let g = d.agrupar as usize;
-                    if (d.dividir && run != g) || (!d.dividir && !run.is_multiple_of(g)) {
-                        v.agrupar.push((d.nome.clone(), run, d.agrupar));
-                    }
+                    pedacos.push(run);
                     run = 0;
                 }
             }
+        }
+        let desvio = d.divisao.desvio(pedacos.iter().copied());
+        if desvio > 0 {
+            pedacos.sort_unstable_by(|a, b| b.cmp(a));
+            let texto = pedacos.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("+");
+            v.divisao.push((d.nome.clone(), texto, desvio));
         }
     }
     v
@@ -87,13 +90,13 @@ fn main() {
     let orcamento = (arg("--orcamento").map_or(3.0, |s| s.parse::<f64>().unwrap()) * 1e6) as usize;
 
     let mut regras = carregar(caminho);
-    // --pesos professor:unidas:agrupar:movAgrupar:movProfessor
+    // --pesos professor:unidas:agrupar:movProfessor[:conflito]
     if let Some(p) = arg("--pesos") {
         let p: Vec<f64> = p.split(':').map(|x| x.parse().unwrap()).collect();
         regras.pesos = rust_wasm::horario::PesosFitness {
             professor: p[0], unidas: p[1], agrupar: p[2],
-            agrupar_por_movimentos: p[3] != 0.0, professor_por_movimentos: p[4] != 0.0,
-            conflito: p.get(5).copied().unwrap_or(p[0]),
+            professor_por_movimentos: p[3] != 0.0,
+            conflito: p.get(4).copied().unwrap_or(p[0]),
         };
     }
     let cfg = config_ga_horario(&regras);
@@ -108,13 +111,13 @@ fn main() {
         ga.run(orcamento / cfg.population_size);
         let info = ga.get_info();
         let v = analisar(&regras, info.best_genes.as_ref().unwrap());
-        println!("\nsemente {semente}: fitness {} | indisponível {} | conflito {} | unidas {} | agrupar {}",
-            info.best_fitness.unwrap(), v.prof_indisponivel.len(), v.prof_conflito.len(), v.unidas.len(), v.agrupar.len());
+        println!("\nsemente {semente}: fitness {} | indisponível {} | conflito {} | unidas {} | divisão {}",
+            info.best_fitness.unwrap(), v.prof_indisponivel.len(), v.prof_conflito.len(), v.unidas.len(), v.divisao.len());
         for (d, p) in &v.prof_indisponivel { println!("    indisponível: {p} em \"{d}\""); }
         for (p, quando, ds) in &v.prof_conflito { println!("    conflito: {p} em {quando}: {}", ds.join(" x ")); }
         for d in &v.unidas { println!("    unida fora do lugar: \"{d}\""); }
-        for (d, run, g) in &v.agrupar { println!("    bloco de {run} (G={g}): \"{d}\""); }
-        for (t, n) in totais.iter_mut().zip([v.prof_indisponivel.len(), v.prof_conflito.len(), v.unidas.len(), v.agrupar.len()]) { *t += n; }
+        for (d, pedacos, desvio) in &v.divisao { println!("    divisão {pedacos} (desvio {desvio}): \"{d}\""); }
+        for (t, n) in totais.iter_mut().zip([v.prof_indisponivel.len(), v.prof_conflito.len(), v.unidas.len(), v.divisao.len()]) { *t += n; }
     }
-    println!("\nTOTAL em {sementes} sementes: indisponível {} | conflito {} | unidas {} | agrupar {}", totais[0], totais[1], totais[2], totais[3]);
+    println!("\nTOTAL em {sementes} sementes: indisponível {} | conflito {} | unidas {} | divisão {}", totais[0], totais[1], totais[2], totais[3]);
 }

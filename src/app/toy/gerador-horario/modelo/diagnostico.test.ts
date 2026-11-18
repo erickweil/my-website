@@ -25,7 +25,7 @@ function projetoQueFecha(): { p: ProjetoHorario; a: string; calculo: string; fis
     p = manterDocentes({
         ...o2.projeto,
         ofertas: [
-            { ...o1.oferta, nome: "Cálculo", aulasSemana: 4, distribuicao: { tipo: "blocos", tamanho: 2, emendar: false }, professorIds: ["ana"] },
+            { ...o1.oferta, nome: "Cálculo", aulasSemana: 4, divisao: { pedacos: { tipo: "blocos", tamanho: 2, emendar: false }, espalhar: false }, professorIds: ["ana"] },
             { ...o2.oferta, nome: "Física", aulasSemana: 4, professorIds: ["bia"] },
         ],
     });
@@ -51,14 +51,19 @@ test("turma: aulas que não fecham com os horários", () => {
     assert.ok(mensagens(semHorario).includes("erro: A turma A não tem nenhum horário marcado."));
 });
 
-test("disciplina: blocos que não fecham ou não cabem, e sem professor", () => {
+test("disciplina: divisão impossível ou que não cabe, e sem professor", () => {
     const { p, calculo, fisica } = projetoQueFecha();
+    // Blocos de 2 com aulas ímpares: o que sobra vira um pedaço de 1, sem erro
     const impar = { ...p, ofertas: p.ofertas.map((o) => (o.id === calculo ? { ...o, aulasSemana: 3 } : o.id === fisica ? { ...o, aulasSemana: 5 } : o)) };
-    assert.ok(mensagens(impar).includes("erro: Cálculo (A) tem 3 aulas, que não fecham em blocos de 2."));
+    assert.ok(!mensagens(impar).some((m) => m.includes("divisão")));
+    // Só pedaços de 2 com 3 aulas: nenhuma divisão
+    const soDuplas = { pedacos: { tipo: "regras" as const, tamanhoMin: 2, tamanhoMax: 2, quantidadeMin: 1, quantidadeMax: null, porTamanho: [] }, espalhar: false };
+    const impossivel = { ...impar, ofertas: impar.ofertas.map((o) => (o.id === calculo ? { ...o, divisao: soDuplas } : o)) };
+    assert.ok(mensagens(impossivel).includes("erro: Cálculo (A) tem 3 aulas, e nenhuma divisão em pedaços atende às regras escolhidas."));
 
     // A turma só tem a 1ª e a 3ª aula: não há duas seguidas
     const picado = { ...p, turmas: p.turmas.map((t) => ({ ...t, horarios: { seg: [1, 3], ter: [1, 3] } })) };
-    assert.ok(mensagens(picado).includes("erro: Cálculo (A) pede blocos de 2 aulas seguidas, e a turma A não tem 2 horários seguidos em nenhum dia."));
+    assert.ok(mensagens(picado).includes("erro: Cálculo (A) pede 2 aulas seguidas, e a turma A não tem 2 horários seguidos em nenhum dia."));
 
     const semProf = manterDocentes({ ...p, ofertas: p.ofertas.map((o) => (o.id === fisica ? { ...o, professorIds: [] } : o)) });
     assert.deepEqual(mensagens(semProf), ["aviso: Física (A) está sem professor."]);
@@ -88,7 +93,7 @@ test("ambiente: capacidade (somando as turmas juntas) e ocupação", () => {
     // Com outra turma junto, a soma passa da capacidade
     const b = criarTurmaAvulsa(cabe, { nome: "B", alunos: 15 });
     const ob = criarOferta(b.projeto, b.turma.id);
-    const comB = { ...ob.projeto, ofertas: ob.projeto.ofertas.map((o) => (o.id === ob.oferta.id ? { ...o, nome: "Cálculo", aulasSemana: 4, distribuicao: { tipo: "blocos" as const, tamanho: 2, emendar: false } } : o)) };
+    const comB = { ...ob.projeto, ofertas: ob.projeto.ofertas.map((o) => (o.id === ob.oferta.id ? { ...o, nome: "Cálculo", aulasSemana: 4, divisao: { pedacos: { tipo: "blocos" as const, tamanho: 2, emendar: false }, espalhar: false } } : o)) };
     const junta = juntarOfertas(comB, calculo, ob.oferta.id);
     assert.ok("projeto" in junta);
     assert.ok(mensagens(junta.projeto).includes("aviso: Cálculo (A + B) tem 35 alunos e Lab 1 comporta 20."));
