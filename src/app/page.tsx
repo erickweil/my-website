@@ -33,7 +33,7 @@ type Project = {
 const STATUS_STYLES: Record<ProjectStatus, string> = {
   "Finalizado": "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
   "Em construção": "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-  "A Fazer": "bg-gray-100 text-gray-500 dark:bg-gray-800/50 dark:text-gray-500",
+  "A Fazer": "bg-gray-100 text-gray-700 dark:bg-gray-800/50 dark:text-gray-300",
   "Abandonado": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
 };
 
@@ -55,7 +55,7 @@ function ProjectCard({ project }: { project: Project }) {
       target={isReady ? undefined : "_blank"}
       rel={isReady ? undefined : "noreferrer"}
       className={cn(
-        "group flex flex-col gap-3 rounded-2xl border border-foreground/10 p-5 transition-all duration-200",
+        "group flex min-w-0 flex-col gap-3 rounded-2xl border border-foreground/10 p-5 transition-all duration-200",
         isReady
           ? "hover:border-[color-mix(in_srgb,var(--primary)_40%,transparent)] hover:bg-[color-mix(in_srgb,var(--primary)_4%,transparent)] hover:shadow-sm cursor-pointer"
           : "opacity-60 cursor-default hover:opacity-75"
@@ -77,13 +77,13 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
 
       {project.data && (
-        <p className="text-xs text-foreground/50 font-mono">
+        <p className="text-xs text-foreground/70 font-mono">
           {project.data}
         </p>
       )}
 
       {project.description && (
-        <p className="text-sm leading-relaxed text-foreground/60 line-clamp-3">
+        <p className="text-sm leading-relaxed text-foreground/75 line-clamp-3">
           {project.description}
         </p>
       )}
@@ -93,7 +93,7 @@ function ProjectCard({ project }: { project: Project }) {
           {project.tags.map((tag) => (
             <span
               key={tag}
-              className="rounded-md bg-foreground/5 px-2 py-0.5 text-xs text-foreground/50 font-mono"
+              className="rounded-md bg-foreground/5 px-2 py-0.5 text-xs text-foreground/70 font-mono"
             >
               {tag}
             </span>
@@ -190,7 +190,7 @@ export default function Home() {
         <div className="text-5xl md:text-6xl font-bold tracking-tight">
           Erick<MirroredText text="Erick" className="inline-block border-r pr-1 ml-1" />
         </div>
-        <p className="text-base md:text-lg text-foreground/55 max-w-md mx-auto leading-relaxed">
+        <p className="text-base md:text-lg text-foreground/70 max-w-md mx-auto leading-relaxed">
           Explore utilitários, experimentos, simulações entre outras coisas
         </p>
         <div className="flex items-center justify-center gap-4 pt-2">
@@ -207,7 +207,7 @@ export default function Home() {
         {/* Projetos externos */}
         <section id="projetos">
           <div className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/65 mb-1">
               Portfólio
             </p>
             <h2 className="text-2xl font-bold text-foreground">Projetos</h2>
@@ -223,7 +223,7 @@ export default function Home() {
         {/* Toys internos */}
         <section id="toys">
           <div className="mb-6 mt-12">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/65 mb-1">
               Experimentos
             </p>
             <h2 className="text-2xl font-bold text-foreground">Toys</h2>
@@ -239,7 +239,7 @@ export default function Home() {
         {/* Roadmap */}
         <section id="roadmap">
           <div className="mb-5 mt-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/65 mb-1">
               Em breve
             </p>
             <h2 className="text-2xl font-bold text-foreground">Roadmap</h2>
@@ -253,7 +253,7 @@ export default function Home() {
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="text-base shrink-0 opacity-60" aria-hidden>{project.emoji}</span>
-                  <span className="text-sm text-foreground/55 truncate">{project.text}</span>
+                  <span className="text-sm text-foreground/70 truncate">{project.text}</span>
                 </div>
                 <StatusBadge status={project.status} />
               </div>

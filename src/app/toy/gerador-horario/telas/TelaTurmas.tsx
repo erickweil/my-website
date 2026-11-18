@@ -3,25 +3,53 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { Cadastros, Id, ProjetoHorario, Turma, Turno } from "../modelo/modelo";
+import { cn } from "@/lib/utils";
+import type { Cadastros, Id, ProjetoHorario, Turma } from "../modelo/modelo";
 import { aulasDaTurma, contarTempos, criarTurmaAvulsa, criarTurmaDePeriodo, nomeDoPeriodo, removerTurma, turnosDoQuadro } from "../modelo/operacoes";
-import { Ajuda, CampoNumero, Cabecalho, ItemDaLista, ListaLateral, Selecao, Vazio } from "../componentes/comuns";
+import { diagnosticar, type Pendencia } from "../modelo/diagnostico";
+import { Ajuda, AvisosDaTela, CampoNumero, Cabecalho, Selecao, Vazio, marcaDe, rotuloDoAmbiente } from "../componentes/comuns";
 import { GradeTempos, LegendaDaGrade, pintarHorarios, type EstadoDaGrade } from "../componentes/GradeTempos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
+import { AulasDaTurma, JA_NA_TELA } from "./AulasDaTurma";
 
 const ESTADOS: Record<string, EstadoDaGrade> = {
     aula: { rotulo: "Tem aula", classe: "bg-primary/80 hover:bg-primary" },
     livre: { rotulo: "Sem aula", classe: "bg-muted/50 hover:bg-muted" },
 };
 
-/** "18 de 20": aulas atribuídas e tempos marcados da turma. */
-export const resumoDaTurma = (aulas: number, tempos: number) => `${aulas} de ${tempos}`;
+export type AbaDaTurma = "horarios" | "aulas";
 
-export function TelaTurmas({ area, projeto, mudarProjeto, irParaAulas, turmaInicial }: ContextoDoProjeto & { irParaAulas: (turmaId: Id) => void; turmaInicial?: Id | null }) {
-    const [selecionada, setSelecionada] = useState<Id | null>(turmaInicial ?? null);
-    const turma = projeto.turmas.find((t) => t.id === selecionada) ?? projeto.turmas[0];
+/** As pendências que se corrigem na tela de turmas (nos horários ou nas aulas). */
+const daTela = (p: Pendencia) => p.tela === "turmas" || p.tela === "aulas";
+
+/** Turmas agrupadas pelo curso de origem; as sem curso por último. */
+function agruparPorCurso(projeto: ProjetoHorario, cadastros: Cadastros): { titulo: string; turmas: Turma[] }[] {
+    const grupos = new Map<string, Turma[]>();
+    for (const t of projeto.turmas) {
+        const chave = t.origem?.cursoId ?? "";
+        grupos.set(chave, [...(grupos.get(chave) ?? []), t]);
+    }
+    return [...grupos.entries()]
+        .map(([cursoId, turmas]) => ({
+            cursoId,
+            titulo: cursoId ? cadastros.cursos.find((c) => c.id === cursoId)?.nome || "(curso sem nome)" : "Sem curso",
+            turmas,
+        }))
+        .sort((a, b) => (!a.cursoId ? 1 : !b.cursoId ? -1 : a.titulo.localeCompare(b.titulo)));
+}
+
+export function TelaTurmas({
+    turmaAberta,
+    abrirTurma,
+    aba,
+    mudarAba,
+    ...contexto
+}: ContextoDoProjeto & { turmaAberta: Id | null; abrirTurma: (id: Id) => void; aba: AbaDaTurma; mudarAba: (aba: AbaDaTurma) => void }) {
+    const { area, projeto, mudarProjeto } = contexto;
+    const turma = projeto.turmas.find((t) => t.id === turmaAberta) ?? projeto.turmas[0];
+    const pendencias = diagnosticar(projeto, area.cadastros).filter(daTela);
+    const grupos = agruparPorCurso(projeto, area.cadastros);
 
     const mudar = (campos: Partial<Turma>, cosmetica = false) =>
         mudarProjeto((p) => ({ ...p, turmas: p.turmas.map((t) => (t.id === turma.id ? { ...t, ...campos } : t)) }), cosmetica);
@@ -30,6 +58,7 @@ export function TelaTurmas({ area, projeto, mudarProjeto, irParaAulas, turmaInic
     const cursoDaTurma = cursos.find((c) => c.id === turma?.origem?.cursoId);
     const periodoDaTurma = cursoDaTurma?.periodos.find((p) => p.id === turma?.origem?.periodoId);
     const ambiente = ambientes.find((a) => a.id === turma?.ambienteId);
+    const [aulas, tempos] = turma ? [aulasDaTurma(projeto, turma.id), contarTempos(turma.horarios)] : [0, 0];
 
     return (
         <div>
@@ -39,139 +68,184 @@ export function TelaTurmas({ area, projeto, mudarProjeto, irParaAulas, turmaInic
                     <NovaTurma
                         cadastros={area.cadastros}
                         projeto={projeto}
-                        onCriar={(novo, turmaId) => {
+                        onCriar={(novo, turmaId, comAulas) => {
                             mudarProjeto(() => novo);
-                            setSelecionada(turmaId);
+                            abrirTurma(turmaId);
+                            mudarAba(comAulas ? "aulas" : "horarios");
                         }}
                     />
                 }
             />
 
-            {!turma ? (
-                <Vazio>Nenhuma turma neste projeto.</Vazio>
-            ) : (
-                <div className="grid gap-6 md:grid-cols-[14rem_1fr]">
-                    <ListaLateral>
-                        {projeto.turmas.map((t) => {
-                            const [aulas, tempos] = [aulasDaTurma(projeto, t.id), contarTempos(t.horarios)];
-                            return (
-                                <ItemDaLista
-                                    key={t.id}
-                                    ativo={t.id === turma.id}
-                                    onClick={() => setSelecionada(t.id)}
-                                    titulo={t.nome || "(sem nome)"}
-                                    detalhe={resumoDaTurma(aulas, tempos)}
-                                    // Aulas a menos só deixam horários vagos; aulas demais não cabem
-                                    alerta={aulas > tempos}
-                                />
-                            );
-                        })}
-                    </ListaLateral>
+            <AvisosDaTela className="mb-4" pendencias={pendencias.filter((p) => !p.turmaId)} />
 
-                    <div className="min-w-0 space-y-5">
+            {!turma ? (
+                <Vazio>Nenhuma turma neste projeto. Crie a primeira em “+ Turma”.</Vazio>
+            ) : (
+                <>
+                    {/* Turmas por curso: no celular cada curso é uma fila que rola de lado */}
+                    <div className="mb-5 space-y-2">
+                        {grupos.map((g) => (
+                            <div key={g.titulo} className="flex min-w-0 gap-3 max-md:flex-col max-md:gap-1 md:items-baseline">
+                                {grupos.length > 1 && (
+                                    <p className="w-32 shrink-0 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase" title={g.titulo}>
+                                        {g.titulo}
+                                    </p>
+                                )}
+                                <div className="-mx-3 flex min-w-0 gap-1.5 overflow-x-auto px-3 pb-1 md:mx-0 md:flex-wrap md:overflow-visible md:px-0 md:pb-0">
+                                    {g.turmas.map((t) => (
+                                        <BotaoDaTurma
+                                            key={t.id}
+                                            nome={t.nome || "(sem nome)"}
+                                            ativo={t.id === turma.id}
+                                            marca={marcaDe(pendencias.filter((p) => p.turmaId === t.id))}
+                                            onClick={() => abrirTurma(t.id)}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <section className="space-y-4 rounded-2xl border border-border p-3 md:p-4">
                         <div className="flex flex-wrap items-end gap-3">
-                            <div className="min-w-48 flex-1 space-y-1.5">
+                            <div className="min-w-40 flex-1 space-y-1.5">
                                 <Label htmlFor="turma-nome">Nome</Label>
                                 <Input id="turma-nome" value={turma.nome} onChange={(e) => mudar({ nome: e.target.value }, true)} />
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="turma-alunos">Alunos</Label>
-                                <CampoNumero id="turma-alunos" className="w-24" max={9999} valor={turma.alunos} onChange={(n) => mudar({ alunos: n }, true)} />
+                                <CampoNumero id="turma-alunos" className="w-20" max={9999} valor={turma.alunos} onChange={(n) => mudar({ alunos: n }, true)} />
                             </div>
                             {ambientes.length > 0 && (
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="turma-ambiente">Ambiente padrão</Label>
-                                    <Selecao id="turma-ambiente" className="block max-w-48" value={turma.ambienteId ?? ""} onChange={(e) => mudar({ ambienteId: e.target.value || null })}>
-                                        <option value="">Nenhum</option>
+                                    <Label htmlFor="turma-ambiente">Sala</Label>
+                                    <Selecao id="turma-ambiente" className="block max-w-52" value={turma.ambienteId ?? ""} onChange={(e) => mudar({ ambienteId: e.target.value || null })}>
+                                        <option value="">Nenhuma</option>
                                         {ambientes.map((a) => (
-                                            <option key={a.id} value={a.id}>{a.nome || "(sem nome)"} ({a.capacidade})</option>
+                                            <option key={a.id} value={a.id}>{rotuloDoAmbiente(a)}</option>
                                         ))}
                                     </Selecao>
                                 </div>
                             )}
                             <Button
-                                variant="destructive"
+                                variant="ghost"
+                                size="icon"
+                                title="Remover turma"
+                                className="text-destructive hover:text-destructive"
                                 onClick={() => {
                                     if (confirm(`Remover a turma “${turma.nome}” e as aulas dela?`)) mudarProjeto((p) => removerTurma(p, turma.id));
                                 }}
                             >
-                                <Trash2 /> Remover
+                                <Trash2 />
                             </Button>
                         </div>
 
-                        {(cursoDaTurma || (ambiente && turma.alunos > ambiente.capacidade)) && (
+                        {(cursoDaTurma || (ambiente && turma.alunos > ambiente.capacidade && ambiente.capacidade > 0)) && (
                             <p className="text-sm text-muted-foreground">
                                 {cursoDaTurma && <>{cursoDaTurma.nome}{periodoDaTurma && `, ${nomeDoPeriodo(cursoDaTurma, periodoDaTurma)}`}</>}
-                                {ambiente && turma.alunos > ambiente.capacidade && (
+                                {ambiente && ambiente.capacidade > 0 && turma.alunos > ambiente.capacidade && (
                                     <span className="text-destructive">
                                         {cursoDaTurma && " · "}
-                                        {ambiente.nome} comporta {ambiente.capacidade} alunos e a turma tem {turma.alunos}
+                                        {ambiente.nome} tem {ambiente.capacidade} lugares e a turma tem {turma.alunos} alunos
                                     </span>
                                 )}
                             </p>
                         )}
 
-                        <div className="space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <Label>
-                                    Horários da turma
-                                    <Ajuda>
-                                        Marque em quais aulas do quadro a turma tem aula. Clique e arraste para marcar várias; clique no dia ou
-                                        no número da aula para marcar a coluna ou a linha inteira.
-                                    </Ajuda>
-                                </Label>
-                                <LegendaDaGrade estados={ESTADOS} />
+                        <AvisosDaTela pendencias={pendencias.filter((p) => p.turmaId === turma.id && !(p.codigo && JA_NA_TELA.includes(p.codigo)))} />
+
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
+                            <div className="flex gap-1" role="tablist" aria-label="Turma">
+                                {(["horarios", "aulas"] as const).map((a) => (
+                                    <button
+                                        key={a}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={aba === a}
+                                        onClick={() => mudarAba(a)}
+                                        className={cn(
+                                            "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                                            aba === a ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                                        )}
+                                    >
+                                        {a === "horarios" ? "Horários" : "Aulas"}
+                                        <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">{a === "horarios" ? tempos : aulas}</span>
+                                    </button>
+                                ))}
                             </div>
-                            <GradeTempos
-                                quadro={projeto.quadro}
-                                estados={ESTADOS}
-                                estadoDe={(dia, tempo) => (turma.horarios[dia]?.includes(tempo) ? "aula" : "livre")}
-                                onPintar={(celulas, estado) => mudar({ horarios: pintarHorarios(turma.horarios, celulas, estado === "aula") })}
-                            />
+                            <ResumoDaTurma aulas={aulas} tempos={tempos} />
                         </div>
 
-                        <ResumoDaTurma aulas={aulasDaTurma(projeto, turma.id)} tempos={contarTempos(turma.horarios)} onVerAulas={() => irParaAulas(turma.id)} />
-                    </div>
-                </div>
+                        {aba === "horarios" ? (
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                        Clique ou arraste para marcar
+                                        <Ajuda>Clique no dia, no turno ou no número da aula para marcar a coluna ou a linha inteira.</Ajuda>
+                                    </p>
+                                    <LegendaDaGrade estados={ESTADOS} />
+                                </div>
+                                <GradeTempos
+                                    quadro={projeto.quadro}
+                                    estados={ESTADOS}
+                                    estadoDe={(dia, tempo) => (turma.horarios[dia]?.includes(tempo) ? "aula" : "livre")}
+                                    onPintar={(celulas, estado) => mudar({ horarios: pintarHorarios(turma.horarios, celulas, estado === "aula") })}
+                                />
+                            </div>
+                        ) : (
+                            <AulasDaTurma {...contexto} turma={turma} />
+                        )}
+                    </section>
+                </>
             )}
         </div>
     );
 }
 
-/** A conta que precisa fechar para existir horário: aulas atribuídas = tempos marcados. */
-export function ResumoDaTurma({ aulas, tempos, onVerAulas }: { aulas: number; tempos: number; onVerAulas?: () => void }) {
+function BotaoDaTurma({ nome, ativo, marca, onClick }: { nome: string; ativo: boolean; marca: "erro" | "aviso" | null; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-current={ativo ? "true" : undefined}
+            className={cn(
+                "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
+                ativo ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted",
+            )}
+        >
+            {nome}
+            {marca && (
+                <span
+                    className={cn("size-2 rounded-full", marca === "erro" ? "bg-destructive" : "bg-amber-500", ativo && "ring-2 ring-primary-foreground")}
+                    title={marca === "erro" ? "Tem pendências que impedem um horário completo" : "Tem avisos"}
+                />
+            )}
+        </button>
+    );
+}
+
+/** A conta que precisa fechar para existir horário: aulas da turma × horários marcados. */
+export function ResumoDaTurma({ aulas, tempos }: { aulas: number; tempos: number }) {
     const diferenca = tempos - aulas;
     return (
-        <div
-            className={
-                "flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm " +
-                (diferenca >= 0 ? "border-border bg-muted/30" : "border-destructive/40 bg-destructive/5")
-            }
+        <p
+            className={cn("pb-2 text-sm tabular-nums", diferenca < 0 ? "font-medium text-destructive" : "text-muted-foreground")}
+            title="Aulas por semana nas disciplinas × horários marcados para a turma"
         >
-            <span>
-                <strong className="tabular-nums">{aulas}</strong> aulas por semana nas disciplinas ·{" "}
-                <strong className="tabular-nums">{tempos}</strong> horários marcados
-                {diferenca > 0 && <span className="text-muted-foreground"> · {diferenca === 1 ? "1 horário fica vago" : `${diferenca} horários ficam vagos`}, de preferência no começo ou no fim do turno</span>}
-                {diferenca < 0 && <span className="text-destructive"> · {diferenca === -1 ? "sobra 1 aula, que não cabe" : `sobram ${-diferenca} aulas, que não cabem`} nos horários</span>}
-                {diferenca === 0 && tempos > 0 && <span className="text-muted-foreground"> · fecha</span>}
-            </span>
-            {onVerAulas && (
-                <Button variant="outline" size="sm" onClick={onVerAulas}>
-                    Ver aulas da turma
-                </Button>
-            )}
-        </div>
+            {aulas} aulas em {tempos} horários
+            {diferenca < 0 && ` · sobram ${-diferenca}`}
+            {diferenca > 0 && ` · ${diferenca} ${diferenca === 1 ? "vago" : "vagos"}`}
+        </p>
     );
 }
 
-const NOME_DO_TURNO: Record<Turno, string> = { matutino: "Manhã", vespertino: "Tarde", noturno: "Noite" };
-
-/** Botão "+ Turma": abre o formulário da turma nova, de um período de um curso ou avulsa. */
+/** Botão "+ Turma": nome, alunos, sala e, se quiser, o curso e período de onde vêm as aulas. */
 function NovaTurma({
     cadastros,
     projeto,
     onCriar,
-}: { cadastros: Cadastros; projeto: ProjetoHorario; onCriar: (projeto: ProjetoHorario, turmaId: Id) => void }) {
+}: { cadastros: Cadastros; projeto: ProjetoHorario; onCriar: (projeto: ProjetoHorario, turmaId: Id, comAulas: boolean) => void }) {
     const turnos = turnosDoQuadro(projeto.quadro);
     const [aberto, setAberto] = useState(false);
     const [cursoId, setCursoId] = useState("");
@@ -179,22 +253,20 @@ function NovaTurma({
     const [nome, setNome] = useState("");
     const [alunos, setAlunos] = useState(0);
     const [ambienteId, setAmbienteId] = useState("");
-    const [marcados, setMarcados] = useState<Turno[] | null>(null);
 
     const curso = cadastros.cursos.find((c) => c.id === cursoId);
     const periodo = curso?.periodos.find((p) => p.id === periodoId) ?? curso?.periodos[0];
     const sugestao = curso && periodo ? `${curso.nome} ${periodo.numero}º` : `Turma ${projeto.turmas.length + 1}`;
-    const turnosDaTurma = marcados ?? turnos;
 
     const criar = () => {
-        const dados = { nome: nome.trim() || sugestao, alunos, turnos: turnosDaTurma, ambienteId: ambienteId || null };
+        // A turma nasce com o primeiro turno do quadro marcado; o resto se ajusta na aba de horários
+        const dados = { nome: nome.trim() || sugestao, alunos, turnos: turnos.slice(0, 1), ambienteId: ambienteId || null };
         const r = curso && periodo ? criarTurmaDePeriodo(projeto, curso, periodo.id, dados) : criarTurmaAvulsa(projeto, dados);
-        onCriar(r.projeto, r.turma.id);
+        onCriar(r.projeto, r.turma.id, !!(curso && periodo));
         setAberto(false);
         // O curso fica, para criar as turmas dos outros períodos; o resto é de cada turma
         setNome("");
         setAmbienteId("");
-        setMarcados(null);
     };
 
     return (
@@ -203,7 +275,7 @@ function NovaTurma({
                 type="button"
                 disabled={turnos.length === 0}
                 title={turnos.length === 0 ? "Antes, defina as aulas no quadro de horários" : undefined}
-                className="inline-flex h-9 items-center gap-1.5 rounded-4xl bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-1.5 rounded-4xl bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/85 disabled:opacity-50"
             >
                 <Plus className="size-4" /> Turma
             </PopoverTrigger>
@@ -211,7 +283,7 @@ function NovaTurma({
                 {cadastros.cursos.length > 0 && (
                     <div className="grid grid-cols-[1fr_auto] gap-2">
                         <label className="space-y-1 text-xs text-muted-foreground">
-                            <span className="block">Curso</span>
+                            <span className="block">Curso (opcional)</span>
                             <Selecao
                                 className="w-full"
                                 value={cursoId}
@@ -220,7 +292,7 @@ function NovaTurma({
                                     setPeriodoId("");
                                 }}
                             >
-                                <option value="">Sem curso (avulsa)</option>
+                                <option value="">Nenhum</option>
                                 {cadastros.cursos.map((c) => (
                                     <option key={c.id} value={c.id}>{c.nome || "(sem nome)"}</option>
                                 ))}
@@ -248,26 +320,13 @@ function NovaTurma({
                         <CampoNumero max={9999} valor={alunos} onChange={setAlunos} />
                     </label>
                 </div>
-                {turnos.length > 1 && (
-                    <div className="flex flex-wrap gap-3 text-sm">
-                        {turnos.map((t) => (
-                            <label key={t} className="flex items-center gap-1.5">
-                                <Checkbox
-                                    checked={turnosDaTurma.includes(t)}
-                                    onCheckedChange={(v) => setMarcados(v === true ? [...turnosDaTurma, t] : turnosDaTurma.filter((x) => x !== t))}
-                                />
-                                {NOME_DO_TURNO[t]}
-                            </label>
-                        ))}
-                    </div>
-                )}
                 {cadastros.ambientes.length > 0 && (
                     <label className="space-y-1 text-xs text-muted-foreground">
-                        <span className="block">Ambiente padrão</span>
+                        <span className="block">Sala</span>
                         <Selecao className="w-full" value={ambienteId} onChange={(e) => setAmbienteId(e.target.value)}>
-                            <option value="">Nenhum</option>
+                            <option value="">Nenhuma</option>
                             {cadastros.ambientes.map((a) => (
-                                <option key={a.id} value={a.id}>{a.nome || "(sem nome)"} ({a.capacidade})</option>
+                                <option key={a.id} value={a.id}>{rotuloDoAmbiente(a)}</option>
                             ))}
                         </Selecao>
                     </label>

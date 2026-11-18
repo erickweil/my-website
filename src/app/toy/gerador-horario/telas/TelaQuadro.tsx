@@ -10,27 +10,34 @@ import { NOME_DO_TURNO, faixaSobreposta, fimDaFaixa, novoId, substituirTurno, tr
 import { Ajuda, CampoNumero, Cabecalho, Selecao } from "../componentes/comuns";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
+/** Duração da última aula do quadro, ou 50 minutos se ainda não há aulas. */
+const duracaoDaUltimaAula = (faixas: Faixa[]) => faixas.findLast((f) => f.tipo === "aula")?.duracaoMin ?? 50;
+
 const INICIO_DO_TURNO: Record<Turno, string> = { matutino: "07:30", vespertino: "13:30", noturno: "19:00" };
 
-/** Colunas da tabela de faixas no computador; no celular, 6 colunas em que os campos se empilham. */
-const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 md:grid-cols-[minmax(9rem,1fr)_7.5rem_6rem_4rem_9rem_2rem]";
+/**
+ * Colunas da tabela de faixas quando ela é larga; estreita, 6 colunas em que os campos se empilham.
+ * Vai pela largura da tabela (container query), não da tela: com o menu lateral aberto a tabela
+ * fica estreita mesmo num computador.
+ */
+const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 @2xl:grid-cols-[minmax(9rem,1fr)_7.5rem_6rem_4rem_9rem_2rem]";
 
 export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
     const { quadro } = projeto;
     const sobreposta = faixaSobreposta(quadro);
-    const [gerar, setGerar] = useState({ turno: "matutino" as Turno, inicio: "07:30", aulas: 5, intervaloApos: 3, intervaloMin: 20 });
+    const [gerar, setGerar] = useState(() => ({ turno: "matutino" as Turno, inicio: "07:30", aulas: 5, duracaoMin: duracaoDaUltimaAula(quadro.faixas), intervaloApos: 3, intervaloMin: 20 }));
 
     const mudarFaixa = (id: string, campos: Partial<Faixa>) =>
         mudarProjeto((p) => trocarFaixas(p, p.quadro.faixas.map((f) => (f.id === id ? ({ ...f, ...campos } as Faixa) : f))));
 
-    /** Faixa nova logo depois da última. */
+    /** Faixa nova logo depois da última; a aula nova dura o mesmo que a aula anterior. */
     const adicionar = (tipo: Faixa["tipo"]) =>
         mudarProjeto((p) => {
             const ultima = p.quadro.faixas.at(-1);
             const inicio = ultima ? fimDaFaixa(ultima) : "07:30";
             const nova: Faixa =
                 tipo === "aula"
-                    ? { tipo, id: novoId(), inicio, duracaoMin: p.quadro.duracaoAulaMin, turno: turnoDaHora(inicio) }
+                    ? { tipo, id: novoId(), inicio, duracaoMin: duracaoDaUltimaAula(p.quadro.faixas), turno: turnoDaHora(inicio) }
                     : { tipo, id: novoId(), nome: "Intervalo", inicio, duracaoMin: 20 };
             return trocarFaixas(p, [...p.quadro.faixas, nova]);
         });
@@ -49,7 +56,7 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
         <div>
             <Cabecalho
                 titulo="Quadro de horários"
-                ajuda="Os dias da semana e a sequência de aulas e intervalos do dia. O mesmo quadro vale para todas as turmas do projeto: cada turma usa a parte que lhe cabe (só a manhã, só a noite). As faixas ficam em ordem de horário; incluir ou remover uma aula renumera as seguintes, e o que já foi marcado nas turmas e nos professores acompanha a aula."
+                ajuda="Dias e sequência de aulas e intervalos, comum a todas as turmas do projeto."
             />
 
             <section className="mb-8 space-y-2">
@@ -76,23 +83,10 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
             </section>
 
             <section className="mb-8">
-                <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
-                    <Label>Aulas e intervalos do dia</Label>
-                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                        Duração padrão da aula
-                        <CampoNumero
-                            className="h-8 w-16"
-                            min={1}
-                            max={300}
-                            valor={quadro.duracaoAulaMin}
-                            onChange={(n) => mudarProjeto((p) => ({ ...p, quadro: { ...p.quadro, duracaoAulaMin: n } }), true)}
-                        />
-                        min
-                    </label>
-                </div>
+                <Label className="mb-2">Aulas e intervalos do dia</Label>
 
-                <div className="rounded-2xl border border-border">
-                    <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
+                <div className="@container rounded-2xl border border-border">
+                    <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground @2xl:grid")}>
                         <span>Faixa</span>
                         <span>Início</span>
                         <span>Duração (min)</span>
@@ -106,14 +100,14 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                     {quadro.faixas.map((f) => (
                         <Fragment key={f.id}>
                         {comecaTurno.has(f.id) && f.tipo === "aula" && (
-                            <div className="border-t border-border bg-muted/50 px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase first:border-t-0 md:first:border-t">
+                            <div className="border-t border-border bg-muted/50 px-3 py-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase first:border-t-0 @2xl:first:border-t">
                                 {NOME_DO_TURNO[f.turno]}
                             </div>
                         )}
                         <div
-                            className={cn(COLUNAS, "grid border-t border-border py-1.5 first:border-t-0 md:first:border-t", f.tipo === "intervalo" && "bg-muted/30", f === sobreposta && "bg-destructive/10")}
+                            className={cn(COLUNAS, "grid border-t border-border py-1.5 first:border-t-0 @2xl:first:border-t", f.tipo === "intervalo" && "bg-muted/30", f === sobreposta && "bg-destructive/10")}
                         >
-                            <div className="col-span-5 flex items-center gap-2 md:col-span-1">
+                            <div className="col-span-5 flex items-center gap-2 @2xl:col-span-1">
                                 {f.tipo === "aula" ? (
                                     <span className="font-medium">{numeroDaAula.get(f.id)}ª aula</span>
                                 ) : (
@@ -127,9 +121,9 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                                         />
                                     </>
                                 )}
-                                <span className="text-xs text-muted-foreground md:hidden">até {fimDaFaixa(f)}</span>
+                                <span className="text-xs text-muted-foreground @2xl:hidden">até {fimDaFaixa(f)}</span>
                             </div>
-                            <div className="col-span-1 text-right md:order-last">
+                            <div className="col-span-1 text-right @2xl:order-last">
                                 <Button
                                     size="icon-sm"
                                     variant="ghost"
@@ -140,14 +134,14 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                                     <Trash2 />
                                 </Button>
                             </div>
-                            <div className="col-span-2 md:col-span-1">
+                            <div className="col-span-2 @2xl:col-span-1">
                                 <Input aria-label="Início" type="time" className="h-8" value={f.inicio} onChange={(e) => e.target.value && mudarFaixa(f.id, { inicio: e.target.value })} />
                             </div>
-                            <div className="col-span-2 md:col-span-1">
+                            <div className="col-span-2 @2xl:col-span-1">
                                 <CampoNumero aria-label="Duração em minutos" title="Duração em minutos" className="h-8" min={1} max={300} valor={f.duracaoMin} onChange={(n) => mudarFaixa(f.id, { duracaoMin: n })} />
                             </div>
-                            <div className="hidden text-muted-foreground tabular-nums md:block">{fimDaFaixa(f)}</div>
-                            <div className="col-span-2 md:col-span-1">
+                            <div className="hidden text-muted-foreground tabular-nums @2xl:block">{fimDaFaixa(f)}</div>
+                            <div className="col-span-2 @2xl:col-span-1">
                                 {f.tipo === "aula" && (
                                     <Selecao aria-label="Turno" className="h-8 w-full" value={f.turno} onChange={(e) => mudarFaixa(f.id, { turno: e.target.value as Turno })}>
                                         {TURNOS.map((t) => (
@@ -178,10 +172,7 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
             <section className="rounded-2xl border border-border p-4">
                 <h3 className="mb-3 flex items-center gap-2 font-medium">
                     Gerar um turno
-                    <Ajuda>
-                        Cria as aulas de um turno de uma vez, com a duração padrão. Se o turno já existe, ele é refeito e as outras
-                        faixas ficam como estão.
-                    </Ajuda>
+                    <Ajuda>Cria todas as aulas do turno de uma vez. Se o turno já existe, ele é refeito.</Ajuda>
                 </h3>
                 <div className="flex flex-wrap items-end gap-3">
                     <label className="space-y-1 text-xs text-muted-foreground">
@@ -201,6 +192,10 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                         <CampoNumero className="w-16" min={1} max={12} valor={gerar.aulas} onChange={(n) => setGerar({ ...gerar, aulas: n })} />
                     </label>
                     <label className="space-y-1 text-xs text-muted-foreground">
+                        <span className="block">Duração (min)</span>
+                        <CampoNumero className="w-16" min={1} max={300} valor={gerar.duracaoMin} onChange={(n) => setGerar({ ...gerar, duracaoMin: n })} />
+                    </label>
+                    <label className="space-y-1 text-xs text-muted-foreground">
                         <span className="block">Intervalo depois da aula</span>
                         <CampoNumero className="w-16" min={0} max={12} valor={gerar.intervaloApos} onChange={(n) => setGerar({ ...gerar, intervaloApos: n })} />
                     </label>
@@ -208,7 +203,7 @@ export function TelaQuadro({ projeto, mudarProjeto }: ContextoDoProjeto) {
                         <span className="block">Duração do intervalo (min)</span>
                         <CampoNumero className="w-20" min={0} max={180} valor={gerar.intervaloMin} onChange={(n) => setGerar({ ...gerar, intervaloMin: n })} />
                     </label>
-                    <Button onClick={() => mudarProjeto((p) => substituirTurno(p, { ...gerar, duracaoMin: p.quadro.duracaoAulaMin }))}>
+                    <Button onClick={() => mudarProjeto((p) => substituirTurno(p, gerar))}>
                         Gerar turno
                     </Button>
                 </div>

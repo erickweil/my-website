@@ -5,32 +5,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import type { Componente, Curso, Id, Oferta, Professor } from "../modelo/modelo";
-import { atualizarPelaMatriz, aulasDaTurma, alunosDaOferta, buscarComponente, componentesNaoOfertados, contarTempos, criarOferta, diferencasDaMatriz, juntarOfertas, manterDocentes, nomeDoPeriodo, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
-import { Ajuda, CampoNumero, Cabecalho, RotuloMovel, Selecao, Vazio, rotuloDoProfessor } from "../componentes/comuns";
+import type { Componente, Curso, Id, Oferta, Professor, Turma } from "../modelo/modelo";
+import { atualizarPelaMatriz, alunosDaOferta, buscarComponente, componentesNaoOfertados, criarOferta, diferencasDaMatriz, juntarOfertas, manterDocentes, nomeDoPeriodo, nomeNaTurma, ofertasDaTurma, renomearNaTurma, separarTurma } from "../modelo/operacoes";
+import { Ajuda, CampoNumero, RotuloMovel, Selecao, rotuloDoAmbiente, rotuloDoProfessor } from "../componentes/comuns";
+import type { Pendencia } from "../modelo/diagnostico";
 import { CampoDivisao } from "../componentes/CampoDivisao";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 import { novoProfessor } from "./TelaProfessores";
-import { ResumoDaTurma } from "./TelaTurmas";
 
-export function TelaAulas({
-    area,
-    projeto,
-    mudarArea,
-    mudarProjeto,
-    turmaId,
-    escolherTurma,
-}: ContextoDoProjeto & { turmaId: Id | null; escolherTurma: (id: Id) => void }) {
+/** A aba "Aulas" da turma: as disciplinas dela, quem dá, quantas aulas, divisão e ambiente. */
+export function AulasDaTurma({ area, projeto, mudarArea, mudarProjeto, turma }: ContextoDoProjeto & { turma: Turma }) {
     const [erro, setErro] = useState<string | null>(null);
-    const turma = projeto.turmas.find((t) => t.id === turmaId) ?? projeto.turmas[0];
-    if (!turma) {
-        return (
-            <div>
-                <Cabecalho titulo="Aulas" />
-                <Vazio>Crie uma turma primeiro: as aulas são cadastradas por turma.</Vazio>
-            </div>
-        );
-    }
     const ofertas = ofertasDaTurma(projeto, turma.id);
     const nomeDaTurma = (id: Id) => projeto.turmas.find((t) => t.id === id)?.nome || "(sem nome)";
 
@@ -68,33 +53,9 @@ export function TelaAulas({
     const CAMPOS = { nome: "nome", aulasSemana: "aulas", divisao: "divisão" };
 
     return (
-        <div>
-            <Cabecalho titulo="Aulas" />
-
-            <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
-                {projeto.turmas.map((t) => {
-                    // Só aula demais impede o horário; aulas a menos deixam horários vagos (aviso na turma)
-                    const sobra = aulasDaTurma(projeto, t.id) > contarTempos(t.horarios);
-                    return (
-                        <button
-                            key={t.id}
-                            type="button"
-                            title={sobra ? "A turma tem mais aulas que horários marcados" : undefined}
-                            onClick={() => escolherTurma(t.id)}
-                            className={cn(
-                                "shrink-0 rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                                t.id === turma.id ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
-                            )}
-                        >
-                            {t.nome || "(sem nome)"}
-                            {sobra && <span className={cn("ml-1.5", t.id === turma.id ? "" : "text-destructive")}>●</span>}
-                        </button>
-                    );
-                })}
-            </div>
-
+        <div className="@container">
             <div className="rounded-2xl border border-border">
-                <div className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
+                <div className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground @4xl:grid")}>
                     <span>Disciplina</span>
                     <span>Professores</span>
                     <span className="text-center">Aulas/sem.</span>
@@ -110,8 +71,8 @@ export function TelaAulas({
                     const ambiente = ambientes.find((a) => a.id === (o.ambienteId ?? turma.ambienteId));
                     const alunos = alunosDaOferta(projeto, o);
                     return (
-                    <div key={o.id} className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "grid border-t border-border py-2 first:border-t-0 md:first:border-t")}>
-                        <div className="col-span-5 md:col-span-1">
+                    <div key={o.id} className={cn(COLUNAS, comAmbiente && COM_AMBIENTE, "grid border-t border-border py-2 first:border-t-0 @4xl:first:border-t")}>
+                        <div className="col-span-5 @4xl:col-span-1">
                             <Input
                                 aria-label="Disciplina"
                                 className="h-8"
@@ -133,12 +94,12 @@ export function TelaAulas({
                                 </p>
                             )}
                         </div>
-                        <div className="col-span-1 text-right md:order-last">
+                        <div className="col-span-1 text-right @4xl:order-last">
                             <Button size="icon-sm" variant="ghost" title="Remover disciplina da turma" className="text-destructive hover:text-destructive" onClick={() => remover(o)}>
                                 <Trash2 />
                             </Button>
                         </div>
-                        <div className="col-span-6 md:order-3 md:col-span-1">
+                        <div className="col-span-6 @4xl:order-3 @4xl:col-span-1">
                             <RotuloMovel>Professores</RotuloMovel>
                             <SeletorProfessores
                                 professores={area.cadastros.professores}
@@ -151,16 +112,16 @@ export function TelaAulas({
                                 }}
                             />
                         </div>
-                        <div className="col-span-2 md:order-4 md:col-span-1">
+                        <div className="col-span-2 @4xl:order-4 @4xl:col-span-1">
                             <RotuloMovel>Aulas/sem.</RotuloMovel>
                             <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={o.aulasSemana} onChange={(n) => mudarOferta(o.id, { aulasSemana: n })} />
                         </div>
-                        <div className="col-span-4 md:order-5 md:col-span-1">
+                        <div className="col-span-4 @4xl:order-5 @4xl:col-span-1">
                             <RotuloMovel>Divisão</RotuloMovel>
                             <CampoDivisao valor={o.divisao} aulasSemana={o.aulasSemana} onChange={(divisao) => mudarOferta(o.id, { divisao })} />
                         </div>
                         {comAmbiente && (
-                            <div className="col-span-6 md:order-6 md:col-span-1">
+                            <div className="col-span-6 @4xl:order-6 @4xl:col-span-1">
                                 <RotuloMovel>Ambiente</RotuloMovel>
                                 <Selecao
                                     aria-label="Ambiente"
@@ -169,9 +130,9 @@ export function TelaAulas({
                                     value={o.ambienteId ?? ""}
                                     onChange={(e) => mudarOferta(o.id, { ambienteId: e.target.value || null })}
                                 >
-                                    <option value="">{ambienteDaTurma ? `Da turma (${ambienteDaTurma.nome})` : "Da turma (nenhum)"}</option>
+                                    <option value="">{ambienteDaTurma ? `Da turma: ${ambienteDaTurma.nome || "(sem nome)"}` : "Da turma: nenhum"}</option>
                                     {ambientes.map((a) => (
-                                        <option key={a.id} value={a.id}>{a.nome || "(sem nome)"} ({a.capacidade})</option>
+                                        <option key={a.id} value={a.id}>{rotuloDoAmbiente(a)}</option>
                                     ))}
                                 </Selecao>
                             </div>
@@ -198,7 +159,6 @@ export function TelaAulas({
                         ))}
                     </p>
                 )}
-                <ResumoDaTurma aulas={aulasDaTurma(projeto, turma.id)} tempos={contarTempos(turma.horarios)} />
             </div>
 
             <section className="mt-8">
@@ -244,10 +204,13 @@ export function TelaAulas({
     );
 }
 
+/** Pendências que a aba já mostra no próprio campo: não entram na lista de avisos da turma. */
+export const JA_NA_TELA: NonNullable<Pendencia["codigo"]>[] = ["aulas-sobrando", "fora-da-matriz", "sem-professor"];
+
 /** Colunas da tabela de aulas no computador; no celular, 6 colunas em que os campos se empilham. */
-const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 md:grid-cols-[minmax(9rem,1fr)_minmax(10rem,16rem)_5rem_12rem_2rem]";
+const COLUNAS = "grid-cols-6 items-start gap-x-2 gap-y-2 px-3 @4xl:grid-cols-[minmax(9rem,1fr)_minmax(10rem,16rem)_5rem_12rem_2rem]";
 /** Com ambientes cadastrados, a tabela ganha a coluna do ambiente. */
-const COM_AMBIENTE = "md:grid-cols-[minmax(8rem,1fr)_minmax(9rem,14rem)_5rem_12rem_11rem_2rem]";
+const COM_AMBIENTE = "@4xl:grid-cols-[minmax(8rem,1fr)_minmax(9rem,14rem)_5rem_12rem_11rem_2rem]";
 
 /** "Da matriz…": inclui na turma uma disciplina de qualquer período de qualquer curso (oferta especial). */
 function SeletorDaMatriz({ cursos, cursoInicial, onEscolher }: { cursos: Curso[]; cursoInicial?: Id; onEscolher: (c: Componente) => void }) {

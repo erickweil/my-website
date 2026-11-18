@@ -42,7 +42,11 @@ const activeLineField = StateField.define<DecorationSet>({
 
 // Mantido no escopo de módulo para que a referência seja estável entre renders.
 // Se fosse criado dentro do componente, o CodeMirror reconfiguraria o parser a cada keystroke.
-const turingExtensions = [turingLanguage(), activeLineField];
+const turingExtensions = [
+    turingLanguage(),
+    activeLineField,
+    EditorView.contentAttributes.of({ 'aria-label': 'Programa da máquina de Turing' }),
+];
 
 const myTheme = EditorView.theme({
     '&': {
@@ -98,6 +102,7 @@ export default function TuringEditor({ value, onChange, highlightLine }: TuringE
     return (
         <NonSSRWrapper>
             <select
+                aria-label='Exemplo de programa'
                 className='w-full px-3 py-2 bg-gray-100 text-gray-800 rounded border hover:bg-gray-200 text-sm'
                 onChange={(e) => onChange(exampleCodes[e.target.value])}
                 defaultValue="busy beaver"

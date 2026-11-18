@@ -155,6 +155,9 @@ export default function Genetic() {
         <div className="absolute top-3 right-3 z-10 flex items-center gap-2 bg-white/80 backdrop-blur rounded-lg px-3 py-2 shadow text-sm font-medium select-none">
             <span className={solver === "ts" ? "font-bold" : "text-gray-400"}>TS</span>
             <button
+                role="switch"
+                aria-checked={solver === "wasm"}
+                aria-label="Usar o solver em WASM"
                 onClick={() => setSolver(s => s === "ts" ? "wasm" : "ts")}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${solver === "wasm" ? "bg-violet-600" : "bg-gray-300"}`}
             >

@@ -13,6 +13,10 @@ const ISOLAMENTO = [
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  // O servidor de desenvolvimento também é acessado pelo domínio (via nginx-proxy)
+  allowedDevOrigins: ["erick.fslab.dev"],
+  // O indicador do modo dev fica em cima da barra de navegação do celular
+  devIndicators: false,
   async headers() {
     return [
       { source: "/", headers: ISOLAMENTO },

@@ -4,10 +4,12 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { lerAreaDeTrabalho } from "../modelo/armazenamento";
+import { exportarProjeto, importarProjetos } from "../modelo/exportacao";
 import { extrairFormularioAntigo, projetoDoFormatoAntigo } from "../modelo/formato-antigo";
 import type { AreaDeTrabalho, Id } from "../modelo/modelo";
 import { duplicarProjeto, novoProjeto } from "../modelo/operacoes";
-import { Cabecalho, Vazio, plural } from "../componentes/comuns";
+import { cn } from "@/lib/utils";
+import { Cabecalho, plural } from "../componentes/comuns";
 import type { Contexto } from "../useAreaDeTrabalho";
 
 /** Dados salvos pela versão anterior da página. */
@@ -35,7 +37,7 @@ export function TelaProjetos({
     mudarArea,
     projetoAbertoId,
     abrir,
-}: Contexto & { projetoAbertoId: Id | null; abrir: (id: Id) => void }) {
+}: Contexto & { projetoAbertoId: Id | null; abrir: (id: Id, destino?: "horario" | "quadro") => void }) {
     const [nome, setNome] = useState("");
     const [erro, setErro] = useState<string | null>(null);
     const arquivo = useRef<HTMLInputElement>(null);
@@ -47,14 +49,18 @@ export function TelaProjetos({
         const projeto = novoProjeto(nome.trim() || `Projeto ${area.projetos.length + 1}`);
         mudarArea((a) => ({ ...a, projetos: [...a.projetos, projeto] }));
         setNome("");
-        abrir(projeto.id);
+        // Projeto novo começa pelo quadro de horários
+        abrir(projeto.id, "quadro");
     };
 
-    const exportar = () => {
-        const url = URL.createObjectURL(new Blob([JSON.stringify(area, null, 2)], { type: "application/json" }));
+    /** Baixa o projeto com os cursos, professores e ambientes que ele usa. */
+    const exportar = (id: Id) => {
+        const arquivo = exportarProjeto(area, id);
+        const nomeDoArquivo = arquivo.projetos[0].nome.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "") || "projeto";
+        const url = URL.createObjectURL(new Blob([JSON.stringify(arquivo, null, 2)], { type: "application/json" }));
         const a = document.createElement("a");
         a.href = url;
-        a.download = "horarios.json";
+        a.download = `horario-${nomeDoArquivo}.json`;
         a.click();
         URL.revokeObjectURL(url);
     };
@@ -64,9 +70,14 @@ export function TelaProjetos({
         const texto = await file.text();
         const leitura = lerAreaDeTrabalho(texto);
         if (leitura.ok) {
-            const temDados = area.projetos.length > 0 || area.cadastros.professores.length > 0;
-            if (temDados && !confirm("Importar este arquivo substitui todos os cadastros e projetos atuais. Continuar?")) return;
-            mudarArea(() => leitura.area);
+            if (leitura.area.projetos.length === 0) {
+                setErro("O arquivo não tem nenhum projeto.");
+                return;
+            }
+            // Entra como projeto novo; os cadastros que já existem são reaproveitados
+            const r = importarProjetos(area, leitura.area);
+            mudarArea(() => r.area);
+            abrir(r.ids[0]);
             return;
         }
         // Não é uma área de trabalho: pode ser um arquivo exportado pela versão anterior
@@ -112,14 +123,11 @@ export function TelaProjetos({
         <div>
             <Cabecalho
                 titulo="Projetos de horário"
-                ajuda="Cada projeto é o horário de um período letivo (por exemplo, 2027/1): tem o seu quadro de horários, as suas turmas e a disponibilidade dos professores naquele período. Os cadastros são compartilhados entre os projetos. Tudo fica salvo neste navegador."
+                ajuda="Um projeto por período letivo (ex.: 2027/1). Os cadastros são compartilhados; tudo fica salvo neste navegador."
                 acoes={
                     <>
-                        <Button variant="outline" size="sm" onClick={exportar}>
-                            <Download /> Exportar tudo
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => arquivo.current?.click()}>
-                            <Upload /> Importar
+                        <Button variant="outline" size="sm" title="Abrir um projeto exportado (.json) como projeto novo" onClick={() => arquivo.current?.click()}>
+                            <Upload /> Importar projeto
                         </Button>
                         <input
                             ref={arquivo}
@@ -155,71 +163,94 @@ export function TelaProjetos({
                 </Alert>
             )}
 
-            <div className="space-y-2">
-                {area.projetos.length === 0 && <Vazio>Nenhum projeto ainda. Crie o primeiro abaixo, por exemplo “2027/1”.</Vazio>}
-                {area.projetos.map((p) => (
-                    <div
-                        key={p.id}
-                        className={
-                            "flex flex-wrap items-center gap-2 rounded-2xl border p-3 " +
-                            (p.id === projetoAbertoId ? "border-primary bg-primary/5" : "border-border")
-                        }
-                    >
-                        <Input
-                            aria-label="Nome do projeto"
-                            className="w-40 flex-1"
-                            value={p.nome}
-                            onChange={(e) =>
-                                mudarArea((a) => ({ ...a, projetos: a.projetos.map((x) => (x.id === p.id ? { ...x, nome: e.target.value } : x)) }))
-                            }
-                        />
-                        <span className="text-xs text-muted-foreground">
-                            {plural(p.turmas.length, "turma", "turmas")} · {plural(p.ofertas.length, "disciplina", "disciplinas")}
-                            {p.horario ? " · horário gerado" : ""}
-                        </span>
-                        <Button size="sm" variant={p.id === projetoAbertoId ? "default" : "outline"} onClick={() => abrir(p.id)}>
-                            <FolderOpen /> {p.id === projetoAbertoId ? "Aberto" : "Abrir"}
-                        </Button>
-                        <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            title="Duplicar: novo projeto com as mesmas turmas, aulas e disponibilidades"
-                            onClick={() => {
-                                const copia = duplicarProjeto(p, `${p.nome} (cópia)`);
-                                mudarArea((a) => ({ ...a, projetos: [...a.projetos, copia] }));
-                            }}
-                        >
-                            <Copy />
-                        </Button>
-                        <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            title="Excluir projeto"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => {
-                                if (confirm(`Excluir o projeto “${p.nome}”? Não dá para desfazer.`)) {
-                                    mudarArea((a) => ({ ...a, projetos: a.projetos.filter((x) => x.id !== p.id) }));
-                                }
-                            }}
-                        >
-                            <Trash2 />
-                        </Button>
+            {area.projetos.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+                    <p className="text-lg font-medium">Comece criando um projeto de horário</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Um projeto por período letivo, por exemplo “2027/1”.</p>
+                    <FormularioNovo nome={nome} setNome={setNome} criar={criar} className="mx-auto mt-5 max-w-sm" />
+                </div>
+            ) : (
+                <>
+                    <div className="space-y-2">
+                        {area.projetos.map((p) => {
+                            const aberto = p.id === projetoAbertoId;
+                            return (
+                                <div
+                                    key={p.id}
+                                    className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border p-3", aberto ? "border-primary bg-primary/5" : "border-border")}
+                                >
+                                    <div className="min-w-48 flex-1">
+                                        <Input
+                                            aria-label="Nome do projeto"
+                                            className="h-8 font-medium"
+                                            value={p.nome}
+                                            onChange={(e) =>
+                                                mudarArea((a) => ({ ...a, projetos: a.projetos.map((x) => (x.id === p.id ? { ...x, nome: e.target.value } : x)) }))
+                                            }
+                                        />
+                                        <p className="mt-1 px-3 text-xs text-muted-foreground">
+                                            {plural(p.turmas.length, "turma", "turmas")}
+                                            {p.horario ? (p.horario.completo ? " · horário completo" : " · horário incompleto") : " · sem horário"}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Button size="sm" variant={aberto ? "default" : "outline"} onClick={() => abrir(p.id)}>
+                                            <FolderOpen /> {aberto ? "Aberto" : "Abrir"}
+                                        </Button>
+                                        <Button size="icon-sm" variant="ghost" title="Exportar este projeto (.json)" aria-label="Exportar" onClick={() => exportar(p.id)}>
+                                            <Download />
+                                        </Button>
+                                        <Button
+                                            size="icon-sm"
+                                            variant="ghost"
+                                            title="Duplicar"
+                                            aria-label="Duplicar"
+                                            onClick={() => {
+                                                const copia = duplicarProjeto(p, `${p.nome} (cópia)`);
+                                                mudarArea((a) => ({ ...a, projetos: [...a.projetos, copia] }));
+                                            }}
+                                        >
+                                            <Copy />
+                                        </Button>
+                                        <Button
+                                            size="icon-sm"
+                                            variant="ghost"
+                                            title="Excluir"
+                                            aria-label="Excluir"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => {
+                                                if (confirm(`Excluir o projeto “${p.nome}”? Não dá para desfazer.`)) {
+                                                    mudarArea((a) => ({ ...a, projetos: a.projetos.filter((x) => x.id !== p.id) }));
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 />
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
-                ))}
-            </div>
-
-            <form
-                className="mt-4 flex gap-2"
-                onSubmit={(e) => {
-                    e.preventDefault();
-                    criar();
-                }}
-            >
-                <Input className="max-w-xs" placeholder="Nome do novo projeto" value={nome} onChange={(e) => setNome(e.target.value)} />
-                <Button type="submit">
-                    <Plus /> Novo projeto
-                </Button>
-            </form>
+                    <FormularioNovo nome={nome} setNome={setNome} criar={criar} className="mt-4 max-w-md" />
+                </>
+            )}
         </div>
+    );
+}
+
+function FormularioNovo({ nome, setNome, criar, className }: { nome: string; setNome: (n: string) => void; criar: () => void; className?: string }) {
+    return (
+        <form
+            className={cn("flex gap-2", className)}
+            onSubmit={(e) => {
+                e.preventDefault();
+                criar();
+            }}
+        >
+            <Input placeholder="Nome do novo projeto" value={nome} onChange={(e) => setNome(e.target.value)} />
+            <Button type="submit" className="shrink-0">
+                <Plus /> Novo projeto
+            </Button>
+        </form>
     );
 }

@@ -24,7 +24,7 @@ function Section({
   return (
     <section id={id} className="scroll-mt-8 mt-12 first:mt-0">
       <div className="mb-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/40 mb-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-foreground/65 mb-1">
           {eyebrow}
         </p>
         <h2 className="text-2xl font-bold text-foreground">{title}</h2>
@@ -46,8 +46,8 @@ function Scope({
   return (
     <li className="rounded-xl bg-foreground/[0.03] px-4 py-3">
       <p className="text-sm font-medium text-foreground">{name}</p>
-      <p className="text-xs font-mono text-foreground/45 mt-0.5 break-all">{scope}</p>
-      <p className="text-sm leading-relaxed text-foreground/60 mt-1.5">{children}</p>
+      <p className="text-xs font-mono text-foreground/65 mt-0.5 break-all">{scope}</p>
+      <p className="text-sm leading-relaxed text-foreground/75 mt-1.5">{children}</p>
     </li>
   );
 }
@@ -59,7 +59,7 @@ export default function Sobre() {
 
         <Link
           href="/"
-          className="text-sm text-foreground/45 hover:text-foreground transition-colors"
+          className="text-sm text-foreground/65 hover:text-foreground transition-colors"
         >
           ← Início
         </Link>
@@ -69,10 +69,10 @@ export default function Sobre() {
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-foreground">
             Erick Weil
           </h1>
-          <p className="text-xs font-mono uppercase tracking-[0.22em] text-foreground/40 mt-2">
+          <p className="text-xs font-mono uppercase tracking-[0.22em] text-foreground/65 mt-2">
             liewkcire.vercel.app
           </p>
-          <p className="text-base md:text-lg text-foreground/55 leading-relaxed mt-4">
+          <p className="text-base md:text-lg text-foreground/70 leading-relaxed mt-4">
             Site pessoal de Erick Weil, desenvolvedor de software, com utilitários,
             simuladores e experimentos de computação que rodam direto no navegador.
           </p>
@@ -86,7 +86,7 @@ export default function Sobre() {
               seu próprio navegador, em JavaScript e WebAssembly — nada é instalado e não
               há cobrança.
             </p>
-            <ul className="text-sm leading-relaxed text-foreground/60 space-y-2.5 list-disc pl-5">
+            <ul className="text-sm leading-relaxed text-foreground/75 space-y-2.5 list-disc pl-5">
               <li>
                 <Link href="/toy/gerador-horario" className="font-medium text-foreground/80 underline underline-offset-2 hover:text-foreground transition-colors">
                   Gerador de Horário
@@ -114,7 +114,7 @@ export default function Sobre() {
                 — visualização de populações de soluções evoluindo em tempo real.
               </li>
             </ul>
-            <p className="text-sm leading-relaxed text-foreground/60">
+            <p className="text-sm leading-relaxed text-foreground/75">
               A <Link href="/" className="underline underline-offset-2 hover:text-foreground transition-colors">página inicial</Link>{" "}
               lista essas ferramentas junto com outros projetos publicados fora deste
               domínio. Tudo pode ser acessado livremente, sem cadastro e sem login.
@@ -125,7 +125,7 @@ export default function Sobre() {
         <Section id="login-google" eyebrow="Conta" title="Login com o Google">
           <div className="rounded-2xl border border-foreground/10 p-5 sm:p-6 space-y-6">
             <p className="text-sm leading-relaxed text-foreground/70 flex gap-3">
-              <FaGoogle className="shrink-0 mt-1 text-foreground/40" size={18} />
+              <FaGoogle className="shrink-0 mt-1 text-foreground/65" size={18} />
               <span>
                 As ferramentas funcionam sem nenhum cadastro. O login com a Conta Google é{" "}
                 <strong className="text-foreground">opcional</strong> e serve para um único
@@ -157,7 +157,7 @@ export default function Sobre() {
 
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">O que não é feito</h3>
-              <ul className="text-sm leading-relaxed text-foreground/60 space-y-1.5 list-disc pl-5">
+              <ul className="text-sm leading-relaxed text-foreground/75 space-y-1.5 list-disc pl-5">
                 <li>
                   Nenhum outro dado da sua Conta Google é acessado — nem Gmail, Drive,
                   Agenda, Contatos ou Fotos.
@@ -170,7 +170,7 @@ export default function Sobre() {
 
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-foreground">Como revogar o acesso</h3>
-              <p className="text-sm leading-relaxed text-foreground/60">
+              <p className="text-sm leading-relaxed text-foreground/75">
                 A qualquer momento, em{" "}
                 <a
                   href="https://myaccount.google.com/permissions"
@@ -191,7 +191,7 @@ export default function Sobre() {
               </p>
             </div>
 
-            <p className="text-xs leading-relaxed text-foreground/45 border-t border-foreground/10 pt-4">
+            <p className="text-xs leading-relaxed text-foreground/65 border-t border-foreground/10 pt-4">
               O uso das informações recebidas das APIs do Google segue a{" "}
               <a
                 href="https://developers.google.com/terms/api-services-user-data-policy"
@@ -214,7 +214,7 @@ export default function Sobre() {
         </Section>
 
         <Section id="contato" eyebrow="Responsável" title="Quem mantém o site">
-          <div className="rounded-2xl border border-foreground/10 p-5 sm:p-6 space-y-3 text-sm leading-relaxed text-foreground/60">
+          <div className="rounded-2xl border border-foreground/10 p-5 sm:p-6 space-y-3 text-sm leading-relaxed text-foreground/75">
             <p>
               <strong className="text-foreground">Erick Weil</strong> — desenvolvedor de
               software, Rondônia, Brasil. Responsável pelo site e pelo tratamento dos dados
@@ -240,7 +240,7 @@ export default function Sobre() {
         </Section>
 
         <footer className="mt-16 pt-6 border-t border-foreground/10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-foreground/50">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-sm text-foreground/70">
             <p>© 2026 Erick Weil · liewkcire.vercel.app</p>
             <nav className="flex flex-wrap items-center gap-x-5 gap-y-2">
               <a href={PRIVACY_URL} className="hover:text-foreground transition-colors">

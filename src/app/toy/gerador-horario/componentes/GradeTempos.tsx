@@ -162,10 +162,11 @@ export function LegendaDaGrade({
 }: { estados: Record<string, EstadoDaGrade>; pincel?: string; onEscolher?: (estado: string) => void }) {
     return (
         <div className="flex flex-wrap items-center gap-2 text-xs">
+            {onEscolher && <span className="text-muted-foreground">Pintar com:</span>}
             {Object.entries(estados).map(([id, e]) => {
                 const conteudo = (
                     <>
-                        <span className={cn("inline-block size-3.5 rounded", e.classe)} /> {e.rotulo}
+                        <span className={cn("inline-block size-3.5 rounded ring-1 ring-foreground/15 ring-inset", e.classe)} /> {e.rotulo}
                     </>
                 );
                 return onEscolher ? (

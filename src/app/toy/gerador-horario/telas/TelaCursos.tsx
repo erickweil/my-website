@@ -6,8 +6,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { Componente, Curso, Id } from "../modelo/modelo";
 import { adicionarPeriodo, duplicarCurso, nomeDoPeriodo, novoComponente, novoCurso, removerCurso } from "../modelo/operacoes";
-import { CampoDivisao } from "../componentes/CampoDivisao";
-import { CampoNumero, Cabecalho, ItemDaLista, ListaLateral, RotuloMovel, Selecao, Vazio, plural } from "../componentes/comuns";
+import { CampoNumero, Cabecalho, ItemDaLista, ListaLateral, Selecao, Vazio, plural } from "../componentes/comuns";
 import type { Contexto } from "../useAreaDeTrabalho";
 
 const NIVEIS: Record<Curso["nivel"], string> = {
@@ -17,7 +16,7 @@ const NIVEIS: Record<Curso["nivel"], string> = {
     outro: "Outro",
 };
 
-const COLUNAS = "grid-cols-6 items-center gap-x-2 gap-y-1.5 px-3 md:grid-cols-[minmax(9rem,1fr)_5rem_12rem_2rem]";
+const COLUNAS = "grid-cols-[1fr_5rem_2rem] items-center gap-x-2 px-3";
 
 export function TelaCursos({ area, mudarArea }: Contexto) {
     const { cursos } = area.cadastros;
@@ -43,7 +42,7 @@ export function TelaCursos({ area, mudarArea }: Contexto) {
         <div>
             <Cabecalho
                 titulo="Cursos"
-                ajuda="A matriz curricular de cada curso: as disciplinas de cada período, com as aulas por semana. É preenchida uma vez; em cada projeto de horário, uma turma criada a partir de um período já recebe essas disciplinas, que podem ser alteradas ali sem mexer na matriz. Quando o PPC mudar, duplique o curso e altere a cópia: as turmas antigas continuam na matriz antiga."
+                ajuda="As disciplinas de cada período e as aulas por semana. Uma turma criada a partir do curso recebe essas aulas."
                 acoes={
                     <Button onClick={() => adicionar(novoCurso(`Curso ${cursos.length + 1}`))}>
                         <Plus /> Curso
@@ -136,29 +135,19 @@ export function TelaCursos({ area, mudarArea }: Contexto) {
                         {periodo && (
                             <div>
                                 <div className="rounded-2xl border border-border">
-                                    <div className={cn(COLUNAS, "hidden rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground md:grid")}>
+                                    <div className={cn(COLUNAS, "grid rounded-t-2xl bg-muted/50 py-2 text-xs font-medium text-muted-foreground")}>
                                         <span>Disciplina</span>
                                         <span className="text-center">Aulas/sem.</span>
-                                        <span title="Como as aulas se dividem em pedaços de aulas seguidas no mesmo dia">Divisão</span>
                                         <span />
                                     </div>
                                     {periodo.componentes.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma disciplina neste período.</p>}
                                     {periodo.componentes.map((c) => (
-                                        <div key={c.id} className={cn(COLUNAS, "grid border-t border-border py-1.5 first:border-t-0 md:first:border-t")}>
-                                            <Input aria-label="Disciplina" className="col-span-5 h-8 md:col-span-1" placeholder="Nome da disciplina" value={c.nome} onChange={(e) => mudarComponente(c.id, { nome: e.target.value })} />
-                                            <div className="text-right md:order-last">
-                                                <Button size="icon-sm" variant="ghost" title="Remover disciplina da matriz" className="text-destructive hover:text-destructive" onClick={() => mudarComponentes((cs) => cs.filter((x) => x.id !== c.id))}>
-                                                    <Trash2 />
-                                                </Button>
-                                            </div>
-                                            <div className="col-span-2 md:col-span-1">
-                                                <RotuloMovel>Aulas/sem.</RotuloMovel>
-                                                <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={c.aulasSemana} onChange={(n) => mudarComponente(c.id, { aulasSemana: n })} />
-                                            </div>
-                                            <div className="col-span-4 md:col-span-1">
-                                                <RotuloMovel>Divisão</RotuloMovel>
-                                                <CampoDivisao valor={c.divisao} aulasSemana={c.aulasSemana} onChange={(divisao) => mudarComponente(c.id, { divisao })} />
-                                            </div>
+                                        <div key={c.id} className={cn(COLUNAS, "grid border-t border-border py-1.5")}>
+                                            <Input aria-label="Disciplina" className="h-8" placeholder="Nome da disciplina" value={c.nome} onChange={(e) => mudarComponente(c.id, { nome: e.target.value })} />
+                                            <CampoNumero aria-label="Aulas por semana" className="h-8" max={60} valor={c.aulasSemana} onChange={(n) => mudarComponente(c.id, { aulasSemana: n })} />
+                                            <Button size="icon-sm" variant="ghost" title="Remover disciplina da matriz" className="text-destructive hover:text-destructive" onClick={() => mudarComponentes((cs) => cs.filter((x) => x.id !== c.id))}>
+                                                <Trash2 />
+                                            </Button>
                                         </div>
                                     ))}
                                 </div>

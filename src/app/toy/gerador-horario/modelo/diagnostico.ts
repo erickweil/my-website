@@ -34,6 +34,12 @@ export interface Pendencia {
     mensagem: string;
     /** Onde se corrige. */
     tela: "quadro" | "turmas" | "aulas" | "docentes";
+    /**
+     * Identifica as pendências que a própria tela já mostra no campo em que se corrigem (o resumo
+     * de aulas × horários, a lista do que falta da matriz, o "sem professor" da aula), para não
+     * aparecerem duas vezes.
+     */
+    codigo?: "aulas-sobrando" | "fora-da-matriz" | "sem-professor";
     turmaId?: Id;
     professorId?: Id;
 }
@@ -95,11 +101,11 @@ export function diagnosticar(projeto: ProjetoHorario, cadastros: Cadastros): Pen
         const [aulas, tempos] = [aulasDaTurma(projeto, t.id), contarTempos(limitarAoQuadro(t.horarios, projeto.quadro))];
         if (tempos === 0) erro({ tela: "turmas", turmaId: t.id, mensagem: `A turma ${nome(t)} não tem nenhum horário marcado.` });
         // Menos aulas que horários é permitido: os que sobram ficam vagos, de preferência nas pontas do turno
-        else if (aulas > tempos) erro({ tela: "aulas", turmaId: t.id, mensagem: `A turma ${nome(t)} tem ${aulas} aulas para ${tempos} horários: ${aulas - tempos === 1 ? "sobra 1" : `sobram ${aulas - tempos}`}.` });
+        else if (aulas > tempos) erro({ tela: "aulas", codigo: "aulas-sobrando", turmaId: t.id, mensagem: `A turma ${nome(t)} tem ${aulas} aulas para ${tempos} horários: ${aulas - tempos === 1 ? "sobra 1" : `sobram ${aulas - tempos}`}.` });
 
         const faltando = componentesNaoOfertados(projeto, t, cadastros.cursos);
         if (faltando.length > 0) {
-            aviso({ tela: "aulas", turmaId: t.id, mensagem: `A turma ${nome(t)} não oferta ${faltando.length === 1 ? "uma disciplina" : `${faltando.length} disciplinas`} da matriz: ${faltando.map(nome).join(", ")}.` });
+            aviso({ tela: "aulas", codigo: "fora-da-matriz", turmaId: t.id, mensagem: `A turma ${nome(t)} não oferta ${faltando.length === 1 ? "uma disciplina" : `${faltando.length} disciplinas`} da matriz: ${faltando.map(nome).join(", ")}.` });
         }
     }
     const nomes = projeto.turmas.map((t) => t.nome.trim());
@@ -110,7 +116,7 @@ export function diagnosticar(projeto: ProjetoHorario, cadastros: Cadastros): Pen
     for (const o of projeto.ofertas) {
         if (o.aulasSemana === 0) continue;
         const turmaId = o.participacoes[0].turmaId;
-        if (o.professorIds.length === 0) aviso({ tela: "aulas", turmaId, mensagem: `${rotulo(o)} está sem professor.` });
+        if (o.professorIds.length === 0) aviso({ tela: "aulas", codigo: "sem-professor", turmaId, mensagem: `${rotulo(o)} está sem professor.` });
 
         // Divisão em pedaços: alguma divisão atende às regras, e o menor dos maiores pedaços cabe
         const divisoes = divisoesAceitas(regrasDaDivisao(o.divisao, o.aulasSemana), o.aulasSemana);

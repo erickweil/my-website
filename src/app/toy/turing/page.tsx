@@ -88,7 +88,7 @@ export default function TuringPage() {
                     <div className='flex gap-2'>
                         <button
                             title={paused ? 'Continuar' : 'Pausar'}
-                            className='flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 font-medium'
+                            className='flex-1 flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium'
                             onClick={handlePlayPause}
                         >
                             {(paused || !isLoaded) ? '▶ Play' : '⏸ Pause'}
@@ -111,7 +111,7 @@ export default function TuringPage() {
 
                     {/* Carregar programa */}
                     <button
-                        className='w-full px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium'
+                        className='w-full px-3 py-2 bg-green-700 text-white rounded hover:bg-green-800 text-sm font-medium'
                         onClick={handleLoad}
                     >
                         ▶ Carregar código
@@ -121,6 +121,7 @@ export default function TuringPage() {
                     <div className='flex items-center gap-3'>
                         <span className='text-sm text-gray-600'>Vel:</span>
                         <input
+                            aria-label='Velocidade'
                             className='flex-1'
                             type='range'
                             min={0}

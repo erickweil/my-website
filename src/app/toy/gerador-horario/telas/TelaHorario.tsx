@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, CircleAlert, CircleCheck, Download, Loader2, Play, Printer, TriangleAlert, X } from "lucide-react";
+import { CircleAlert, CircleCheck, Download, Loader2, Play, Printer, Square, TriangleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,7 +10,7 @@ import { detalharProblema, diagnosticar, observarHorario, type Pendencia } from 
 import type { Dia, HorarioGerado, Id, Oferta, Professor, ProjetoHorario } from "../modelo/modelo";
 import { NOME_DO_TURNO, ambienteDaOferta, fimDaFaixa, nomeNaTurma, rotuloDoTempo, aulasPorTurno } from "../modelo/operacoes";
 import { doSolver, paraSolver } from "../modelo/para-solver";
-import { Ajuda, Cabecalho, ListaComLimite, Selecao, Vazio, corDoTexto, plural } from "../componentes/comuns";
+import { Ajuda, Cabecalho, CartaoDePendencias, ItemDaLista, ListaComLimite, ListaLateral, Selecao, Vazio, corDoTexto, plural } from "../componentes/comuns";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
 type Visao = "turmas" | "professores" | "ambientes";
@@ -24,6 +24,10 @@ interface Celula {
     detalhes?: string[];
     /** A aula chegou nesta célula na última atualização do quadro (durante a busca). */
     mudou?: boolean;
+    /** A aula não tem professor (fica sem cor). */
+    semProfessor?: boolean;
+    /** Regras de qualidade que a aula não atende (preferências, não impedem o horário). */
+    avisos?: string[];
 }
 
 /** Um quadro dias × aulas: de uma turma, de um professor ou de um ambiente. */
@@ -59,6 +63,31 @@ function montarQuadros(
     const nomeDaTurma = (id: Id) => projeto.turmas.find((t) => t.id === id)?.nome || "(sem nome)";
     const turmasDa = (o: Oferta) => o.participacoes.map((p) => nomeDaTurma(p.turmaId)).join(" + ");
     const cor = (o: Oferta) => professor(o.professorIds[0])?.cor;
+    const nomesDosProfessores = (o: Oferta) => o.professorIds.map((id) => professor(id)?.nome || "(sem nome)").join(", ");
+
+    /**
+     * As regras de qualidade que uma aula não atende. Só as que se ligam a uma aula: horário a
+     * evitar do professor, aula sozinha num lado do intervalo, mais de um trecho no dia e, no
+     * quadro do professor, jornada e descanso do dia.
+     */
+    const avisosDaAula = (o: Oferta, dia: Dia, tempo: number, turmaId?: Id, professorId?: Id): string[] => {
+        const avisos: string[] = [];
+        for (const id of o.professorIds) {
+            if (professorId && id !== professorId) continue;
+            if (projeto.docentes.find((d) => d.professorId === id)?.evitar[dia]?.includes(tempo)) {
+                avisos.push(`${professor(id)?.nome || "O professor"} pediu para evitar este horário.`);
+            }
+        }
+        for (const q of horario.qualidade) {
+            if (q.dia !== dia) continue;
+            const daAula = q.ofertaId === o.id && (!turmaId || !q.turmaId || q.turmaId === turmaId);
+            if (daAula && (q.regra === "intervalo" || q.regra === "turno")) avisos.push(`Aula sozinha de um lado ${q.regra === "turno" ? "da troca de turno" : "do intervalo"}.`);
+            if (daAula && q.regra === "espalhar") avisos.push("A disciplina está em mais de um trecho neste dia.");
+            if (professorId && q.professorId === professorId && q.regra === "jornada") avisos.push("Jornada do professor acima de 10 horas neste dia.");
+            if (professorId && q.professorId === professorId && q.regra === "descanso") avisos.push("Menos de 11 horas de descanso até o dia seguinte.");
+        }
+        return [...new Set(avisos)];
+    };
 
     /** O que aparece ao passar o mouse numa aula: disciplina, turmas, professores, ambiente. */
     const detalhar = (o: Oferta, turmaId: Id): string => {
@@ -74,7 +103,7 @@ function montarQuadros(
     };
 
     /** Quadro de um recurso (professor ou ambiente): as aulas das ofertas que o usam. */
-    const doRecurso = (id: Id, titulo: string, usa: (o: Oferta) => boolean, ativo: Quadro["ativo"], quem: string): Quadro => {
+    const doRecurso = (id: Id, titulo: string, usa: (o: Oferta) => boolean, ativo: Quadro["ativo"], quem: string, professorId?: Id): Quadro => {
         const celulas = new Map<string, Celula>();
         for (const a of horario.alocacoes) {
             const o = oferta(a.ofertaId);
@@ -84,7 +113,8 @@ function montarQuadros(
             const anterior = celulas.get(k);
             const mudou = novas.has(chaveDaAlocacao(a)) || anterior?.mudou;
             const detalhes = [...(anterior?.detalhes ?? []), detalhar(o, o.participacoes[0].turmaId)];
-            celulas.set(k, anterior ? { ...anterior, linhas: [...anterior.linhas, ...linhas], problema: `${quem} está em duas aulas ao mesmo tempo.`, mudou, detalhes } : { linhas, cor: cor(o), mudou, detalhes });
+            const avisos = [...(anterior?.avisos ?? []), ...avisosDaAula(o, a.dia, a.tempo, undefined, professorId)];
+            celulas.set(k, anterior ? { ...anterior, linhas: [...anterior.linhas, ...linhas], problema: `${quem} está em duas aulas ao mesmo tempo.`, mudou, detalhes, avisos } : { linhas, cor: cor(o), mudou, detalhes, semProfessor: o.professorIds.length === 0, avisos });
         }
         return { id, titulo, ativo, celulas, vazioEhFalha: false };
     };
@@ -93,7 +123,7 @@ function montarQuadros(
         return projeto.docentes
             .map((d) => {
                 const nome = professor(d.professorId)?.nome || "(sem nome)";
-                return doRecurso(d.professorId, nome, (o) => o.professorIds.includes(d.professorId), (dia, t) => !!d.disponibilidade[dia]?.includes(t), nome);
+                return doRecurso(d.professorId, nome, (o) => o.professorIds.includes(d.professorId), (dia, t) => !!d.disponibilidade[dia]?.includes(t), nome, d.professorId);
             })
             .sort((a, b) => a.titulo.localeCompare(b.titulo));
     }
@@ -108,8 +138,11 @@ function montarQuadros(
             const o = oferta(a.ofertaId);
             if (o?.participacoes.some((p) => p.turmaId === turma.id)) {
                 celulas.set(chave(a.dia, a.tempo), {
-                    linhas: [nomeNaTurma(o, turma.id) || "(sem nome)"],
+                    // O professor vai na célula: dispensa a legenda de cores
+                    linhas: [nomeNaTurma(o, turma.id) || "(sem nome)", nomesDosProfessores(o) || "sem professor"],
                     cor: cor(o),
+                    semProfessor: o.professorIds.length === 0,
+                    avisos: avisosDaAula(o, a.dia, a.tempo, turma.id),
                     mudou: novas.has(chaveDaAlocacao(a)),
                     detalhes: [detalhar(o, turma.id)],
                 });
@@ -144,8 +177,6 @@ function paraCsv(projeto: ProjetoHorario, quadros: Quadro[]): string {
     return "﻿" + linhas.join("\r\n");
 }
 
-const ROTULO_DA_TELA: Record<Pendencia["tela"], string> = { quadro: "Quadro", turmas: "Turmas", aulas: "Aulas", docentes: "Docentes" };
-
 export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDoProjeto & { irPara: (p: Pendencia) => void }) {
     const [solver, setSolver] = useState<SolverHorario>("local");
     const [ilhas, setIlhas] = useState(true);
@@ -158,6 +189,8 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
     const [novas, setNovas] = useState<Set<string>>(new Set());
     const [erro, setErro] = useState<string | null>(null);
     const [visao, setVisao] = useState<Visao>("turmas");
+    /** Quadro mostrado (turma, professor ou ambiente), ou todos um embaixo do outro. */
+    const [selecionado, setSelecionado] = useState<Id | "todos">("todos");
     /** Para a busca em andamento e fica com o último quadro que ela entregou. */
     const parar = useRef<(() => void) | null>(null);
     // Sair da tela no meio da geração também para (e guarda o último quadro)
@@ -165,7 +198,6 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
 
     const professor = (id: Id) => area.cadastros.professores.find((p) => p.id === id);
     const pendencias = diagnosticar(projeto, area.cadastros);
-    const erros = pendencias.filter((p) => p.gravidade === "erro").length;
     const totalDeAulas = projeto.ofertas.reduce((s, o) => s + o.aulasSemana, 0);
 
     /**
@@ -224,6 +256,12 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
     const temAmbientes = projeto.ofertas.some((o) => ambienteDaOferta(projeto, o) !== null);
     const visaoAtual = visao === "ambientes" && !temAmbientes ? "turmas" : visao;
     const quadros = horario ? montarQuadros(projeto, horario, visaoAtual, professor, area.cadastros.ambientes, gerando ? novas : undefined) : [];
+    // O escolhido some quando muda a visão (era uma turma e agora são professores): volta a "Todos"
+    const atual = quadros.some((q) => q.id === selecionado) ? selecionado : "todos";
+    const contar = (q: Quadro) => {
+        const celulas = [...q.celulas.values()];
+        return { problemas: celulas.filter((c) => c.problema).length, avisos: celulas.filter((c) => !c.problema && c.avisos?.length).length };
+    };
 
     /** Problemas das turmas, com quem está em choque quando dá para saber. */
     const problemas = (horario?.problemas ?? [])
@@ -246,130 +284,74 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
     return (
         <div>
             <div className="print:hidden">
-                <Cabecalho titulo="Horário" />
-
-                {pendencias.length > 0 && (
-                    <Alert className="mb-4" variant={erros > 0 ? "destructive" : "default"}>
-                        <TriangleAlert />
-                        <AlertTitle>
-                            {erros > 0 ? `${plural(erros, "pendência impede", "pendências impedem")} um horário completo` : plural(pendencias.length, "aviso", "avisos")}
-                        </AlertTitle>
-                        <AlertDescription>
-                            <ListaComLimite itens={pendencias} className="space-y-1">
-                                {(p) => (
-                                    <li key={p.mensagem} className={cn("flex items-start gap-2", p.gravidade === "aviso" && "text-muted-foreground")}>
-                                        <span className="flex-1">{p.mensagem}</span>
-                                        <button type="button" className="inline-flex shrink-0 items-center gap-1 text-xs underline" onClick={() => irPara(p)}>
-                                            {ROTULO_DA_TELA[p.tela]} <ArrowRight className="size-3" />
-                                        </button>
-                                    </li>
-                                )}
-                            </ListaComLimite>
-                        </AlertDescription>
-                    </Alert>
-                )}
-
-                <div className="mb-6 flex flex-wrap items-center gap-3">
-                    {gerando ? (
-                        <Button size="lg" variant="outline" onClick={() => parar.current?.()}>
-                            <X /> Interromper
-                        </Button>
-                    ) : (
-                        <Button size="lg" onClick={gerar} disabled={projeto.turmas.length === 0 || totalDeAulas === 0}>
-                            <Play /> {projeto.horario ? "Gerar de novo" : "Gerar horário"}
-                        </Button>
-                    )}
-                    {gerando && (
-                        <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="size-4 animate-spin" />
-                            {!parcial
-                                ? "Preparando…"
-                                : parcial.completo
-                                  ? `Regras obrigatórias atendidas. Reduzindo ${plural(parcial.qualidade.length, "observação", "observações")}…`
-                                  : solver === "pencilmark"
-                                    ? `${parcial.alocacoes.length} de ${totalDeAulas} aulas alocadas…`
-                                    : `${plural(parcial.problemas.filter((p) => p.turmaId).length, "violação", "violações")} e ${plural(parcial.qualidade.length, "observação", "observações")}…`}
-                        </span>
-                    )}
-                    <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
-                        <label className="flex items-center gap-2">
-                            Método
-                            <Ajuda>
-                                <p>
-                                    <strong>Busca local (padrão):</strong> parte de um horário com erros e o conserta trocando aulas de
-                                    lugar. Mostra o melhor horário que encontrou até agora, mesmo com erros, e depois de chegar a um horário
-                                    válido continua tentando atender às regras de qualidade. Roda até atender a todas as regras ou até
-                                    você interromper; ao interromper, fica o melhor horário encontrado.
-                                </p>
-                                <p>
-                                    <strong>Busca exata:</strong> acha um horário que cumpre todas as regras obrigatórias, ou prova que não
-                                    existe. Resolve quadros pequenos depressa, mas pode não terminar nos grandes. Trata os horários a evitar
-                                    como indisponíveis e só deixa horário vago no começo ou no fim do turno; as outras regras de qualidade
-                                    ela não considera.
-                                </p>
-                                <p>
-                                    <strong>Algoritmo genético:</strong> o método anterior, com as mesmas regras da busca local e também
-                                    sem limite de tempo. É bem mais lento e costuma estacionar antes de atender às regras obrigatórias.
-                                </p>
-                                <p>
-                                    <strong>Regras de qualidade:</strong> horários que o professor pediu para evitar; no máximo 10 horas
-                                    entre a primeira e a última aula do professor no dia; 11 horas de descanso até a primeira aula do dia
-                                    seguinte; grupo de aulas da mesma disciplina que atravessa o intervalo (ou a troca de turno) sem deixar
-                                    uma aula sozinha de um lado; quando a turma tem mais horários que aulas, os vagos no começo ou no fim
-                                    do turno, não entre duas aulas. O horário mostra o que não foi atendido, em qualquer método.
-                                </p>
-                            </Ajuda>
-                            <Selecao className="h-8" value={solver} disabled={gerando} onChange={(e) => setSolver(e.target.value as SolverHorario)}>
-                                <option value="local">Busca local (padrão)</option>
-                                <option value="pencilmark">Busca exata</option>
-                                <option value="genetic">Algoritmo genético</option>
-                            </Selecao>
-                        </label>
-                        {solver === "genetic" && (
-                            <label className="flex items-center gap-2" title="Várias populações evoluem em paralelo e trocam indivíduos entre si.">
-                                <Checkbox checked={ilhas} disabled={gerando} onCheckedChange={(v) => setIlhas(v === true)} /> Usar ilhas
+                <Cabecalho
+                    titulo="Horário"
+                    acoes={
+                        <>
+                            <label className="flex items-center gap-2 text-sm">
+                                <span className="text-muted-foreground">Método</span>
+                                <Ajuda>
+                                    <p><strong>Busca local:</strong> o padrão. Roda até atender a todas as regras ou até você parar, e fica com o melhor horário encontrado.</p>
+                                    <p><strong>Busca exata:</strong> acha um horário válido ou prova que não existe. Rápida em quadros pequenos; ignora as regras de qualidade.</p>
+                                    <p><strong>Algoritmo genético:</strong> experimental, mais lento.</p>
+                                </Ajuda>
+                                <Selecao className="h-9" value={solver} disabled={gerando} onChange={(e) => setSolver(e.target.value as SolverHorario)}>
+                                    <option value="local">Busca local</option>
+                                    <option value="pencilmark">Busca exata</option>
+                                    <option value="genetic">Algoritmo genético</option>
+                                </Selecao>
                             </label>
-                        )}
-                    </div>
-                </div>
+                            {solver === "genetic" && (
+                                <label className="flex items-center gap-2 text-sm" title="Várias populações evoluem em paralelo e trocam indivíduos entre si.">
+                                    <Checkbox checked={ilhas} disabled={gerando} onCheckedChange={(v) => setIlhas(v === true)} /> Ilhas
+                                </label>
+                            )}
+                            {gerando ? (
+                                <Button variant="outline" onClick={() => parar.current?.()}>
+                                    <Square className="fill-current" /> Parar
+                                </Button>
+                            ) : (
+                                <Button onClick={gerar} disabled={projeto.turmas.length === 0 || totalDeAulas === 0}>
+                                    <Play /> {projeto.horario ? "Gerar de novo" : "Gerar horário"}
+                                </Button>
+                            )}
+                        </>
+                    }
+                />
 
-                {progresso && (gerando || progresso.solver !== "pencilmark") && (
-                    <PainelDeProgresso progresso={progresso} gerando={gerando} horario={gerando ? parcial : projeto.horario} />
-                )}
+                <div className="mb-4 space-y-3">
+                    <CartaoDePendencias pendencias={pendencias} onIr={irPara} />
 
-                {erro && (
-                    <Alert variant="destructive" className="mb-4">
-                        <CircleAlert />
-                        <AlertTitle>Não foi possível gerar</AlertTitle>
-                        <AlertDescription>{erro}</AlertDescription>
-                    </Alert>
-                )}
+                    {erro && (
+                        <Alert variant="destructive">
+                            <CircleAlert />
+                            <AlertTitle>Não foi possível gerar</AlertTitle>
+                            <AlertDescription>{erro}</AlertDescription>
+                        </Alert>
+                    )}
 
-                {!horario && !gerando && <Vazio>Nenhum horário gerado para este projeto.</Vazio>}
+                    {(gerando || horario) && (
+                        <div className="rounded-2xl border border-border px-4 py-3 text-sm">
+                            {gerando ? (
+                                <p className="flex items-center gap-2 font-medium">
+                                    <Loader2 className="size-4 shrink-0 animate-spin text-primary" />
+                                    {!parcial
+                                        ? "Preparando…"
+                                        : parcial.completo
+                                          ? `Regras obrigatórias atendidas. Melhorando a qualidade: ${plural(parcial.qualidade.length, "observação", "observações")}…`
+                                          : solver === "pencilmark"
+                                            ? `${parcial.alocacoes.length} de ${totalDeAulas} aulas alocadas…`
+                                            : `${plural(parcial.problemas.filter((p) => p.turmaId).length, "violação", "violações")} e ${plural(parcial.qualidade.length, "observação", "observações")}…`}
+                                </p>
+                            ) : horario && <ResumoDoResultado horario={horario} observacoes={observacoes.length} totalDeAulas={totalDeAulas} />}
 
-                {horario && !gerando && (
-                    <div className="mb-4 space-y-2">
-                        {horario.completo && observacoes.length === 0 ? (
-                            <p className="flex items-center gap-2 font-medium text-emerald-600 dark:text-emerald-400">
-                                <CircleCheck className="size-5" /> Horário completo, sem problemas.
-                            </p>
-                        ) : horario.completo ? (
-                            <p className="flex items-center gap-2 font-medium text-amber-600 dark:text-amber-400">
-                                <TriangleAlert className="size-5 shrink-0" /> Horário completo, que atende às regras obrigatórias, mas com{" "}
-                                {plural(observacoes.length, "observação", "observações")} de qualidade.
-                            </p>
-                        ) : (
-                            <Alert variant="destructive">
-                                <CircleAlert />
-                                <AlertTitle>
-                                    Horário incompleto: {horario.alocacoes.length} de {totalDeAulas} aulas alocadas
-                                </AlertTitle>
-                                <AlertDescription>
+                            {!gerando && horario && !horario.completo && (gerais.length > 0 || problemas.length > 0) && (
+                                <div className="mt-2 text-destructive">
                                     {gerais.map((p) => (
                                         <p key={p.mensagem}>{p.mensagem}</p>
                                     ))}
                                     {problemas.length > 0 && (
-                                        <ListaComLimite itens={problemas} className="mt-1 list-disc space-y-0.5 pl-4">
+                                        <ListaComLimite itens={problemas} limite={3} className="list-disc space-y-0.5 pl-5">
                                             {(p) => (
                                                 <li key={`${p.turmaId}|${p.dia}|${p.tempo}`}>
                                                     {p.turma}, {DIAS_SEMANA_MAP[p.dia!].toLowerCase()}, {rotuloDoTempo(projeto.quadro, p.tempo!)}:{" "}
@@ -378,45 +360,63 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
                                             )}
                                         </ListaComLimite>
                                     )}
-                                </AlertDescription>
-                            </Alert>
-                        )}
-                        {desatualizado && (
-                            <p className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
-                                <TriangleAlert className="size-4 shrink-0" /> O projeto mudou depois que este horário foi gerado. Gere de novo para atualizar.
-                            </p>
-                        )}
-                        {observacoes.length > 0 && (
-                            <div className="text-sm text-amber-600 dark:text-amber-400">
-                                <ListaComLimite itens={observacoes} className="list-disc space-y-0.5 pl-5">
-                                    {(o) => <li key={o}>{o}</li>}
-                                </ListaComLimite>
-                            </div>
-                        )}
-                    </div>
-                )}
+                                </div>
+                            )}
+                            {desatualizado && (
+                                <p className="mt-2 flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                                    <TriangleAlert className="size-4 shrink-0" /> O projeto mudou depois que este horário foi gerado. Gere de novo para atualizar.
+                                </p>
+                            )}
+                            {observacoes.length > 0 && (
+                                <details className="group mt-2">
+                                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground select-none hover:text-foreground">
+                                        Ver as {plural(observacoes.length, "observação", "observações")} de qualidade
+                                    </summary>
+                                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-amber-700 dark:text-amber-400">
+                                        {observacoes.map((o) => <li key={o}>{o}</li>)}
+                                    </ul>
+                                </details>
+                            )}
+
+                            {progresso && (gerando || progresso.solver !== "pencilmark") && (
+                                <PainelDeProgresso progresso={progresso} gerando={gerando} horario={gerando ? parcial : projeto.horario} />
+                            )}
+                        </div>
+                    )}
+
+                    {!horario && !gerando && (
+                        <Vazio>Nenhum horário gerado para este projeto. Confira as pendências acima e clique em “Gerar horário”.</Vazio>
+                    )}
+                </div>
 
                 {horario && (
                     <div className="mb-4 flex flex-wrap items-center gap-2">
-                        {(["turmas", "professores", ...(temAmbientes ? (["ambientes"] as const) : [])] as Visao[]).map((v) => (
-                            <button
-                                key={v}
-                                type="button"
-                                onClick={() => setVisao(v)}
-                                className={cn(
-                                    "rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                                    v === visaoAtual ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                Por {v === "turmas" ? "turma" : v === "professores" ? "professor" : "ambiente"}
-                            </button>
-                        ))}
+                        <div className="inline-flex rounded-full border border-border p-0.5" role="tablist" aria-label="Visão do horário">
+                            {(["turmas", "professores", ...(temAmbientes ? (["ambientes"] as const) : [])] as Visao[]).map((v) => (
+                                <button
+                                    key={v}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={v === visaoAtual}
+                                    onClick={() => {
+                                        setVisao(v);
+                                        setSelecionado("todos");
+                                    }}
+                                    className={cn(
+                                        "rounded-full px-3 py-1 text-sm font-medium transition-colors",
+                                        v === visaoAtual ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                                    )}
+                                >
+                                    Por {v === "turmas" ? "turma" : v === "professores" ? "professor" : "ambiente"}
+                                </button>
+                            ))}
+                        </div>
                         {!gerando && (
                             <div className="ml-auto flex gap-2">
-                                <Button size="sm" variant="outline" onClick={() => window.print()}>
+                                <Button size="sm" variant="outline" title="Imprime todos os quadros da visão atual" onClick={() => window.print()}>
                                     <Printer /> Imprimir
                                 </Button>
-                                <Button size="sm" variant="outline" title="Planilha (CSV) da visão atual" onClick={exportar}>
+                                <Button size="sm" variant="outline" title="Planilha (CSV) com todos os quadros da visão atual" onClick={exportar}>
                                     <Download /> Exportar
                                 </Button>
                             </div>
@@ -426,25 +426,67 @@ export function TelaHorario({ area, projeto, salvarHorario, irPara }: ContextoDo
             </div>
 
             {horario && (
-                <div className="space-y-8">
-                    <h2 className="hidden text-xl font-semibold print:block">Horário — {projeto.nome}</h2>
-                    <div className="flex flex-wrap gap-2 [print-color-adjust:exact]">
-                        {projeto.docentes.map((d) => {
-                            const p = professor(d.professorId);
-                            return (
-                                <span key={d.professorId} className="rounded-full px-3 py-0.5 text-xs font-medium" style={{ backgroundColor: p?.cor, color: p ? corDoTexto(p.cor) : undefined }}>
-                                    {p?.nome || "(sem nome)"}
-                                </span>
-                            );
-                        })}
+                <div className="grid gap-6 md:grid-cols-[12rem_1fr] print:block">
+                    <div className="min-w-0 print:hidden md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:self-start md:overflow-y-auto md:pr-1">
+                        <ListaLateral>
+                            <ItemDaLista ativo={atual === "todos"} onClick={() => setSelecionado("todos")} titulo="Todos" detalhe={quadros.length} />
+                            {quadros.map((q) => {
+                                const { problemas: n, avisos } = contar(q);
+                                return (
+                                    <ItemDaLista
+                                        key={q.id}
+                                        ativo={q.id === atual}
+                                        onClick={() => setSelecionado(q.id)}
+                                        titulo={q.titulo}
+                                        detalhe={n > 0 ? <span title={plural(n, "aula fora das regras obrigatórias", "aulas fora das regras obrigatórias")}>{n}</span> : undefined}
+                                        alerta={n > 0}
+                                        marca={n > 0 ? "erro" : avisos > 0 ? "aviso" : null}
+                                    />
+                                );
+                            })}
+                        </ListaLateral>
                     </div>
-                    {quadros.length === 0 && <Vazio>Nada para mostrar nesta visão.</Vazio>}
-                    {quadros.map((q) => (
-                        <QuadroDeHorario key={q.id} projeto={projeto} quadro={q} />
-                    ))}
+                    <div className="min-w-0 space-y-8">
+                        <h2 className="hidden text-xl font-semibold print:block">Horário — {projeto.nome}</h2>
+                        {quadros.length === 0 && <Vazio>Nada para mostrar nesta visão.</Vazio>}
+                        {quadros.map((q) => (
+                            // Os que não estão à vista continuam no documento para a impressão sair completa
+                            <div key={q.id} className={cn(atual !== "todos" && q.id !== atual && "hidden print:block")}>
+                                <QuadroDeHorario projeto={projeto} quadro={q} />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
+    );
+}
+
+/** A situação do horário salvo, numa linha. */
+function ResumoDoResultado({ horario, observacoes, totalDeAulas }: { horario: HorarioGerado; observacoes: number; totalDeAulas: number }) {
+    if (!horario.completo) {
+        const violacoes = horario.problemas.filter((p) => p.turmaId).length;
+        return (
+            <p className="flex items-center gap-2 font-medium text-destructive">
+                <CircleAlert className="size-4 shrink-0" />
+                {horario.alocacoes.length < totalDeAulas
+                    ? `Horário incompleto: ${horario.alocacoes.length} de ${totalDeAulas} aulas alocadas`
+                    : `Horário com ${plural(violacoes, "violação", "violações")} das regras obrigatórias`}
+            </p>
+        );
+    }
+    if (observacoes === 0) {
+        return (
+            <p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400">
+                <CircleCheck className="size-4 shrink-0" /> Horário completo, sem nenhuma observação.
+            </p>
+        );
+    }
+    return (
+        <p className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-400">
+            <CircleCheck className="size-4 shrink-0" /> Horário completo: atende a todas as regras obrigatórias
+            <span className="font-normal text-muted-foreground">· {plural(observacoes, "observação", "observações")} de qualidade</span>
+        </p>
     );
 }
 
@@ -514,8 +556,9 @@ function QuadroDeHorario({ projeto, quadro }: { projeto: ProjetoHorario; quadro:
                                                             celula &&
                                                             [
                                                                 ...(celula.detalhes ?? []),
-                                                                celula.problema && `⚠ ${celula.problema}`,
-                                                                celula.mudou && "(mudou de lugar na última atualização)",
+                                                                celula.problema && `Regra obrigatória: ${celula.problema}`,
+                                                                ...(celula.avisos ?? []).map((a) => `Qualidade: ${a}`),
+                                                                celula.mudou && "Mudou de lugar na última atualização.",
                                                             ]
                                                                 .filter(Boolean)
                                                                 .join("\n\n")
@@ -523,20 +566,31 @@ function QuadroDeHorario({ projeto, quadro }: { projeto: ProjetoHorario; quadro:
                                                         className={cn(
                                                             "relative h-12 border-l border-border px-0.5 py-0.5 text-center text-[0.65rem] leading-tight hyphens-auto sm:px-1 sm:text-xs",
                                                             !ativo && "bg-muted/40",
-                                                            celula?.problema && "outline-2 -outline-offset-2 outline-destructive",
-                                                            celula?.mudou && !celula.problema && "outline-2 -outline-offset-2 outline-sky-500 dark:outline-sky-400",
+                                                            // Vermelho: regra obrigatória. Amarelo: regra de qualidade (preferência)
+                                                            celula?.problema && "outline-3 -outline-offset-3 outline-destructive",
+                                                            !celula?.problema && celula?.avisos?.length && "outline-3 -outline-offset-3 outline-amber-400",
+                                                            // Sem professor não há cor: o tracejado mostra que é aula, não horário livre
+                                                            celula?.semProfessor && "bg-muted",
+                                                            celula?.semProfessor && !celula.problema && !celula.avisos?.length && "outline-1 -outline-offset-4 outline-dashed outline-muted-foreground/60",
                                                         )}
                                                         style={principal && celula?.cor ? { backgroundColor: celula.cor, color: corDoTexto(celula.cor) } : undefined}
                                                     >
                                                         {principal ? (
                                                             <>
                                                                 <p className={cn("font-medium break-words text-balance", resto.length > 0 ? "line-clamp-2" : "line-clamp-3")}>{principal}</p>
-                                                                {resto.length > 0 && <p className="truncate opacity-80">{resto.join(" · ")}</p>}
+                                                                {resto.length > 0 && <p className="truncate">{resto.join(" · ")}</p>}
                                                             </>
                                                         ) : ativo && quadro.vazioEhFalha ? (
                                                             <span className="text-destructive">vazio</span>
                                                         ) : null}
-                                                        {celula?.problema && <CircleAlert className="absolute top-0.5 right-0.5 size-3.5 rounded-full bg-white text-destructive" />}
+                                                        {celula?.problema ? (
+                                                            <CircleAlert className="absolute top-0.5 right-0.5 size-3.5 rounded-full bg-white text-destructive" />
+                                                        ) : celula?.avisos?.length ? (
+                                                            <TriangleAlert className="absolute top-0.5 right-0.5 size-3.5 rounded-sm bg-white p-px text-amber-600" />
+                                                        ) : null}
+                                                        {celula?.mudou && (
+                                                            <span className="absolute top-1 left-1 size-2 rounded-full bg-sky-500 ring-2 ring-white" aria-label="Mudou de lugar" />
+                                                        )}
                                                     </td>
                                                 );
                                             })}
@@ -602,8 +656,12 @@ function PainelDeProgresso({ progresso, gerando, horario }: {
         : `Custo ${p.custo.toLocaleString("pt-BR", { maximumFractionDigits: 20 })} (0 = todas as regras atendidas). Cada violação de regra obrigatória vale ao menos 20; as observações de qualidade, todas somadas, valem menos que uma violação.`;
 
     return (
-        <div className={cn("mb-4 rounded-2xl border border-border px-4 py-3 text-sm", !gerando && "text-muted-foreground")}>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className={cn("mt-3 border-t border-border pt-3", !gerando && "text-muted-foreground")}>
+            {/* Celular: só uma linha; os números completos ficam para telas maiores */}
+            <p className="text-xs text-muted-foreground tabular-nums sm:hidden">
+                {duracao(p.ms)} · {compacto.format(p.iter)} {unidade.iter} · {p.versao === 0 ? "sem quadro ainda" : plural(p.versao, "atualização", "atualizações")}
+            </p>
+            <dl className="hidden gap-x-6 gap-y-2 sm:grid sm:grid-cols-3 lg:grid-cols-6">
                 <Item rotulo={gerando ? "Tempo" : "Duração"}>{duracao(p.ms)}</Item>
                 <Item rotulo={unidade.iter[0].toUpperCase() + unidade.iter.slice(1)} title={extras.join(", ")}>
                     {compacto.format(p.iter)} <span className="text-xs font-normal text-muted-foreground">({compacto.format(porSegundo)}/s)</span>
@@ -628,11 +686,6 @@ function PainelDeProgresso({ progresso, gerando, horario }: {
                     </span>
                 </Item>
             </dl>
-            {gerando && p.versao > 0 && (
-                <p className="mt-2 text-xs text-muted-foreground">
-                    As aulas que mudaram de lugar na última atualização ficam com contorno azul.
-                </p>
-            )}
         </div>
     );
 }

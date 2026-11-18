@@ -302,7 +302,8 @@ const ofertaDoComponente = (c: Componente, turmaId: Id): Oferta => ({
     participacoes: [{ turmaId, componenteId: c.id }],
     nome: c.nome,
     aulasSemana: c.aulasSemana,
-    divisao: structuredClone(c.divisao),
+    // A divisão é decidida no horário (a matriz não tem mais esse campo na tela)
+    divisao: structuredClone(DIVISAO_PADRAO),
     ambienteId: null,
     professorIds: [],
 });
@@ -455,21 +456,22 @@ export function buscarComponente(cursos: Curso[], componenteId: Id): Componente 
     return undefined;
 }
 
-/** Campos em que a oferta difere do componente de onde veio (vazio = igual à matriz). */
-export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("nome" | "aulasSemana" | "divisao")[] {
+/**
+ * Campos em que a oferta difere do componente de onde veio (vazio = igual à matriz). A divisão em
+ * pedaços é decisão do horário, não da matriz: não conta.
+ */
+export function diferencasDaMatriz(oferta: Oferta, componente: Componente): ("nome" | "aulasSemana")[] {
     const dif: ReturnType<typeof diferencasDaMatriz> = [];
     if (oferta.nome !== componente.nome) dif.push("nome");
     if (oferta.aulasSemana !== componente.aulasSemana) dif.push("aulasSemana");
-    if (!mesmaDivisao(oferta.divisao, componente.divisao)) dif.push("divisao");
     return dif;
 }
 
-/** Volta a oferta aos valores da matriz (professores e ambiente ficam). */
+/** Volta a oferta aos valores da matriz (professores, ambiente e divisão ficam). */
 export const atualizarPelaMatriz = (oferta: Oferta, componente: Componente): Oferta => ({
     ...oferta,
     nome: componente.nome,
     aulasSemana: componente.aulasSemana,
-    divisao: structuredClone(componente.divisao),
 });
 
 /** Componentes do período da turma que não têm oferta nela. */
