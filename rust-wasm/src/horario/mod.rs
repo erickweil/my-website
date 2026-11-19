@@ -1,4 +1,7 @@
 mod horario_regras;
+mod horario_tabelas;
+mod horario_movimentos;
+mod horario_avaliacao;
 mod horario_busca_local;
 mod horario_genetic;
 mod horario_pencilmark;
@@ -9,6 +12,8 @@ mod horario_resultado;
 mod horario_runners;
 
 pub use horario_regras::*;
+pub use horario_tabelas::*;
+pub use horario_movimentos::*;
 pub use horario_busca_local::*;
 pub use horario_genetic::*;
 pub use horario_pencilmark::*;

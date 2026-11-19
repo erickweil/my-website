@@ -62,13 +62,13 @@ pub struct GAConfig {
     pub ilhas: usize,
     /// Com ilhas: gerações que cada ilha evolui sozinha entre uma migração e outra.
     /// Medido: 100 a 200 foi o melhor no horário; o TSP preferiu 50; 1000 foi pior nos dois.
-    /// Padrão 100
+    /// Padrão 200
     pub epoca: usize,
-    /// Com ilhas: fração de cada ilha que passa para a ilha vizinha a cada época (0.0 a 1.0).
-    /// A migração é um giro do array da população: a fronteira entre as ilhas desliza.
-    /// Medido no horário: de 0% a 50% a diferença ficou dentro do ruído entre sementes.
-    /// Padrão 0.1
-    pub migracao: f64,
+    /// Com ilhas: número absoluto de indivíduos de cada ilha que passam para a ilha vizinha a cada
+    /// época (limitado a `population_size - 1`; 0 = sem migração). A migração é um giro do array
+    /// da população: a fronteira entre as ilhas desliza.
+    /// Padrão 1
+    pub migracao: usize,
     /// Com ilhas: quem migra. false = indivíduos quaisquer (o melhor de cada ilha fica nela);
     /// true = o melhor de cada ilha vai junto (espalha mais rápido, mas aumenta a pressão de
     /// seleção). Medido: sem diferença clara entre os dois. Padrão false
@@ -89,8 +89,8 @@ impl GAConfig {
             diversity_check: false,
             threads: 0,
             ilhas: 0,
-            epoca: 100,
-            migracao: 0.1,
+            epoca: 200,
+            migracao: 1,
             migrar_elite: false,
         }
     }
@@ -507,8 +507,9 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
     /// independentes durante o trecho, então rodam em sequência ou uma por thread com exatamente
     /// o mesmo resultado — e as threads só se sincronizam uma vez por trecho, não a cada geração.
     ///
-    /// Migração: o array é girado em `migracao * tam` posições, ou seja, a fronteira entre as ilhas
-    /// desliza e os indivíduos de uma ponta de cada ilha passam a pertencer à vizinha (anel).
+    /// Migração: o array é girado em `migracao` posições (limitado a `tam - 1`, pois girar `tam`
+    /// apenas permutaria ilhas inteiras sem misturar indivíduos), ou seja, a fronteira entre as
+    /// ilhas desliza e os indivíduos de uma ponta de cada ilha passam a pertencer à vizinha (anel).
     /// O elite fica na posição 0 da ilha; girar para a direita leva embora os ÚLTIMOS (filhos em
     /// ordem qualquer) e o elite fica; girar para a esquerda leva os PRIMEIROS, elite incluído.
     fn run_ilhas(&mut self, max_geracoes: usize) -> (usize, usize, bool) {
@@ -558,7 +559,7 @@ impl<P: GAProblem> GeneticAlgorithm<P> {
         self.ate_migrar -= geracoes;
         let fim_de_epoca = self.ate_migrar == 0;
         if fim_de_epoca {
-            let migrantes = ((self.config.migracao.clamp(0.0, 1.0) * tam as f64).round() as usize).min(tam);
+            let migrantes = self.config.migracao.min(tam.saturating_sub(1));
             if self.config.migrar_elite {
                 self.population.rotate_left(migrantes);
             } else {
@@ -900,7 +901,7 @@ mod tests {
 
     // ── Modelo de ilhas ─────────────────────────────────────────────────────────────────────
 
-    fn config_ilhas(pop_por_ilha: usize, genes: usize, ilhas: usize, epoca: usize, migracao: f64, migrar_elite: bool) -> GAConfig {
+    fn config_ilhas(pop_por_ilha: usize, genes: usize, ilhas: usize, epoca: usize, migracao: usize, migrar_elite: bool) -> GAConfig {
         GAConfig { ilhas, epoca, migracao, migrar_elite, ..config(pop_por_ilha, genes) }
     }
 
@@ -910,11 +911,11 @@ mod tests {
         let cidades = TSPGAProblem::generate_random_cities(40);
         // Época ímpar (troca população/filhos no fim), par, e maior que as gerações de cada chamada
         for (epoca, migrar_elite) in [(7, false), (10, true), (500, false)] {
-            let cfg = config_ilhas(60, 40, 5, epoca, 0.1, migrar_elite);
+            let cfg = config_ilhas(60, 40, 5, epoca, 6, migrar_elite);
             assert_paralelo_igual_ao_sequencial(|| TSPGAProblem::new(cidades.clone()), cfg, 150);
         }
-        assert_paralelo_igual_ao_sequencial(|| OneMaxGAProblem::new(300), config_ilhas(31, 300, 4, 5, 0.25, false), 120);
-        let cfg = GAConfig { diversity_check: true, ..config_ilhas(40, 12, 3, 6, 0.1, false) };
+        assert_paralelo_igual_ao_sequencial(|| OneMaxGAProblem::new(300), config_ilhas(31, 300, 4, 5, 8, false), 120);
+        let cfg = GAConfig { diversity_check: true, ..config_ilhas(40, 12, 3, 6, 4, false) };
         fastrand::seed(10);
         let poucas = TSPGAProblem::generate_random_cities(12);
         assert_paralelo_igual_ao_sequencial(|| TSPGAProblem::new(poucas.clone()), cfg, 120);
@@ -926,18 +927,18 @@ mod tests {
             RegrasHorario::de_arquivo(&format!("{}/tests/instancias/pequena.json", env!("CARGO_MANIFEST_DIR")))
         };
         let tamanho = criar().tamanho_quadro();
-        assert_paralelo_igual_ao_sequencial(criar, config_ilhas(tamanho, tamanho, 4, 20, 0.1, false), 150);
+        assert_paralelo_igual_ao_sequencial(criar, config_ilhas(tamanho, tamanho, 4, 20, 4, false), 150);
     }
 
     #[test]
     fn ilhas_multiplicam_a_populacao_e_uma_ilha_e_o_modelo_classico() {
-        let (_, pop) = evoluir(OneMaxGAProblem::new(100), config_ilhas(30, 100, 4, 10, 0.1, false), 1, 20);
+        let (_, pop) = evoluir(OneMaxGAProblem::new(100), config_ilhas(30, 100, 4, 10, 3, false), 1, 20);
         assert_eq!(pop.len(), 120);
 
         // ilhas = 0 ou 1: exatamente o modelo clássico
         let (info_classico, pop_classico) = evoluir(OneMaxGAProblem::new(100), config(30, 100), 1, 60);
         for ilhas in [0, 1] {
-            let (info, pop) = evoluir(OneMaxGAProblem::new(100), config_ilhas(30, 100, ilhas, 10, 0.1, false), 1, 60);
+            let (info, pop) = evoluir(OneMaxGAProblem::new(100), config_ilhas(30, 100, ilhas, 10, 3, false), 1, 60);
             assert_eq!(pop.len(), 30);
             assert_eq!(info.best_fitness, info_classico.best_fitness);
             assert!(pop == pop_classico, "ilhas = {ilhas} deveria ser igual ao modelo clássico");
@@ -951,7 +952,7 @@ mod tests {
         let cidades = TSPGAProblem::generate_random_cities(30);
         let rodar = |passos: &[usize]| {
             fastrand::seed(42);
-            let mut ga = GeneticAlgorithm::new(TSPGAProblem::new(cidades.clone()), config_ilhas(40, 30, 4, 15, 0.2, false));
+            let mut ga = GeneticAlgorithm::new(TSPGAProblem::new(cidades.clone()), config_ilhas(40, 30, 4, 15, 8, false));
             for &p in passos {
                 ga.run(p);
             }
@@ -969,7 +970,7 @@ mod tests {
     #[test]
     fn ilhas_tem_elitismo_proprio() {
         let (ilhas, tam) = (4, 30);
-        let cfg = GAConfig { max_stagnation: None, ..config_ilhas(tam, 200, ilhas, 5, 0.0, false) };
+        let cfg = GAConfig { max_stagnation: None, ..config_ilhas(tam, 200, ilhas, 5, 0, false) };
         fastrand::seed(5);
         let mut ga = GeneticAlgorithm::new(OneMaxGAProblem::new(200), cfg);
         let melhores = |ga: &GeneticAlgorithm<OneMaxGAProblem>| -> Vec<f64> {
@@ -997,13 +998,13 @@ mod tests {
         let (ilhas, tam) = (3, 20);
         for (migrar_elite, deslocamento) in [(false, 5isize), (true, -5)] {
             // Taxas zeradas: sem crossover nem mutação os genes só são copiados, e dá para segui-los
-            let cfg = GAConfig { crossover_rate: 0.0, mutation_rate: 0.0, max_stagnation: None, ..config_ilhas(tam, 64, ilhas, 4, 0.25, migrar_elite) };
+            let cfg = GAConfig { crossover_rate: 0.0, mutation_rate: 0.0, max_stagnation: None, ..config_ilhas(tam, 64, ilhas, 4, 5, migrar_elite) };
             fastrand::seed(6);
             let mut ga = GeneticAlgorithm::new(OneMaxGAProblem::new(64), cfg);
             ga.run(3); // falta 1 geração para a migração
             let antes: Vec<_> = ga.population.iter().map(|i| i.genes.clone()).collect();
             // Roda a última geração da época numa cópia sem migração, para comparar posição a posição
-            let mut sem_migrar = GeneticAlgorithm::new(OneMaxGAProblem::new(64), GAConfig { migracao: 0.0, ..ga.config.clone() });
+            let mut sem_migrar = GeneticAlgorithm::new(OneMaxGAProblem::new(64), GAConfig { migracao: 0, ..ga.config.clone() });
             fastrand::seed(6);
             sem_migrar = { let mut g = GeneticAlgorithm::new(OneMaxGAProblem::new(64), sem_migrar.config.clone()); g.run(4); g };
             ga.run(1);
@@ -1013,6 +1014,20 @@ mod tests {
                 let destino = (i as isize + deslocamento).rem_euclid(n) as usize;
                 assert!(ga.population[destino].genes == ind.genes, "elite={migrar_elite}: indivíduo {i} deveria estar em {destino}");
             }
+        }
+
+        // `migracao >= tam` é limitado a `tam - 1` (girar `tam` só trocaria ilhas inteiras de lugar)
+        let cfg = GAConfig { crossover_rate: 0.0, mutation_rate: 0.0, max_stagnation: None, ..config_ilhas(tam, 64, ilhas, 4, tam * 2, false) };
+        fastrand::seed(6);
+        let mut ga = GeneticAlgorithm::new(OneMaxGAProblem::new(64), cfg);
+        ga.run(4);
+        fastrand::seed(6);
+        let mut sem_migrar = GeneticAlgorithm::new(OneMaxGAProblem::new(64), GAConfig { migracao: 0, ..ga.config.clone() });
+        sem_migrar.run(4);
+        let n = ilhas * tam;
+        for (i, ind) in sem_migrar.population.iter().enumerate() {
+            let destino = (i + (tam - 1)) % n;
+            assert!(ga.population[destino].genes == ind.genes, "migracao >= tam deveria limitar a tam - 1");
         }
     }
 

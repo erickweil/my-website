@@ -62,7 +62,15 @@ export function paraSolver(projeto: ProjetoHorario, inicial: AulaDePartida[] = [
             return { inicio: h * 60 + m, fim: h * 60 + m + f.duracaoMin, turno: f.turno };
         }),
         inicial: inicial.map((a) => ({ aula: a.ofertaId, dia: a.dia, tempo: a.tempo, fixa: a.fixada })),
-        config: { pesos: Object.fromEntries([...REGRAS_OBRIGATORIAS, ...REGRAS_DE_QUALIDADE].map((r) => [r, pesoDaRegra(projeto.config, r)])) as Record<Regra, number> },
+        config: {
+            pesos: Object.fromEntries([...REGRAS_OBRIGATORIAS, ...REGRAS_DE_QUALIDADE].map((r) => [r, pesoDaRegra(projeto.config, r)])) as Record<Regra, number>,
+            ga: {
+                ...(projeto.config.ilhas
+                    ? { populacao: projeto.config.populacaoIlha, migracao: projeto.config.migracaoIlhas }
+                    : {}),
+                estagnacao: projeto.config.estagnacao,
+            },
+        },
     };
 }
 

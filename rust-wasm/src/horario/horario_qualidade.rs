@@ -29,7 +29,7 @@
 
 use serde::Serialize;
 
-use crate::horario::{DiaSemana, QUANTOS_DIAS, RegrasHorario};
+use crate::horario::{horario_tabelas::TabelasHorario, DiaSemana, QUANTOS_DIAS, RegrasHorario};
 
 /// Limite da jornada: da primeira à última aula do dia.
 pub const JORNADA_MAXIMA_MIN: i32 = 10 * 60;
@@ -109,22 +109,16 @@ pub struct Ocorrencia {
     pub minutos: u32,
 }
 
-/// Tabelas derivadas das regras, montadas uma vez, para medir a qualidade de muitos quadros.
+/// Tabelas derivadas das regras específicas de qualidade, montadas uma vez dentro de
+/// [`TabelasHorario`]. Os índices estruturais (`ativas`, `linhas`, `rec`, `trechos`, `n`) vêm de
+/// `TabelasHorario` sem duplicação.
 #[derive(Clone)]
 pub struct TabelasQualidade {
     /// false = nenhuma regra de qualidade se aplica a esta entrada (a medição é pulada).
     pub ativa: bool,
-    n_tempos: usize,
-    /// Células em que a turma tem aula: (índice no quadro, dia, tempo).
-    ativas: Vec<(u32, u8, u8)>,
-    /// Um dia de uma turma, se ela tem aula nele: índice do 1º tempo no quadro.
-    linhas: Vec<u32>,
-    /// Por disciplina: intervalo em `recursos`.
-    recursos_de: Vec<(u32, u32)>,
-    recursos: Vec<u32>,
     /// Por recurso: é um professor? (ambiente não tem jornada nem preferências)
     pub(super) pessoa: Vec<bool>,
-    /// Por recurso e (dia, tempo): disponível, mas a evitar.
+    /// Por recurso e (dia, tempo): disponível, mas a evitar (`p * por_turma + pos`).
     pub(super) evitar: Vec<bool>,
     /// Por tempo, em minutos desde a meia-noite. Vazios se a entrada não trouxe as horas.
     inicio: Vec<i32>,
@@ -140,8 +134,6 @@ pub struct TabelasQualidade {
     espalhar: Vec<bool>,
     /// Alguma disciplina tem a regra de espalhar.
     pub(super) tem_espalhar: bool,
-    /// Valor de um horário vago no quadro ([`RegrasHorario::vago`]).
-    vago: i32,
     /// Peso de cada regra (ver [`PesosQualidade`]).
     peso: PesosQualidade,
 }
@@ -159,30 +151,6 @@ const SEM_AULA: u8 = u8::MAX;
 impl TabelasQualidade {
     pub fn new(r: &RegrasHorario) -> Self {
         let n = r.n_tempos;
-        let (mut ativas, mut linhas) = (Vec::new(), Vec::new());
-        for turma in &r.turmas {
-            for dia in DiaSemana::TODOS {
-                let inicio = r.to_quadro_index(turma.id, dia, 0);
-                let mut tem_aula = false;
-                for tempo in 0..n {
-                    if turma.horarios.get(dia, tempo) == 1 {
-                        ativas.push(((inicio + tempo) as u32, dia.to_index() as u8, tempo as u8));
-                        tem_aula = true;
-                    }
-                }
-                if tem_aula {
-                    linhas.push(inicio as u32);
-                }
-            }
-        }
-
-        let (mut recursos_de, mut recursos) = (Vec::new(), Vec::new());
-        for d in &r.disciplinas {
-            let ini = recursos.len() as u32;
-            recursos.extend(d.professores.iter().map(|&p| p as u32));
-            recursos_de.push((ini, recursos.len() as u32));
-        }
-
         let pessoa: Vec<bool> = r.professores.iter().map(|p| p.pessoa).collect();
         let mut evitar = vec![false; r.professores.len() * QUANTOS_DIAS * n];
         for p in r.professores.iter().filter(|p| p.pessoa) {
@@ -207,11 +175,6 @@ impl TabelasQualidade {
 
         Self {
             ativa: tem_evitar || (tem_horas && pessoas > 0) || tem_quebras || tem_vagos || tem_espalhar,
-            n_tempos: n,
-            ativas,
-            linhas,
-            recursos_de,
-            recursos,
             pessoa,
             evitar,
             inicio,
@@ -223,7 +186,6 @@ impl TabelasQualidade {
             tem_vagos,
             espalhar,
             tem_espalhar,
-            vago: r.vago(),
             peso: r.qualidade,
         }
     }
@@ -234,50 +196,67 @@ impl TabelasQualidade {
     }
 
     /// Penalidade no fitness: cada ocorrência vezes o peso da regra.
+    #[inline]
     pub fn custo(&self, q: &Qualidade) -> f64 {
-        self.peso.jornada * q.jornada_min as f64 / 60.0
-            + self.peso.descanso * q.descanso_min as f64 / 60.0
-            + self.peso.evitar * q.evitar as f64
-            + self.peso.intervalo * q.intervalo as f64
-            + self.peso.turno * q.troca_de_turno as f64
-            + self.peso.janela * q.janela as f64
-            + self.peso.espalhar * q.espalhar as f64
+        self.custo_com(q, &self.peso)
     }
 
-    /// Mede a qualidade do quadro. Com `detalhe`, também lista cada ocorrência (mais lento: só
-    /// para montar o resultado).
-    pub fn medir(&self, r: &RegrasHorario, quadro: &[i32], buf: &mut BuffersQualidade, mut detalhe: Option<&mut Vec<Ocorrencia>>) -> Qualidade {
+    /// Como [`Self::custo`], usando pesos explícitos.
+    #[inline]
+    pub fn custo_com(&self, q: &Qualidade, peso: &PesosQualidade) -> f64 {
+        peso.jornada * q.jornada_min as f64 / 60.0
+            + peso.descanso * q.descanso_min as f64 / 60.0
+            + peso.evitar * q.evitar as f64
+            + peso.intervalo * q.intervalo as f64
+            + peso.turno * q.troca_de_turno as f64
+            + peso.janela * q.janela as f64
+            + peso.espalhar * q.espalhar as f64
+    }
+
+    /// Mede a qualidade do quadro usando os índices estruturais de `t`. Com `detalhe` (e `r`),
+    /// também lista cada ocorrência (mais lento: só para montar o resultado).
+    pub(crate) fn medir(
+        &self,
+        t: &TabelasHorario,
+        r: Option<&RegrasHorario>,
+        quadro: &[i32],
+        buf: &mut BuffersQualidade,
+        mut detalhe: Option<&mut Vec<Ocorrencia>>,
+    ) -> Qualidade {
         let mut q = Qualidade::default();
-        let n = self.n_tempos;
+        let n = t.n;
 
         // Evitar, e o primeiro e o último tempo de cada professor em cada dia
         if self.tem_evitar || self.tem_horas {
             buf.primeiro.fill(SEM_AULA);
             buf.ultimo.fill(SEM_AULA);
-            for &(i, dia, tempo) in &self.ativas {
-                let d = quadro[i as usize] - 1;
-                if d < 0 || d + 1 >= self.vago { continue; } // não resolvido ou vago
-                let (ini, fim) = self.recursos_de[d as usize];
-                for &p in &self.recursos[ini as usize..fim as usize] {
+            for &c in &t.ativas {
+                let Some(d) = t.disciplina(quadro[c as usize]) else { continue };
+                let pos = c as usize % t.por_turma;
+                let (dia, tempo) = (pos / n, (pos % n) as u8);
+                let (ini, fim) = t.rec_de[d];
+                for &p in &t.rec[ini as usize..fim as usize] {
                     let p = p as usize;
                     if !self.pessoa[p] { continue; }
-                    let k = p * QUANTOS_DIAS + dia as usize;
-                    if self.evitar[k * n + tempo as usize] {
+                    if self.tem_evitar && self.evitar[p * t.por_turma + pos] {
                         q.evitar += 1;
-                        if let Some(lista) = detalhe.as_deref_mut() {
-                            let disc = &r.disciplinas[d as usize];
+                        if let (Some(lista), Some(r)) = (detalhe.as_deref_mut(), r) {
+                            let disc = &r.disciplinas[d];
                             lista.push(Ocorrencia {
                                 regra: "evitar",
                                 recurso: Some(r.professores[p].nome.clone()),
                                 turma: Some(r.turmas[disc.turma_id].nome.clone()),
                                 aula: Some(disc.nome.clone()),
-                                dia: DiaSemana::from_index(dia as usize).sigla(),
+                                dia: DiaSemana::from_index(dia).sigla(),
                                 minutos: 0,
                             });
                         }
                     }
-                    if buf.primeiro[k] == SEM_AULA || tempo < buf.primeiro[k] { buf.primeiro[k] = tempo; }
-                    if buf.ultimo[k] == SEM_AULA || tempo > buf.ultimo[k] { buf.ultimo[k] = tempo; }
+                    if self.tem_horas {
+                        let k = p * QUANTOS_DIAS + dia;
+                        if buf.primeiro[k] == SEM_AULA || tempo < buf.primeiro[k] { buf.primeiro[k] = tempo; }
+                        if buf.ultimo[k] == SEM_AULA || tempo > buf.ultimo[k] { buf.ultimo[k] = tempo; }
+                    }
                 }
             }
         }
@@ -289,7 +268,7 @@ impl TabelasQualidade {
                     let k = p * QUANTOS_DIAS + dia;
                     if buf.primeiro[k] == SEM_AULA { continue; }
                     let mut ocorrencia = |regra, minutos: u32| {
-                        if let Some(lista) = detalhe.as_deref_mut() {
+                        if let (Some(lista), Some(r)) = (detalhe.as_deref_mut(), r) {
                             lista.push(Ocorrencia {
                                 regra,
                                 recurso: Some(r.professores[p].nome.clone()),
@@ -320,11 +299,11 @@ impl TabelasQualidade {
 
         // Grupos de aulas da mesma disciplina partidos por um intervalo, com uma aula sozinha
         if self.tem_quebras {
-            for &linha in &self.linhas {
+            for &linha in &t.linhas {
                 let linha = linha as usize;
-                self.grupos_partidos(quadro, linha, |v, turno| {
+                self.grupos_partidos(t, quadro, linha, |v, turno| {
                     if turno { q.troca_de_turno += 1 } else { q.intervalo += 1 }
-                    if let Some(lista) = detalhe.as_deref_mut() {
+                    if let (Some(lista), Some(r)) = (detalhe.as_deref_mut(), r) {
                         let disc = &r.disciplinas[(v - 1) as usize];
                         let (_, dia, _) = r.from_quadro_index(linha);
                         lista.push(Ocorrencia {
@@ -342,12 +321,12 @@ impl TabelasQualidade {
 
         // Horários vagos entre duas aulas do mesmo turno
         if self.tem_vagos {
-            for trecho in &r.trechos {
-                if r.turmas[trecho.turma].folga == 0 { continue; }
-                let n = self.janelas_do_trecho(quadro, &trecho.celulas);
+            for trecho in &t.trechos {
+                if !t.tem_folga[trecho.turma] { continue; }
+                let n = self.janelas_do_trecho(t, quadro, &trecho.celulas);
                 if n > 0 {
                     q.janela += n;
-                    if let Some(lista) = detalhe.as_deref_mut() {
+                    if let (Some(lista), Some(r)) = (detalhe.as_deref_mut(), r) {
                         for _ in 0..n {
                             lista.push(Ocorrencia {
                                 regra: "janela",
@@ -365,11 +344,11 @@ impl TabelasQualidade {
 
         // Mais de um pedaço da mesma disciplina no dia
         if self.tem_espalhar {
-            for &linha in &self.linhas {
+            for &linha in &t.linhas {
                 let linha = linha as usize;
-                self.pedacos_a_mais(quadro, linha, |v| {
+                self.pedacos_a_mais(t, quadro, linha, |v| {
                     q.espalhar += 1;
-                    if let Some(lista) = detalhe.as_deref_mut() {
+                    if let (Some(lista), Some(r)) = (detalhe.as_deref_mut(), r) {
                         let disc = &r.disciplinas[(v - 1) as usize];
                         let (_, dia, _) = r.from_quadro_index(linha);
                         lista.push(Ocorrencia {
@@ -388,8 +367,8 @@ impl TabelasQualidade {
         q
     }
 
-    // As regras, uma a uma, sobre um pedaço do quadro. `medir` soma todas; a busca local
-    // (`horario_busca_local.rs`) recalcula só os pedaços em que um movimento mexeu.
+    // As regras, uma a uma, sobre um pedaço do quadro. `medir` soma todas; a avaliação incremental
+    // (`horario_avaliacao.rs`) recalcula só os pedaços em que um movimento mexeu.
 
     /// Jornada: minutos acima das 10 horas num dia que vai do tempo `primeiro` ao tempo `ultimo`.
     #[inline]
@@ -408,13 +387,14 @@ impl TabelasQualidade {
     /// Intervalo e troca de turno numa linha do quadro (um dia de uma turma, que começa no índice
     /// `linha`): chama `achou(valor da disciplina, é troca de turno)` para cada grupo de aulas
     /// seguidas partido por uma quebra com uma aula sozinha de um dos lados.
-    pub(super) fn grupos_partidos(&self, quadro: &[i32], linha: usize, mut achou: impl FnMut(i32, bool)) {
-        let n = self.n_tempos;
+    pub(super) fn grupos_partidos(&self, t: &TabelasHorario, quadro: &[i32], linha: usize, mut achou: impl FnMut(i32, bool)) {
+        let n = t.n;
+        let vago = t.vago();
         let mut a = 0;
         while a < n {
             let v = quadro[linha + a];
             let mut b = a + 1;
-            if v <= 0 || v == self.vago {
+            if v <= 0 || v == vago {
                 a = b;
                 continue;
             }
@@ -439,8 +419,9 @@ impl TabelasQualidade {
 
     /// Espalhar numa linha do quadro (um dia de uma turma): chama `achou(valor da disciplina)` para
     /// cada pedaço de uma disciplina marcada para espalhar que não é o primeiro dela no dia.
-    pub(super) fn pedacos_a_mais(&self, quadro: &[i32], linha: usize, mut achou: impl FnMut(i32)) {
-        let n = self.n_tempos;
+    pub(super) fn pedacos_a_mais(&self, t: &TabelasHorario, quadro: &[i32], linha: usize, mut achou: impl FnMut(i32)) {
+        let n = t.n;
+        let vago = t.vago();
         // Disciplinas que já tiveram um pedaço no dia (um dia tem poucos pedaços)
         let mut vistas = [0i32; 64];
         let mut n_vistas = 0;
@@ -448,7 +429,7 @@ impl TabelasQualidade {
         while a < n {
             let v = quadro[linha + a];
             let mut b = a + 1;
-            if v <= 0 || v == self.vago || !self.espalhar[(v - 1) as usize] {
+            if v <= 0 || v == vago || !self.espalhar[(v - 1) as usize] {
                 a = b;
                 continue;
             }
@@ -467,10 +448,11 @@ impl TabelasQualidade {
 
     /// Janela: horários vagos entre a primeira e a última aula de um trecho (as células de um turno
     /// de um dia de uma turma).
-    pub(super) fn janelas_do_trecho(&self, quadro: &[i32], celulas: &[usize]) -> u32 {
-        let aula = |&c: &usize| quadro[c] > 0 && quadro[c] != self.vago;
+    pub(super) fn janelas_do_trecho(&self, t: &TabelasHorario, quadro: &[i32], celulas: &[usize]) -> u32 {
+        let vago = t.vago();
+        let aula = |&c: &usize| quadro[c] > 0 && quadro[c] != vago;
         let (Some(primeira), Some(ultima)) = (celulas.iter().position(aula), celulas.iter().rposition(aula)) else { return 0 };
-        celulas[primeira..ultima].iter().filter(|&&c| quadro[c] == self.vago).count() as u32
+        celulas[primeira..ultima].iter().filter(|&&c| quadro[c] == vago).count() as u32
     }
 }
 
@@ -489,9 +471,9 @@ impl RegrasHorario {
     /// A qualidade de um quadro e as ocorrências, uma a uma. Para o resultado e os testes; o
     /// fitness do algoritmo genético usa [`TabelasQualidade::medir`] com tabelas já montadas.
     pub fn qualidade(&self, quadro: &[i32]) -> (Qualidade, Vec<Ocorrencia>) {
-        let tabelas = TabelasQualidade::new(self);
+        let t = TabelasHorario::new(self);
         let mut ocorrencias = Vec::new();
-        let q = tabelas.medir(self, quadro, &mut tabelas.buffers(), Some(&mut ocorrencias));
+        let q = t.tq.medir(&t, Some(self), quadro, &mut t.tq.buffers(), Some(&mut ocorrencias));
         (q, ocorrencias)
     }
 }

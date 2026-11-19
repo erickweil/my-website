@@ -33,7 +33,7 @@ enum Variante {
     /// Uma população de tamanho P x ilhas (controle: mesmo total de indivíduos das ilhas).
     ClassicoX,
     /// `ilhas` populações de tamanho P.
-    Ilhas { epoca: usize, migracao: f64, migrar_elite: bool },
+    Ilhas { epoca: usize, migracao: usize, migrar_elite: bool },
 }
 
 impl Variante {
@@ -52,7 +52,7 @@ impl Variante {
             Self::Classico => "clássico P".into(),
             Self::ClassicoX => format!("clássico P x{ilhas}"),
             Self::Ilhas { epoca, migracao, migrar_elite } =>
-                format!("{ilhas} ilhas ép.{epoca} mig.{:.0}%{}", migracao * 100.0, if *migrar_elite { " +elite" } else { "" }),
+                format!("{ilhas} ilhas ép.{epoca} mig.{migracao}{}", if *migrar_elite { " +elite" } else { "" }),
         }
     }
 
@@ -160,7 +160,7 @@ fn main() {
     let sementes: u64 = arg("--sementes").map_or(5, |s| s.parse().unwrap());
     let ilhas: usize = arg("--ilhas").map_or(8, |s| s.parse().unwrap());
     let variantes: Vec<Variante> = arg("--variantes")
-        .unwrap_or("classico,classico-x,ilhas:10:0.1,ilhas:50:0.1,ilhas:200:0.1,ilhas:10:0.1:elite,ilhas:50:0.1:elite,ilhas:200:0.1:elite".into())
+        .unwrap_or("classico,classico-x,ilhas:10:1,ilhas:50:1,ilhas:200:1,ilhas:10:1:elite,ilhas:50:1:elite,ilhas:200:1:elite".into())
         .split(',').map(Variante::ler).collect();
     let orc = |padrao: u64| arg("--orcamento").map_or(padrao, |s| (s.parse::<f64>().unwrap() * 1e6) as u64);
 

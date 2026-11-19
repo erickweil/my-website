@@ -6,8 +6,8 @@
  * O worker não interpreta a entrada: só repassa para o Rust, roda em blocos e encaminha o
  * resultado. Erros da entrada chegam aqui como `Error` com a mensagem pronta para o usuário.
  *
- *  - Recebe: { action: "solucionarQuadroHorario", solver, entrada, ilhas, cadeias }
- *    (`cadeias`: buscas em paralelo na busca local; 0 ou ausente = automático)
+ *  - Recebe: { action: "solucionarQuadroHorario", solver, entrada, ilhas, numIlhas, cadeias }
+ *    (`numIlhas` e `cadeias`: 0 ou ausente = automático)
  *  - Envia type="message" a cada bloco de trabalho, com o progresso, e o quadro quando ele mudou
  *  - Envia type="success" ao terminar (custo 0, ou, na busca exata, horário achado ou impossível)
  *  - Envia type="error" em caso de falha
@@ -37,11 +37,10 @@ const PASSOS_POR_CHAMADA: Record<SolverHorario, number> = {
 const MS_POR_BLOCO = 250;
 
 /**
- * Número de ilhas do GA quando a opção está ligada: uma por thread, entre 2 e 16.
- * Medido (rust-wasm/examples/bench_ga_qualidade): no quadro pequeno, 16 ilhas resolveram 18 de 20
- * execuções, 8 ilhas 16 de 20, e o modelo sem ilhas 10 de 20, com o mesmo número de avaliações.
+ * Número de ilhas do GA quando a opção está ligada e no automático: 1 por núcleo de processamento
+ * (mínimo 2, porque 1 ilha equivale ao modo clássico).
  */
-const numeroDeIlhas = () => Math.min(Math.max(navigator.hardwareConcurrency || 1, 2), 16);
+const numeroDeIlhas = () => Math.max(navigator.hardwareConcurrency || 1, 2);
 
 /**
  * Número de cadeias da busca local: metade das threads, entre 1 e 8. Todas as cadeias fazem o mesmo
@@ -82,7 +81,10 @@ self.onmessage = async (message) => {
             : await iniciarWasmComThreads(solver === "local" ? cadeias : undefined);
 
         // Lança Error com a mensagem do Rust se a entrada for inválida
-        const ilhas = solver === "genetic" && usarIlhas ? numeroDeIlhas() : 0;
+        const numIlhas: number = typeof data.numIlhas === "number" ? data.numIlhas : 0;
+        const ilhas = solver === "genetic" && usarIlhas
+            ? (numIlhas > 0 ? numIlhas : numeroDeIlhas())
+            : 0;
         const runner = solver === "genetic"
             ? new wasm.HorarioGARunner(entrada, ilhas)
             : solver === "local"

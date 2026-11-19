@@ -226,7 +226,7 @@ export const REGRAS_OBRIGATORIAS = ["professor", "conflito", "unidas", "agrupar"
 /**
  * O peso padrão de cada regra: o que uma violação (obrigatória) ou uma ocorrência (qualidade; na
  * jornada e no descanso, uma hora) soma ao custo. Os mesmos de `PesosFitness::PADRAO` e
- * `PesosQualidade::PADRAO` (rust-wasm/src/horario/horario_genetic.rs e horario_qualidade.rs).
+ * `PesosQualidade::PADRAO` (rust-wasm/src/horario/horario_tabelas.rs e horario_qualidade.rs).
  */
 export const PESOS_PADRAO: Record<Regra, number> = {
     professor: 100,
@@ -249,6 +249,14 @@ const configDoProjeto = z.object({
     solver: z.enum(SOLVERS).default("local"),
     /** Algoritmo genético: várias populações em paralelo (modelo de ilhas). */
     ilhas: z.boolean().default(true),
+    /** Algoritmo genético: número de ilhas; 0 = automático (1 por núcleo de processamento). */
+    numIlhas: inteiro.min(0).max(64).default(0),
+    /** Algoritmo genético: indivíduos por ilha (padrão: 16). */
+    populacaoIlha: inteiro.min(2).max(2000).default(16),
+    /** Algoritmo genético: indivíduos migrados entre ilhas a cada época (0 = sem migração; padrão: 1). */
+    migracaoIlhas: inteiro.min(0).max(2000).default(1),
+    /** Algoritmo genético: gerações sem melhora antes de reiniciar a população (0 = desativado). */
+    estagnacao: inteiro.min(0).max(1_000_000).default(0),
     /** Busca local: buscas em paralelo; 0 = automático (metade dos núcleos, até 8). */
     cadeias: inteiro.min(0).max(16).default(0),
     /**

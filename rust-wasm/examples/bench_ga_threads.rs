@@ -6,7 +6,7 @@
 //! - que fração da geração é avaliação (o resto é seleção + crossover + mutação).
 //!
 //! Uso: cargo run --release --example bench_ga_threads -- [--segundos N] [--threads 1,2,4]
-//!      [--ilhas N] [--epoca N] [--migracao F] [--migrar-elite]
+//!      [--ilhas N] [--epoca N] [--migracao N] [--migrar-elite]
 
 use std::{env, time::Instant};
 
@@ -58,7 +58,7 @@ fn custo_fitness<P: GAProblem>(problema: &P) -> f64 {
 struct Ilhas {
     ilhas: usize,
     epoca: usize,
-    migracao: f64,
+    migracao: usize,
     migrar_elite: bool,
 }
 
@@ -105,8 +105,8 @@ fn main() {
 
     let il = Ilhas {
         ilhas: arg("--ilhas").map_or(0, |s| s.parse().unwrap()),
-        epoca: arg("--epoca").map_or(100, |s| s.parse().unwrap()),
-        migracao: arg("--migracao").map_or(0.1, |s| s.parse().unwrap()),
+        epoca: arg("--epoca").map_or(200, |s| s.parse().unwrap()),
+        migracao: arg("--migracao").map_or(1, |s| s.parse().unwrap()),
         migrar_elite: args.iter().any(|a| a == "--migrar-elite"),
     };
 

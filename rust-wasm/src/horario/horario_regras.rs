@@ -190,6 +190,23 @@ pub struct EntradaConfig {
     /// O peso de cada regra, obrigatória ou de qualidade (ausente = o padrão).
     #[serde(default)]
     pub pesos: EntradaPesos,
+    /// Parâmetros opcionais do algoritmo genético (população, migração, época, estagnação).
+    #[serde(default)]
+    pub ga: EntradaConfigGA,
+}
+
+/// Parâmetros opcionais do algoritmo genético enviados pela página (ausente = padrão).
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct EntradaConfigGA {
+    /// Indivíduos por ilha (ou da população única, sem ilhas). `None` ou `< 2` = padrão.
+    pub populacao: Option<usize>,
+    /// Indivíduos que migram entre ilhas a cada época (`0` = sem migração; `None` = padrão 1).
+    pub migracao: Option<usize>,
+    /// Gerações entre migrações (`None` ou `0` = padrão 200).
+    pub epoca: Option<usize>,
+    /// Gerações sem melhora antes de reiniciar a população (`None` ou `Some(0)` = desativado).
+    pub estagnacao: Option<usize>,
 }
 
 /// Os pesos de todas as regras, como a página manda: os obrigatórios vão para
@@ -357,6 +374,8 @@ pub struct RegrasHorario {
     pub pesos: super::PesosFitness,
     /// Quais operadores o algoritmo genético usa (ver horario_genetic.rs).
     pub operadores: super::OperadoresGA,
+    /// Parâmetros do algoritmo genético vindos da configuração do projeto.
+    pub ga_config: EntradaConfigGA,
     /// Quanto pesa cada regra de qualidade (ver horario_qualidade.rs).
     pub qualidade: PesosQualidade,
     /// O quadro de onde a busca parte, se a página mandou um horário (ver horario_inicial.rs).
@@ -447,6 +466,7 @@ impl RegrasHorario {
             trechos: Vec::new(), trecho_de: Vec::new(),
             pesos: super::PesosFitness { professor: e.professor, conflito: e.conflito, unidas: e.unidas, agrupar: e.agrupar, fixa: e.fixa, ..super::PesosFitness::PADRAO },
             operadores: Default::default(),
+            ga_config: entrada.config.ga,
             qualidade: e.qualidade,
             inicial: None, fixas: Vec::new(),
         };

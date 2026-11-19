@@ -25,7 +25,7 @@ use std::{env, time::Instant};
 
 use rust_wasm::{
     genetic::problems::GAProblem,
-    horario::{AtualizacaoDaLista, BuscaLocal, ParametrosBusca, RegrasHorario},
+    horario::{AtualizacaoDaLista, BuscaLocal, ConfigMovimentos, ParametrosBusca, RegrasHorario},
 };
 
 const MARCOS: [f64; 6] = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0];
@@ -43,7 +43,12 @@ fn main() {
     let padrao = ParametrosBusca::default();
     let p = ParametrosBusca {
         lista: arg("--lista").map_or(padrao.lista, |s| s.parse().unwrap()),
-        p_bloco: arg("--p-bloco").map_or(padrao.p_bloco, |s| s.parse().unwrap()),
+        movimentos: ConfigMovimentos {
+            p_bloco: arg("--p-bloco").map_or(padrao.movimentos.p_bloco, |s| s.parse().unwrap()),
+            p_kempe: arg("--p-kempe").map_or(padrao.movimentos.p_kempe, |s| s.parse().unwrap()),
+            kempe_de_blocos: tem("--kempe-de-blocos"),
+            ..padrao.movimentos
+        },
         listas_sem_melhora: arg("--listas-sem-melhora").map_or(padrao.listas_sem_melhora, |s| s.parse().unwrap()),
         folgas: arg("--folgas").map_or(padrao.folgas, |s| s.parse().unwrap()),
         folga_de_qualidade: arg("--folga-qualidade").map_or(padrao.folga_de_qualidade, |s| s.parse().unwrap()),
@@ -52,8 +57,6 @@ fn main() {
         crescer_lista: arg("--crescer").map_or(padrao.crescer_lista, |s| s.parse().unwrap()),
         lista_max: arg("--lista-max").map_or(padrao.lista_max, |s| s.parse().unwrap()),
         recomecar: tem("--recomecar"),
-        p_kempe: arg("--p-kempe").map_or(padrao.p_kempe, |s| s.parse().unwrap()),
-        kempe_de_blocos: tem("--kempe-de-blocos"),
         fatores_da_lista: arg("--fatores").map_or(padrao.fatores_da_lista, |s| {
             Box::leak(s.split(':').map(|x| x.parse().unwrap()).collect::<Vec<f64>>().into_boxed_slice())
         }),

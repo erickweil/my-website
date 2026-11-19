@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import type { ConfigDoProjeto, Regra, Solver } from "../modelo/modelo";
 import { PESOS_PADRAO, REGRAS_DE_QUALIDADE, REGRAS_OBRIGATORIAS, pesoDaRegra } from "../modelo/modelo";
 import { Cabecalho } from "../componentes/comuns";
-import { CampoDecimal, Selecao } from "../componentes/campos";
+import { CampoDecimal, CampoNumero, Selecao } from "../componentes/campos";
 import type { ContextoDoProjeto } from "../useAreaDeTrabalho";
 
 export const NOME_DO_SOLVER: Record<Solver, string> = {
@@ -59,7 +59,7 @@ export function TelaConfiguracao({ projeto, mudarProjeto }: ContextoDoProjeto) {
                         </label>
                     ))}
                 </div>
-                <div className="flex flex-wrap gap-x-8 gap-y-3 pt-1 text-sm">
+                <div className="space-y-4 pt-1 text-sm">
                     <div className="space-y-1">
                         <Label htmlFor="config-cadeias">Busca local: buscas em paralelo</Label>
                         <Selecao id="config-cadeias" value={config.cadeias} onChange={(e) => mudar({ cadeias: Number(e.target.value) })}>
@@ -69,10 +69,69 @@ export function TelaConfiguracao({ projeto, mudarProjeto }: ContextoDoProjeto) {
                             ))}
                         </Selecao>
                     </div>
-                    <label className="flex items-center gap-2 self-end pb-2" title="Várias populações evoluem em paralelo e trocam indivíduos entre si">
-                        <Checkbox checked={config.ilhas} onCheckedChange={(v) => mudar({ ilhas: v === true })} />
-                        Algoritmo genético: usar ilhas
-                    </label>
+
+                    <div className="space-y-3 rounded-2xl border border-border p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-medium">Algoritmo genético</span>
+                            <label className="flex cursor-pointer items-center gap-2" title="Várias populações evoluem em paralelo e trocam indivíduos entre si">
+                                <Checkbox checked={config.ilhas} onCheckedChange={(v) => mudar({ ilhas: v === true })} />
+                                Usar ilhas
+                            </label>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                            <div className="space-y-1">
+                                <Label htmlFor="config-num-ilhas">Ilhas</Label>
+                                <CampoNumero
+                                    id="config-num-ilhas"
+                                    className="h-9"
+                                    valor={config.numIlhas}
+                                    min={0}
+                                    max={64}
+                                    disabled={!config.ilhas}
+                                    onChange={(n) => mudar({ numIlhas: n })}
+                                />
+                                <p className="text-xs text-muted-foreground">0 = 1 por núcleo</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="config-pop-ilha">População por ilha</Label>
+                                <CampoNumero
+                                    id="config-pop-ilha"
+                                    className="h-9"
+                                    valor={config.populacaoIlha}
+                                    min={2}
+                                    max={2000}
+                                    disabled={!config.ilhas}
+                                    onChange={(n) => mudar({ populacaoIlha: n, migracaoIlhas: Math.min(config.migracaoIlhas, n - 1) })}
+                                />
+                                <p className="text-xs text-muted-foreground">Padrão: 16</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="config-migracao">Migração entre ilhas</Label>
+                                <CampoNumero
+                                    id="config-migracao"
+                                    className="h-9"
+                                    valor={config.migracaoIlhas}
+                                    min={0}
+                                    max={Math.max(0, config.populacaoIlha - 1)}
+                                    disabled={!config.ilhas}
+                                    onChange={(n) => mudar({ migracaoIlhas: n })}
+                                />
+                                <p className="text-xs text-muted-foreground">Indivíduos/época (0 = sem)</p>
+                            </div>
+                            <div className="space-y-1">
+                                <Label htmlFor="config-estagnacao">Reinício por estagnação</Label>
+                                <CampoNumero
+                                    id="config-estagnacao"
+                                    className="h-9"
+                                    valor={config.estagnacao}
+                                    min={0}
+                                    max={1_000_000}
+                                    onChange={(n) => mudar({ estagnacao: n })}
+                                />
+                                <p className="text-xs text-muted-foreground">Gerações (0 = desativado)</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 

@@ -232,15 +232,25 @@ test("paraSolver: aulas por id, com as turmas, os professores e o ambiente dispu
         ],
         // Sem horário: a busca parte de um quadro sorteado
         inicial: [],
-        // Todos os pesos, com os padrões
-        config: { pesos: PESOS_PADRAO },
+        // Todos os pesos e parâmetros do GA, com os padrões
+        config: { pesos: PESOS_PADRAO, ga: { populacao: 16, migracao: 1, estagnacao: 0 } },
     });
 });
 
 test("paraSolver: os pesos da configuração, com o padrão nas regras não mexidas", () => {
     const p = novoProjeto("P");
-    const { pesos } = paraSolver({ ...p, config: { ...p.config, pesos: { janela: 5, professor: 0 } } }).config!;
+    const { pesos, ga } = paraSolver({
+        ...p,
+        config: { ...p.config, pesos: { janela: 5, professor: 0 }, populacaoIlha: 32, migracaoIlhas: 2, estagnacao: 500 },
+    }).config!;
     assert.deepEqual(pesos, { ...PESOS_PADRAO, janela: 5, professor: 0 });
+    assert.deepEqual(ga, { populacao: 32, migracao: 2, estagnacao: 500 });
+    // Sem ilhas: não envia população/migração de ilhas, mantém estagnação
+    const semIlhas = paraSolver({
+        ...p,
+        config: { ...p.config, ilhas: false, populacaoIlha: 32, migracaoIlhas: 2, estagnacao: 250 },
+    }).config!;
+    assert.deepEqual(semIlhas.ga, { estagnacao: 250 });
 });
 
 test("pontoDePartida: as fixadas primeiro, e o resto do horário se ele está em dia", () => {

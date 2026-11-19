@@ -18,9 +18,9 @@
 use wasm_bindgen::prelude::*;
 
 use crate::{
-    genetic::ga::{GAConfig, GeneticAlgorithm},
+    genetic::ga::GeneticAlgorithm,
     horario::{
-        config_ga_horario, validar, BuscaLocal, ErroEntrada, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario, LISTA_PADRAO,
+        config_ga_horario_ilhas, validar, BuscaLocal, ErroEntrada, HorarioRegrasPencilmark, QuadroHorario, RegrasHorario, LISTA_PADRAO,
         MSG_IMPOSSIVEL, ResultadoHorario, Validacao,
     },
     pencilmark::{BuscaExaustiva, ExecucaoPencilmark},
@@ -174,7 +174,7 @@ impl HorarioGARunner {
     /// `ilhas`: 0 ou 1 = uma população só; N = modelo de ilhas, com N populações do tamanho padrão
     /// (ver `GAConfig.ilhas`). O horário sofre com ótimos locais, e as ilhas ajudam a escapar deles.
     pub fn de_regras(regras: RegrasHorario, ilhas: usize) -> Self {
-        let config = GAConfig { ilhas, ..config_ga_horario(&regras) };
+        let config = config_ga_horario_ilhas(&regras, ilhas);
         let validador = HorarioRegrasPencilmark::so_obrigatorias(regras.clone());
         Self {
             ga: GeneticAlgorithm::new(regras, config),
@@ -499,7 +499,6 @@ mod tests {
     fn ga_com_ilhas_multiplica_a_populacao_e_entrega_resultado() {
         fastrand::seed(4);
         let regras = carregar("pequena");
-        let aulas = regras.aulas_a_alocar();
         let mut r = HorarioGARunner::de_regras(regras, 4);
         // Em chamadas pequenas, como o worker faz: a época de ilhas atravessa várias chamadas
         for _ in 0..12 {
@@ -508,7 +507,7 @@ mod tests {
             }
         }
         assert_eq!(r.ga.config.ilhas, 4);
-        assert_eq!(r.ga.config.population_size, aulas * crate::horario::POPULACAO_POR_AULA, "população por ilha é a padrão");
+        assert_eq!(r.ga.config.population_size, crate::horario::POPULACAO_POR_ILHA, "população por ilha é a padrão");
         assert!(r.versao() > 0, "deveria ter um melhor quadro");
         let res = r.resultado();
         assert!(res.alocacoes.is_some());

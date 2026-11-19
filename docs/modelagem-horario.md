@@ -164,6 +164,8 @@ interface ProjetoHorario {
   docentes: DocenteNoProjeto[];
   horario: HorarioGerado | null;
   revisao: number;               // sobe a cada edição; diz se o horário gerado está desatualizado
+  config: ConfigDoProjeto;       // método, parâmetros dos solvers e pesos das regras
+  versoes: VersaoDoHorario[];    // horários salvos, com snapshot do projeto e dos cadastros usados
 }
 ```
 
@@ -272,28 +274,53 @@ interface DocenteNoProjeto {
 ```
 
 Criado automaticamente quando o professor é atribuído a uma oferta do projeto. É específico de
-cada projeto. `evitar` é guardado e conferido depois de gerar ("3 aulas em horários a evitar");
-vira regra com peso quando o solver tiver custo por regra (`plano-solver-local-search.md` §3).
+cada projeto. `evitar` entra como regra de qualidade (peso configurável por projeto) na busca local
+e no algoritmo genético; na busca exata, o professor fica indisponível nesses tempos.
 
 ### 4.5 Horário gerado
 
 ```ts
+interface AulaNoHorario {
+  ofertaId: Id;
+  dia: HorarioDia;
+  tempo: number;
+}
+
 interface HorarioGerado {
   revisao: number;               // a revisão do projeto em que foi gerado
   completo: boolean;
-  alocacoes: {
-    ofertaId: Id;
-    dia: HorarioDia;
-    tempo: number;
-    fixada: boolean;             // para "fixar e gerar de novo"
-  }[];
+  alocacoes: AulaNoHorario[];
+  fixadas: AulaNoHorario[];      // aulas fixadas: regra obrigatória (peso alto) ao gerar de novo
   problemas: { ofertaId?: Id; turmaId?: Id; dia?: HorarioDia; tempo?: number; mensagem: string }[];
+  qualidade: {
+    regra: "evitar" | "jornada" | "descanso" | "intervalo" | "turno" | "janela" | "espalhar";
+    professorId?: Id;
+    turmaId?: Id;
+    ofertaId?: Id;
+    dia: HorarioDia;
+    minutos: number;
+  }[];
 }
 ```
 
 Guardar por oferta (e não por célula de turma) dá de graça as visões por turma, por professor e
 por ambiente: são três agrupamentos da mesma lista. Se `horario.revisao` for menor que a do
 projeto, a tela avisa que o horário está desatualizado.
+
+### 4.6 Configuração do projeto
+
+```ts
+interface ConfigDoProjeto {
+  solver: "local" | "pencilmark" | "genetic"; // padrão: "local"
+  cadeias: number;               // busca local: buscas em paralelo (0 = automático)
+  ilhas: boolean;                // GA: usar modelo de ilhas (padrão: true)
+  numIlhas: number;              // GA: número de ilhas (0 = automático: 1 por núcleo)
+  populacaoIlha: number;         // GA: indivíduos por ilha (padrão: 16)
+  migracaoIlhas: number;         // GA: indivíduos migrados por época (0 = sem; padrão: 1)
+  estagnacao: number;            // GA: gerações sem melhora antes de reiniciar (0 = desativado)
+  pesos: Partial<Record<Regra, number>>; // peso de cada regra obrigatória ou de qualidade (ausente = padrão)
+}
+```
 
 ---
 
@@ -323,18 +350,21 @@ interface AreaDeTrabalho {
 | `aulas[]` | uma por oferta com aulas: turmas que participam, aulas por semana e as regras da divisão |
 | `aulas[].recursos` | os professores da oferta e, se disputado, o ambiente |
 | `recursos[]` | um por docente (disponibilidade e horários a evitar) e um por ambiente disputado |
+| `inicial[]` | aulas fixadas e, se o horário estiver em dia, o restante dele como ponto de partida (`pontoDePartida`) |
+| `config.pesos` | peso de cada regra obrigatória e de qualidade (da configuração do projeto) |
+| `config.ga` | parâmetros do algoritmo genético (`populacao`, `migracao`, `estagnacao`; `numIlhas` vai separado ao worker) |
 
 - **Ambiente é um recurso de ocupação única**, igual a um professor: duas aulas não caem nele ao
   mesmo tempo. Só entram os ambientes usados por mais de uma turma (os outros não restringem).
 - **`tempos[]`:** a hora de início e de fim e o turno de cada aula do quadro.
 - **Regras obrigatórias e de qualidade.** A busca exata só conhece as obrigatórias. A busca local
-  (o método padrão) e o algoritmo genético consideram as duas ao mesmo tempo, num custo só em que
-  todas as de qualidade somadas valem menos que uma obrigatória: horários a evitar, jornada de até
-  10 horas no dia, 11 horas de descanso até o dia seguinte, e aulas seguidas da mesma disciplina
-  que atravessam o intervalo ou a troca de turno deixando uma aula sozinha de um lado (qualquer
-  disciplina, com ou sem agrupamento; só encostar no intervalo não conta). As três últimas usam as
-  horas do quadro. O resultado de qualquer método traz o que não foi atendido, também quando ainda
-  há violação obrigatória.
+  (o método padrão) e o algoritmo genético consideram as duas ao mesmo tempo, num custo só cujos
+  pesos são editáveis por projeto (por padrão todas as de qualidade somadas valem menos que uma
+  obrigatória): horários a evitar, jornada de até 10 horas no dia, 11 horas de descanso até o dia
+  seguinte, aulas seguidas da mesma disciplina que atravessam o intervalo ou a troca de turno
+  deixando uma aula sozinha de um lado, horários vagos no meio do turno (janela) e mais de um
+  pedaço da mesma disciplina no dia (quando marcada para espalhar). O resultado de qualquer método
+  traz o que não foi atendido, também quando ainda há violação obrigatória.
 - **Sem limite de tempo:** a busca local e o genético rodam até atender a todas as regras
   (custo 0) ou até o usuário interromper; a busca exata termina ao achar um horário ou provar que
   não existe.
@@ -367,7 +397,6 @@ Além das verificações da proposta (§3.3 de `proposta-frontend-horario.md`):
 | :--- | :--- |
 | Janelas do professor medidas em minutos reais | `inicio` e `duracaoMin` das faixas |
 | Máximo de aulas por dia, evitar dias seguidos | campos novos nas regras de divisão |
-| Fixar aulas e gerar o resto | `alocacoes[].fixada` |
 
 ---
 

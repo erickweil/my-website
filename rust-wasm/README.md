@@ -27,6 +27,12 @@ cargo run --release --example bench_busca_local -- tests/instancias/grande.json 
 # de onde parte: --de quadro.json (um quadro pronto) ou --ga N (o melhor do genético depois de N segundos)
 # opções: --segundos N, --lista N, --cadeias N, --classica (lista do late acceptance como no artigo)
 ```
+- Benchmark nativo dos operadores e parâmetros do algoritmo genético (ver `estudos/ga/` e `docs/estudo-ga.md`)
+```bash
+cd rust-wasm
+RUSTFLAGS="-C target-cpu=native" cargo run --release --example bench_operadores_horario -- tests/instancias/media.json --sementes 10 --orcamento 5 --ilhas 8 --variantes originais,padrao
+# opções: --sementes N, --orcamento M (milhões de avaliações), --segundos S, --ilhas N, --variantes ..., --csv, --cabecalho
+```
 - Reproduzir fora do navegador um projeto da página (exporte a área de trabalho em "Projetos")
 ```bash
 node rust-wasm/tests/instancias/de-projeto.mjs ~/Downloads/horarios.json rust-wasm/tests/instancias/real-tecnico.json

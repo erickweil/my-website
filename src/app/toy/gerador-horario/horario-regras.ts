@@ -84,6 +84,13 @@ export interface EntradaDoSolver {
     config?: {
         /** O peso de cada regra no custo (ver `PESOS_PADRAO` em modelo/modelo.ts). */
         pesos: Record<Regra, number>;
+        /** Parâmetros opcionais do algoritmo genético (`EntradaConfigGA` em horario_regras.rs). */
+        ga?: {
+            populacao?: number;
+            migracao?: number;
+            epoca?: number;
+            estagnacao?: number;
+        };
     };
 }
 

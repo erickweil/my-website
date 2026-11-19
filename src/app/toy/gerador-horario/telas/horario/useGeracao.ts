@@ -78,8 +78,8 @@ export function useGeracao(salvarHorario: (horario: HorarioGerado) => void) {
             encerrar();
         };
         parar.current = encerrar;
-        const { ilhas, cadeias } = projeto.config;
-        worker.postMessage({ action: "solucionarQuadroHorario", solver, entrada: paraSolver(projeto, inicial), ilhas, cadeias });
+        const { ilhas, numIlhas, cadeias } = projeto.config;
+        worker.postMessage({ action: "solucionarQuadroHorario", solver, entrada: paraSolver(projeto, inicial), ilhas, numIlhas, cadeias });
     };
 
     return { gerando, parcial, progresso, novas, erro, gerar, parar: () => parar.current?.() };
